@@ -1,0 +1,30 @@
+version: '3.9'
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: knowledgeplane
+    ports: [ "5432:5432" ]
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+
+  server:
+    build: ../server
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/knowledgeplane
+      - PORT=8080
+      - API_KEYS=DEV_API_KEY
+    depends_on:
+      db:
+        condition: service_healthy
+    ports: [ "8080:8080" ]
+
+volumes:
+  dbdata: {}

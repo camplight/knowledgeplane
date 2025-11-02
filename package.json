@@ -1,0 +1,27 @@
+{
+  "name": "knowledgeplane",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "bootstrap": "npm install",
+    "dev": "concurrently -n \"infra,server,web\" -c \"blue,green,yellow\" \"npm run dev:infra\" \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:infra": "docker compose -f infra/docker-compose.dev.yml up",
+    "dev:server": "node scripts/wait-for-db.js && npm run dev --workspace=server",
+    "dev:web": "npm run dev --workspace=web",
+    "dev:stop": "docker compose -f infra/docker-compose.dev.yml down",
+    "lint": "npm run lint --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "rebuild": "npm run build && docker compose -f infra/docker-compose.dev.yml down -v && docker compose -f infra/docker-compose.dev.yml up -d && node scripts/wait-for-db.js",
+    "seed": "node scripts/seed-db.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "pg": "^8.12.0"
+  }
+}
