@@ -6,6 +6,7 @@ import {
 import type { FastifyLoggerInstance } from "fastify";
 import { factsWriteTool, handleFactsWrite } from "./handlers/facts.write.js";
 import { factsSearchTool, handleFactsSearch } from "./handlers/facts.search.js";
+import { factsUpdateTool, handleFactsUpdate } from "./handlers/facts.update.js";
 import { factsTrashTool, handleFactsTrash } from "./handlers/facts.trash.js";
 import { usersRegisterTool, handleUsersRegister } from "./handlers/users.register.js";
 
@@ -15,7 +16,7 @@ export interface McpContext {
 }
 
 // Tool definitions from handlers
-const tools = [factsWriteTool, factsSearchTool, factsTrashTool, usersRegisterTool];
+const tools = [factsWriteTool, factsSearchTool, factsUpdateTool, factsTrashTool, usersRegisterTool];
 
 export function createMcpServer(
   logger?: FastifyLoggerInstance,
@@ -96,6 +97,21 @@ export function createMcpServer(
           handlerArgs.knowledge_context || context.knowledgeContext;
       }
       handler = handleFactsSearch;
+    } else if (name === "facts.update") {
+      // Merge context into args for facts.update
+      handlerArgs = { ...args } as any;
+      if (context) {
+        if (context.userId) {
+          // Use context userId as default for last_updated_by if not provided
+          handlerArgs.last_updated_by =
+            handlerArgs.last_updated_by || context.userId;
+        }
+        if (context.knowledgeContext) {
+          handlerArgs.knowledge_context =
+            handlerArgs.knowledge_context || context.knowledgeContext;
+        }
+      }
+      handler = handleFactsUpdate;
     } else if (name === "facts.trash") {
       // Merge context into args for facts.trash
       handlerArgs = { ...args } as any;

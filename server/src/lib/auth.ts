@@ -41,9 +41,12 @@ async function validateGoogleToken(token: string): Promise<AuthContext> {
       const decoded = jwt.decode(token, { complete: true });
       if (decoded && typeof decoded === "object" && decoded.payload) {
         const payload = decoded.payload as any;
-        
+
         // Verify Google ID token signature
-        if (payload.iss === "https://accounts.google.com" || payload.iss === "accounts.google.com") {
+        if (
+          payload.iss === "https://accounts.google.com" ||
+          payload.iss === "accounts.google.com"
+        ) {
           await new Promise<void>((resolve, reject) => {
             jwt.verify(
               token,
@@ -55,7 +58,7 @@ async function validateGoogleToken(token: string): Promise<AuthContext> {
               (err) => {
                 if (err) reject(err);
                 else resolve();
-              }
+              },
             );
           });
 
@@ -81,14 +84,19 @@ async function validateGoogleToken(token: string): Promise<AuthContext> {
     }
 
     // Try as OAuth access token (validate by calling userinfo)
-    const userInfoResponse = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-      headers: {
-        Authorization: `Bearer ${token}`,
+    const userInfoResponse = await fetch(
+      "https://www.googleapis.com/oauth2/v2/userinfo",
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       },
-    });
+    );
 
     if (!userInfoResponse.ok) {
-      throw new Error(`Google token validation failed: ${userInfoResponse.statusText}`);
+      throw new Error(
+        `Google token validation failed: ${userInfoResponse.statusText}`,
+      );
     }
 
     const userInfo = await userInfoResponse.json();
@@ -126,7 +134,9 @@ async function validateGitHubToken(token: string): Promise<AuthContext> {
     });
 
     if (!userInfoResponse.ok) {
-      throw new Error(`GitHub token validation failed: ${userInfoResponse.statusText}`);
+      throw new Error(
+        `GitHub token validation failed: ${userInfoResponse.statusText}`,
+      );
     }
 
     const userInfo = await userInfoResponse.json();
@@ -171,14 +181,62 @@ async function validateGitHubToken(token: string): Promise<AuthContext> {
 }
 
 /**
+ * Validates an API key from MEMORYPLANE_KEY header against API_KEYS environment variable
+ * Returns a system auth context if valid
+ */
+async function validateApiKey(apiKey?: string): Promise<AuthContext | null> {
+  if (!apiKey) {
+    return null;
+  }
+
+  const validKeys =
+    process.env.API_KEYS?.split(",")
+      .map((k) => k.trim())
+      .filter(Boolean) || [];
+
+  if (validKeys.length === 0 || !validKeys.includes(apiKey)) {
+    return null;
+  }
+
+  // Get or create a system user for API key authentication
+  // This ensures API keys can be used with database operations that require a user ID
+  const systemUser = await User.getOrCreate({
+    username: "system",
+    email: "system@knowledgeplane.local",
+  });
+
+  // Return system auth context for API key authentication
+  return {
+    userId: systemUser.id,
+    email: systemUser.email,
+    provider: undefined,
+    apiKey: true,
+  };
+}
+
+/**
  * Validates an OAuth Bearer token and returns the decoded token with user context
  * Supports:
+ * - API Key authentication via MEMORYPLANE_KEY header
  * - Google OAuth (ID tokens and access tokens)
  * - GitHub OAuth (access tokens)
  * - Generic JWT with JWKS verification
  * - Generic JWT with secret verification (development)
  */
-export async function requireAuth(header?: string): Promise<AuthContext> {
+export async function requireAuth(
+  header?: string,
+  apiKey?: string,
+): Promise<AuthContext> {
+  // Check API key first (highest priority)
+  if (apiKey) {
+    const apiKeyAuth = await validateApiKey(apiKey);
+    if (apiKeyAuth) {
+      return apiKeyAuth;
+    }
+    // If API key is provided but invalid, throw error
+    throw new Error("Unauthorized: Invalid API key");
+  }
+
   if (!header?.startsWith("Bearer ")) {
     throw new Error("Unauthorized: Missing or invalid Authorization header");
   }
@@ -189,7 +247,10 @@ export async function requireAuth(header?: string): Promise<AuthContext> {
   const providerHint = process.env.OAUTH_PROVIDER?.toLowerCase();
 
   // Google OAuth
-  if (providerHint === "google" || (!providerHint && token.startsWith("ya29."))) {
+  if (
+    providerHint === "google" ||
+    (!providerHint && token.startsWith("ya29."))
+  ) {
     try {
       return await validateGoogleToken(token);
     } catch (error: any) {
@@ -201,7 +262,13 @@ export async function requireAuth(header?: string): Promise<AuthContext> {
   }
 
   // GitHub OAuth (tokens are usually `gho_`, `ghp_`, or `github_pat_`)
-  if (providerHint === "github" || (!providerHint && (token.startsWith("gho_") || token.startsWith("ghp_") || token.startsWith("github_pat_")))) {
+  if (
+    providerHint === "github" ||
+    (!providerHint &&
+      (token.startsWith("gho_") ||
+        token.startsWith("ghp_") ||
+        token.startsWith("github_pat_")))
+  ) {
     try {
       return await validateGitHubToken(token);
     } catch (error: any) {
@@ -248,17 +315,21 @@ export async function requireAuth(header?: string): Promise<AuthContext> {
           }
 
           const payload = decoded as any;
-          
+
           // Try to get or create user from token
           try {
             const email = payload.email;
             if (email) {
-              const username = email.split("@")[0] || payload.sub || payload.user_id || payload.id;
+              const username =
+                email.split("@")[0] ||
+                payload.sub ||
+                payload.user_id ||
+                payload.id;
               const user = await User.getOrCreate({
                 username,
                 email,
               });
-              
+
               resolve({
                 userId: user.id,
                 email: user.email,
@@ -279,7 +350,7 @@ export async function requireAuth(header?: string): Promise<AuthContext> {
               ...payload,
             });
           }
-        }
+        },
       );
     });
   }
@@ -304,7 +375,6 @@ export async function requireAuth(header?: string): Promise<AuthContext> {
   }
 
   throw new Error(
-    "OAuth not configured: Set GOOGLE_CLIENT_ID, GITHUB_CLIENT_ID, JWKS_URI, or JWT_SECRET environment variable"
+    "OAuth not configured: Set GOOGLE_CLIENT_ID, GITHUB_CLIENT_ID, JWKS_URI, or JWT_SECRET environment variable",
   );
 }
-

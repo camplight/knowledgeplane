@@ -46,6 +46,7 @@ PostgreSQL (memory store with full-text search)
 |------|-------------|
 | `facts.write` | Write a fact with content, metadata, user tracking, and optional knowledge context |
 | `facts.search` | Search facts using full-text search with optional knowledge context filtering and pagination. Trashed facts are excluded by default |
+| `facts.update` | Update a fact in the knowledge base. Only provided fields will be updated |
 | `facts.trash` | Mark a fact as trashed. Trashed facts are excluded from search results unless explicitly included |
 | `users.register` | Register a new user or update an existing user's email if the username already exists |
 
@@ -62,6 +63,13 @@ PostgreSQL (memory store with full-text search)
 - `k` (optional): Limit for number of results (default: 5)
 - `offset` (optional): Offset for pagination (default: 0)
 - `include_trashed` (optional): If true, includes trashed facts in search results (default: false)
+
+**facts.update Parameters:**
+- `id` (required): The ID of the fact to update
+- `content` (optional): The updated content of the fact
+- `metadata` (optional): Updated key-value pairs of metadata
+- `last_updated_by` (required): User ID of the person updating the fact
+- `knowledge_context` (optional): Updated context or namespace for organizing facts
 
 **facts.trash Parameters:**
 - `id` (required): The ID of the fact to trash
@@ -86,12 +94,19 @@ PostgreSQL (memory store with full-text search)
 | `GET /auth/github/redirect` | Redirects to GitHub OAuth authorization (internal) |
 | `GET /auth/github/callback` | GitHub OAuth callback endpoint (supports `?mcp=true` for MCP sessions) |
 | `GET /auth/info` | Get available OAuth providers and login URLs |
+| `GET /.well-known/oauth-authorization-server` | OAuth 2.0 Authorization Server Metadata (RFC8414) for MCP client discovery |
+| `GET /.well-known/oauth-authorization-server/:resource` | Resource-specific OAuth 2.0 Authorization Server Metadata |
+| `GET /.well-known/oauth-protected-resource` | OAuth 2.0 Protected Resource Metadata (RFC8705) |
+| `GET /.well-known/oauth-protected-resource/:resource` | Resource-specific OAuth 2.0 Protected Resource Metadata |
+| `GET /authorize` | OAuth 2.1 authorization endpoint (MCP-compliant) |
+| `POST /token` | OAuth 2.1 token endpoint for code exchange (MCP-compliant) |
+| `POST /register` | OAuth 2.0 Dynamic Client Registration endpoint (RFC7591) |
 | `ALL /trpc/*` | tRPC endpoint for type-safe API calls |
 | `GET /dashboard` | User dashboard (protected, requires session) |
 
 **Session Management:**
 
-KnowledgePlane supports two types of authentication:
+KnowledgePlane supports three types of authentication:
 
 1. **Web User Sessions** (for dashboard access):
    - Uses HTTP cookies for session management
@@ -105,11 +120,17 @@ KnowledgePlane supports two types of authentication:
    - Returns OAuth access token as JSON response
    - Token can be used for MCP API calls
 
+3. **API Key Authentication** (for server-to-server and automated access):
+   - Uses `MEMORYPLANE_KEY` header for authentication
+   - Validated against `API_KEYS` environment variable (comma-separated list)
+   - No OAuth flow required - direct authentication
+   - Suitable for automated scripts, CI/CD pipelines, and server-to-server communication
+
 **MCP Session Management:**
 - Sessions are identified by `mcp-session-id` header
 - User context can be provided via query params: `?username=user&email=user@example.com`
 - Knowledge context can be provided via query param: `?knowledge_context=project-alpha`
-- OAuth authentication via `Authorization: Bearer <token>` header
+- Authentication via `Authorization: Bearer <token>` header (OAuth) or `MEMORYPLANE_KEY` header (API key)
 
 🗄️ Data Model
 
@@ -132,11 +153,19 @@ KnowledgePlane supports two types of authentication:
 
 🔐 OAuth Authentication
 
-KnowledgePlane supports OAuth2 authentication with Google (Gmail) and GitHub.
+KnowledgePlane supports OAuth2 authentication with Google (Gmail) and GitHub, and implements OAuth 2.1 compliant authorization server for MCP clients.
 
 **Supported Providers:**
 - **Google OAuth** - Login with Google account (Gmail)
 - **GitHub OAuth** - Login with GitHub account
+
+**MCP OAuth Discovery (RFC8414):**
+
+KnowledgePlane implements OAuth 2.0 Authorization Server Metadata discovery per the MCP specification:
+- `GET /.well-known/oauth-authorization-server` - Returns OAuth server metadata including endpoints and supported features
+- MCP clients automatically discover authorization and token endpoints
+- Supports PKCE (Proof Key for Code Exchange) as required by MCP spec
+- Supports dynamic client registration via `POST /register`
 
 **Authentication Flow:**
 
@@ -151,6 +180,17 @@ KnowledgePlane supports OAuth2 authentication with Google (Gmail) and GitHub.
 8. Dashboard provides instructions for using MCP URL with agents
 
 **MCP Session Authentication (for AI agents):**
+1. MCP client (e.g., ChatGPT) discovers OAuth configuration via `/.well-known/oauth-authorization-server`
+2. MCP client initiates OAuth flow via `GET /authorize` with PKCE parameters (`code_challenge`, `code_challenge_method`, `redirect_uri`, `state`, etc.)
+3. Server stores authorization request and redirects to Google/GitHub OAuth provider
+4. User authenticates with provider
+5. Provider redirects back to server callback (`/auth/google/callback` or `/auth/github/callback`)
+6. Server generates authorization code and redirects back to client's `redirect_uri` with the code and state
+7. MCP client exchanges authorization code for access token via `POST /token` with `code_verifier` (PKCE)
+8. Server validates PKCE and returns OAuth provider's access token
+9. Token can be used in `Authorization: Bearer <token>` header for MCP API calls
+
+**Legacy MCP Authentication (still supported):**
 1. Agent/script calls OAuth callback with `?mcp=true` query parameter: `/auth/google/callback?mcp=true`
 2. After OAuth flow, callback returns JSON with access token instead of creating session cookie
 3. Token can be used in `Authorization: Bearer <token>` header for MCP API calls
@@ -177,11 +217,21 @@ The system automatically:
 - Creates/updates user accounts from OAuth provider data
 - Supports generic JWT with JWKS verification for custom providers
 
+**API Key Authentication:**
+As an alternative to OAuth tokens, endpoints also support API key authentication via the `MEMORYPLANE_KEY` header. This is useful for server-to-server communication or automated scripts that don't require user-specific authentication.
+
+```
+MEMORYPLANE_KEY: <api-key>
+```
+
+API keys are validated against the `API_KEYS` environment variable, which should be a comma-separated list of valid keys. API key authentication takes precedence over Bearer token authentication if both are provided.
+
 **Environment Variables:**
 - `GOOGLE_CLIENT_ID` - Google OAuth client ID
 - `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
 - `GITHUB_CLIENT_ID` - GitHub OAuth client ID
 - `GITHUB_CLIENT_SECRET` - GitHub OAuth client secret
+- `API_KEYS` - Comma-separated list of valid API keys for API key authentication (optional)
 - `OAUTH_REDIRECT_BASE_URL` - Base URL for OAuth callbacks (default: `http://localhost:8080`)
 - `OAUTH_SUCCESS_REDIRECT_URL` - URL to redirect after successful auth (default: `http://localhost:8080`)
 - `OAUTH_PROVIDER` - Force a specific provider: `google` or `github` (optional)
@@ -199,6 +249,16 @@ open http://localhost:8080/auth/google
 # Use token in API calls
 curl -X POST http://localhost:8080/mcp \
   -H "Authorization: Bearer <google-or-github-token>" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+**Example: Using API Key**
+```bash
+# Use API key in API calls (no OAuth token needed)
+curl -X POST http://localhost:8080/mcp \
+  -H "MEMORYPLANE_KEY: <your-api-key>" \
   -H "Content-Type: application/json" \
   -H "mcp-session-id: test-session-123" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
@@ -341,6 +401,29 @@ curl -X POST http://localhost:8080/mcp?knowledge_context=demo \
   }'
 ```
 
+**Example: Update a fact**
+```bash
+curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":4,
+    "method":"tools/call",
+    "params":{
+      "name":"facts.update",
+      "arguments":{
+        "id":"<fact-uuid>",
+        "content":"Updated project information: Apollo uses port 9090 and connects to Redis",
+        "metadata":{
+          "source":"manual-update",
+          "version":"2.0"
+        }
+      }
+    }
+  }'
+```
+
 **Example: Register a user**
 ```bash
 curl -X POST http://localhost:8080/mcp \
@@ -348,7 +431,7 @@ curl -X POST http://localhost:8080/mcp \
   -H "mcp-session-id: test-session-123" \
   -d '{
     "jsonrpc":"2.0",
-    "id":4,
+    "id":5,
     "method":"tools/call",
     "params":{
       "name":"users.register",
@@ -367,7 +450,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
   -H "mcp-session-id: test-session-123" \
   -d '{
     "jsonrpc":"2.0",
-    "id":5,
+    "id":6,
     "method":"tools/call",
     "params":{
       "name":"facts.trash",
@@ -385,7 +468,7 @@ curl -X POST http://localhost:8080/mcp?knowledge_context=demo \
   -H "mcp-session-id: test-session-123" \
   -d '{
     "jsonrpc":"2.0",
-    "id":6,
+    "id":7,
     "method":"tools/call",
     "params":{
       "name":"facts.search",
@@ -430,6 +513,7 @@ KnowledgePlane runs itself: it monitors usage, updates docs, and manages its own
 - ✅ OAuth2 authentication with Google (Gmail) and GitHub
 - ✅ Token-based authentication for API endpoints
 - ✅ Facts write/read operations
+- ✅ Fact update operations (update content, metadata, knowledge context)
 - ✅ Full-text search with knowledge context filtering
 - ✅ Fact trashing (mark facts as trashed, exclude from search by default)
 - ✅ Session-based context management

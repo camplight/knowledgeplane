@@ -32,6 +32,14 @@ export interface FactSearchParams {
   include_trashed?: boolean;
 }
 
+export interface FactUpdateInput {
+  id: string;
+  content?: string;
+  metadata?: Record<string, string>;
+  last_updated_by: string; // User ID
+  knowledge_context?: string;
+}
+
 export class Fact {
   static async write(input: FactInput): Promise<FactRecord> {
     const result = await query(
@@ -46,6 +54,52 @@ export class Fact {
         input.knowledge_context || "",
       ],
     );
+
+    return result.rows[0] as FactRecord;
+  }
+
+  static async update(input: FactUpdateInput): Promise<FactRecord> {
+    const updates: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (input.content !== undefined) {
+      updates.push(`content = $${paramIndex++}`);
+      params.push(input.content);
+    }
+
+    if (input.metadata !== undefined) {
+      updates.push(`metadata = $${paramIndex++}`);
+      params.push(input.metadata);
+    }
+
+    if (input.knowledge_context !== undefined) {
+      updates.push(`knowledge_context = $${paramIndex++}`);
+      params.push(input.knowledge_context);
+    }
+
+    // Always update last_updated_by
+    updates.push(`last_updated_by = $${paramIndex++}`);
+    params.push(input.last_updated_by);
+
+    if (updates.length === 0) {
+      // Only last_updated_by was provided, but we still need to update the timestamp
+      // The trigger will handle updated_at automatically
+    }
+
+    // Add the id as the last parameter
+    params.push(input.id);
+
+    const sql = `UPDATE fact
+                 SET ${updates.join(", ")}
+                 WHERE id = $${paramIndex}
+                 RETURNING id, content, metadata, created_at, updated_at, created_by, last_updated_by, knowledge_context, trashed`;
+
+    const result = await query(sql, params);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Fact with id ${input.id} not found`);
+    }
 
     return result.rows[0] as FactRecord;
   }

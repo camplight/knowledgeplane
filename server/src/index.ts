@@ -85,7 +85,11 @@ if (process.env.NODE_ENV === "production") {
         request.url.startsWith("/mcp") || 
         request.url.startsWith("/auth") ||
         request.url.startsWith("/docs") ||
-        request.url.startsWith("/health")) {
+        request.url.startsWith("/health") ||
+        request.url.startsWith("/.well-known") ||
+        request.url.startsWith("/authorize") ||
+        request.url.startsWith("/token") ||
+        request.url.startsWith("/register")) {
       return reply.code(404).send({ error: "Not found" });
     }
     reply.sendFile("index.html");

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer, type McpContext } from "../mcp/server.js";
-import { requireAuth } from "../lib/auth.js";
+import { requireAuth, type AuthContext } from "../lib/auth.js";
 import { User } from "../models/User.js";
 
 // AsyncLocalStorage for per-request session tracking
@@ -43,8 +43,14 @@ export default async function mcpRoutes(app: FastifyInstance) {
       "MCP: Incoming request",
     );
 
+    let authContext: AuthContext | undefined;
     try {
-      await requireAuth(request.headers.authorization);
+      // Check for API key header (case-insensitive - Fastify normalizes to lowercase)
+      // Support both hyphen and underscore variants, and original case
+      const apiKey = (request.headers["memoryplane-key"] ||
+        request.headers["memoryplane_key"] ||
+        request.headers["MEMORYPLANE_KEY"]) as string | undefined;
+      authContext = await requireAuth(request.headers.authorization, apiKey);
     } catch (error: any) {
       return reply.code(401).send({ error: error.message || "unauthorized" });
     }
@@ -56,6 +62,7 @@ export default async function mcpRoutes(app: FastifyInstance) {
     const query = request.query as Record<string, string>;
     let userId: string | undefined;
 
+    // First, try to get userId from query params
     if (query.username && query.email) {
       try {
         const user = await User.getOrCreate({
@@ -74,6 +81,12 @@ export default async function mcpRoutes(app: FastifyInstance) {
         );
         // Continue without user - handlers will need to get userId from args
       }
+    }
+
+    // If no userId from query params, use userId from auth context (e.g., from API key auth)
+    if (!userId && authContext?.userId) {
+      userId = authContext.userId;
+      app.log.debug({ userId }, "MCP: Using userId from auth context");
     }
 
     // Extract knowledge_context from queryParams

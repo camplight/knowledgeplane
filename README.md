@@ -1,6 +1,6 @@
 # knowledgeplane
 
-**Autonomous team memory for AI agents (MCP server).**
+**Autonomous team knowledge for AI agents (MCP server).**
 
 - Team/project **namespaces**, RBAC scaffolding, audit logs
 - **Hybrid retrieval** (pgvector + BM25 via `pgroonga` optional)
@@ -28,25 +28,8 @@ npm run dev
 **Production Mode:**
 
 ```bash
-# 1) Start full stack (Postgres + server in Docker)
+# Start full stack (Postgres + server in Docker)
 docker compose -f infra/docker-compose.yml up --build
-
-# 2) Seed a dev API key
-make -C infra dev-key
-
-# 3) Test the API
-curl http://localhost:8080/health
-
-curl -X POST http://localhost:8080/v1/facts.write \
-  -H "Authorization: Bearer DEV_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"namespace":"demo","content":"Project Apollo: use port 9090","tags":["devops","ports"],"ttl":86400}'
-
-curl -X POST http://localhost:8080/v1/facts.search \
-  -H "Authorization: Bearer DEV_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"namespace":"demo","query":"Which port for Apollo?","k":5}'
-```
 
 **Stop development servers:**
 ```bash
@@ -91,12 +74,7 @@ Add to your `mcp.json`:
 }
 ```
 
-### Packages
-
-* **server** – Fastify + Postgres/pgvector
-* **sdk/js** – fetch-based client
-
 ### License
 
-Apache-2.0 (suggested)
+Apache-2.0
 
