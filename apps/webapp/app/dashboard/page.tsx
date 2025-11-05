@@ -1,0 +1,231 @@
+"use client";
+
+import { trpc } from "../../utils/trpc";
+import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+
+export default function DashboardPage() {
+  const router = useRouter();
+  const [page, setPage] = useState(0);
+  const limit = 10;
+
+  const { data: userData, isLoading: userLoading } = trpc.auth.me.useQuery();
+  const { data: factsData, isLoading: factsLoading } = trpc.facts.list.useQuery({
+    limit,
+    offset: page * limit,
+    includeTrashed: false,
+  });
+
+  const logoutMutation = trpc.auth.logout.useMutation({
+    onSuccess: () => {
+      router.push("/");
+    },
+  });
+
+  useEffect(() => {
+    if (!userLoading && !userData?.user) {
+      router.push("/");
+    }
+  }, [userLoading, userData, router]);
+
+  const handleLogout = () => {
+    logoutMutation.mutate();
+  };
+
+  if (userLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl text-slate-600">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!userData?.user) {
+    return null;
+  }
+
+  const user = userData.user;
+  const facts = factsData?.facts || [];
+  const totalFacts = factsData?.total || 0;
+  const totalPages = Math.ceil(totalFacts / limit);
+
+  return (
+    <div className="min-h-screen bg-white">
+      {/* Navigation */}
+      <nav className="border-b border-slate-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </div>
+              <span className="text-xl font-bold bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 bg-clip-text text-transparent">
+                KnowledgePlane
+              </span>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-slate-600">
+                <span className="font-medium">{user.username}</span>
+                <span className="text-slate-400 mx-2">•</span>
+                <span>{user.email}</span>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Welcome Section */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-slate-900 mb-2">
+            Welcome back, <span className="gradient-text-blue">{user.username}</span>!
+          </h1>
+          <p className="text-lg text-slate-600">
+            Manage your knowledge base and facts
+          </p>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 mb-1">Total Facts</p>
+                <p className="text-3xl font-bold text-slate-900">{totalFacts}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 mb-1">Active Facts</p>
+                <p className="text-3xl font-bold text-slate-900">{facts.length}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600 mb-1">Knowledge Contexts</p>
+                <p className="text-3xl font-bold text-slate-900">
+                  {new Set(facts.map(f => f.knowledge_context).filter(Boolean)).size}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Facts List */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200">
+          <div className="p-6 border-b border-slate-200">
+            <h2 className="text-2xl font-bold text-slate-900">Your Facts</h2>
+            <p className="text-sm text-slate-600 mt-1">
+              View and manage your knowledge base facts
+            </p>
+          </div>
+
+          {factsLoading ? (
+            <div className="p-8 text-center">
+              <div className="text-slate-600">Loading facts...</div>
+            </div>
+          ) : facts.length === 0 ? (
+            <div className="p-8 text-center">
+              <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p className="text-lg font-medium text-slate-900 mb-2">No facts yet</p>
+              <p className="text-slate-600">
+                Start adding facts to build your knowledge base
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="divide-y divide-slate-200">
+                {facts.map((fact) => (
+                  <div key={fact.id} className="p-6 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="text-slate-900 mb-2 leading-relaxed">{fact.content}</p>
+                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                          {fact.knowledge_context && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-md">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                              </svg>
+                              {fact.knowledge_context}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {new Date(fact.created_at).toLocaleDateString()}
+                          </span>
+                          {fact.metadata && Object.keys(fact.metadata).length > 0 && (
+                            <span className="text-xs text-slate-400">
+                              {Object.keys(fact.metadata).length} metadata field{Object.keys(fact.metadata).length !== 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="p-6 border-t border-slate-200 flex items-center justify-between">
+                  <div className="text-sm text-slate-600">
+                    Showing {page * limit + 1} to {Math.min((page + 1) * limit, totalFacts)} of {totalFacts} facts
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setPage(Math.max(0, page - 1))}
+                      disabled={page === 0}
+                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
+                      disabled={page >= totalPages - 1}
+                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+

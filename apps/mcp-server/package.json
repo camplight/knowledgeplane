@@ -1,0 +1,44 @@
+{
+  "name": "knowledgeplane-mcp-server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "dotenv -e .env.dev -- tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^10.0.0",
+    "@fastify/oauth2": "^8.1.2",
+    "@fastify/secure-session": "^8.2.0",
+    "@fastify/swagger": "^9.0.0",
+    "@fastify/swagger-ui": "^5.0.0",
+    "@knowledgeplane/db": "*",
+    "@modelcontextprotocol/sdk": "^1.20.2",
+    "@types/jsonwebtoken": "^9.0.10",
+    "dotenv": "^16.4.5",
+    "dotenv-cli": "^7.4.2",
+    "fastify": "^5.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.2.0",
+    "node-fetch": "^3.3.2",
+    "pgvector": "^0.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "eslint": "^9.0.0",
+    "pino-pretty": "^13.1.2",
+    "prettier": "^3.3.3",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.0"
+  }
+}

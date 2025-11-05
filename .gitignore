@@ -2,7 +2,7 @@ node_modules
 .DS_Store
 .env
 .env.dev
-server/dist
-sdk/js/dist
+packages/db/dist
+apps/mcp-server/dist
 coverage
-
+.next

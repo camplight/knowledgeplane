@@ -15,8 +15,8 @@ services:
       - dbdata:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
 
-  server:
-    build: ../server
+  mcp-server:
+    build: ../apps/mcp-server
     environment:
       - DATABASE_URL=postgres://postgres:postgres@db:5432/knowledgeplane
       - PORT=8080
@@ -25,6 +25,20 @@ services:
       db:
         condition: service_healthy
     ports: [ "8080:8080" ]
+  
+  webapp:
+    build: ../apps/webapp
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/knowledgeplane
+      - NEXTAUTH_URL=http://localhost:3000
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports: [ "3000:3000" ]
 
 volumes:
   dbdata: {}

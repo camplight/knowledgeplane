@@ -49,12 +49,13 @@ PostgreSQL (memory store with full-text search)
 | `facts.update` | Update a fact in the knowledge base. Only provided fields will be updated |
 | `facts.trash` | Mark a fact as trashed. Trashed facts are excluded from search results unless explicitly included |
 | `users.register` | Register a new user or update an existing user's email if the username already exists |
+| `knowledgecontexts.list` | List all distinct knowledge contexts stored in the database. Trashed facts are excluded by default |
 
 **facts.write Parameters:**
 - `content` (required): The content of the fact
 - `metadata` (optional): Key-value pairs of metadata
-- `created_by` (required): User ID of the creator
-- `last_updated_by` (required): User ID of the last updater
+- `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
+- `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 - `knowledge_context` (optional): Context or namespace for organizing facts
 
 **facts.search Parameters:**
@@ -78,6 +79,9 @@ PostgreSQL (memory store with full-text search)
 **users.register Parameters:**
 - `username` (required): Unique username for the user
 - `email` (required): Email address for the user
+
+**knowledgecontexts.list Parameters:**
+- `include_trashed` (optional): If true, includes knowledge contexts from trashed facts (default: false)
 
 🔌 API Endpoints
 
@@ -103,6 +107,8 @@ PostgreSQL (memory store with full-text search)
 | `POST /register` | OAuth 2.0 Dynamic Client Registration endpoint (RFC7591) |
 | `ALL /trpc/*` | tRPC endpoint for type-safe API calls |
 | `GET /dashboard` | User dashboard (protected, requires session) |
+| `GET /facts` | Browse facts page (protected, requires session) |
+| `GET /users` | Browse users page (protected, requires session) |
 
 **Session Management:**
 
@@ -121,16 +127,21 @@ KnowledgePlane supports three types of authentication:
    - Token can be used for MCP API calls
 
 3. **API Key Authentication** (for server-to-server and automated access):
-   - Uses `MEMORYPLANE_KEY` header for authentication
-   - Validated against `API_KEYS` environment variable (comma-separated list)
+   - Uses `knowledgeplane-key` header for authentication (also supports `knowledgeplane_key`)
+   - If `API_KEYS` environment variable is configured, validates against it (comma-separated list)
+   - If `API_KEYS` is not configured, any API key is accepted and automatically creates/finds a user with that key stored in their profile
+   - The same API key always maps to the same user for consistency
    - No OAuth flow required - direct authentication
    - Suitable for automated scripts, CI/CD pipelines, and server-to-server communication
+   - User ID is automatically inferred from the API key authentication context
 
 **MCP Session Management:**
 - Sessions are identified by `mcp-session-id` header
-- User context can be provided via query params: `?username=user&email=user@example.com`
+- User context is automatically inferred from authenticated session (OAuth token or API key)
+- User context can also be provided via query params: `?username=user&email=user@example.com` (fallback if not authenticated)
 - Knowledge context can be provided via query param: `?knowledge_context=project-alpha`
-- Authentication via `Authorization: Bearer <token>` header (OAuth) or `MEMORYPLANE_KEY` header (API key)
+- Authentication via `Authorization: Bearer <token>` header (OAuth) or `knowledgeplane-key` header (API key)
+- For `facts.write`, `created_by` and `last_updated_by` are automatically set from the authenticated user's ID if not explicitly provided
 
 🗄️ Data Model
 
@@ -138,6 +149,7 @@ KnowledgePlane supports three types of authentication:
 - `id` (UUID): Primary key
 - `username` (text): Unique username
 - `email` (text): User email
+- `api_key` (text): Optional API key stored in user profile (for API key-based authentication)
 - `created_at` (timestamptz): Creation timestamp
 
 **Fact Table:**
@@ -203,7 +215,14 @@ The web interface is built with React and Tailwind CSS, featuring:
 - Enhanced typography and visual hierarchy
 - Responsive design optimized for all screen sizes
 - Responsive login pages for OAuth authentication
-- User dashboard for MCP configuration and management
+- User dashboard (`/dashboard`) with:
+  - User profile information display
+  - Facts overview with statistics (total facts, active facts, knowledge contexts)
+  - Facts list with pagination, metadata display, and knowledge context tags
+  - Logout functionality
+  - Automatic redirect to landing page for unauthenticated users
+- Facts browsing page (`/facts`) with pagination, filtering, and detailed fact display
+- Users browsing page (`/users`) with user listing and API key status
 
 **Token-Based Authentication:**
 All endpoints support Bearer token authentication via the `Authorization` header:
@@ -218,22 +237,28 @@ The system automatically:
 - Supports generic JWT with JWKS verification for custom providers
 
 **API Key Authentication:**
-As an alternative to OAuth tokens, endpoints also support API key authentication via the `MEMORYPLANE_KEY` header. This is useful for server-to-server communication or automated scripts that don't require user-specific authentication.
+As an alternative to OAuth tokens, endpoints also support API key authentication via the `knowledgeplane-key` header (also supports `knowledgeplane_key`). This is useful for server-to-server communication or automated scripts.
 
 ```
-MEMORYPLANE_KEY: <api-key>
+knowledgeplane-key: <api-key>
 ```
 
-API keys are validated against the `API_KEYS` environment variable, which should be a comma-separated list of valid keys. API key authentication takes precedence over Bearer token authentication if both are provided.
+API key behavior:
+- If `API_KEYS` environment variable is configured (comma-separated list), keys are validated against it
+- If `API_KEYS` is not configured, any API key is accepted and automatically creates/finds a user with that key stored in their profile
+- The same API key always maps to the same user, ensuring consistency across requests
+- User ID is automatically inferred from the API key authentication context
+- API key authentication takes precedence over Bearer token authentication if both are provided
 
 **Environment Variables:**
 - `GOOGLE_CLIENT_ID` - Google OAuth client ID
 - `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
 - `GITHUB_CLIENT_ID` - GitHub OAuth client ID
 - `GITHUB_CLIENT_SECRET` - GitHub OAuth client secret
+- `SESSION_SECRET` - Secret key for session encryption (minimum 32 characters, defaults to insecure placeholder in development)
 - `API_KEYS` - Comma-separated list of valid API keys for API key authentication (optional)
 - `OAUTH_REDIRECT_BASE_URL` - Base URL for OAuth callbacks (default: `http://localhost:8080`)
-- `OAUTH_SUCCESS_REDIRECT_URL` - URL to redirect after successful auth (default: `http://localhost:8080`)
+- `OAUTH_SUCCESS_REDIRECT_URL` - URL to redirect after successful auth (default: `http://localhost:5173`)
 - `OAUTH_PROVIDER` - Force a specific provider: `google` or `github` (optional)
 - `JWKS_URI` - JWKS endpoint for custom OAuth providers (optional)
 - `JWT_SECRET` - Secret for JWT verification (development only)
@@ -257,8 +282,9 @@ curl -X POST http://localhost:8080/mcp \
 **Example: Using API Key**
 ```bash
 # Use API key in API calls (no OAuth token needed)
+# User ID is automatically inferred from the API key
 curl -X POST http://localhost:8080/mcp \
-  -H "MEMORYPLANE_KEY: <your-api-key>" \
+  -H "knowledgeplane-key: <your-api-key>" \
   -H "Content-Type: application/json" \
   -H "mcp-session-id: test-session-123" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
@@ -273,7 +299,7 @@ curl -X POST http://localhost:8080/mcp \
 - **MCP SDK** (`@modelcontextprotocol/sdk`) for protocol implementation
 - **Docker Compose** infrastructure
 - **OAuth2** authentication (`@fastify/oauth2`) - Google and GitHub support
-- **Session management** (`@fastify/session`, `@fastify/cookie`) for web users
+- **Session management** (`@fastify/secure-session`, `@fastify/cookie`) for OAuth state management and web user sessions
 - **JWT/JWKS** token validation for MCP sessions
 - **Swagger/OpenAPI** documentation
 - **Tailwind CSS** for styling
@@ -317,6 +343,9 @@ npm run test
 # Rebuild everything (clean build + restart DB)
 npm run rebuild
 
+# Run database migrations (if database already exists)
+npm run migrate
+
 # Seed the database
 npm run seed
 
@@ -339,10 +368,53 @@ curl -X POST http://localhost:8080/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
 
-**Example: Write a fact**
+**Example: Write a fact (with authentication)**
 ```bash
-# When username/email are provided in query params, created_by and last_updated_by 
-# are automatically populated from the user context
+# User ID is automatically inferred from authenticated session (OAuth token or API key)
+# created_by and last_updated_by are automatically populated
+curl -X POST "http://localhost:8080/mcp" \
+  -H "Authorization: Bearer <oauth-token>" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":2,
+    "method":"tools/call",
+    "params":{
+      "name":"facts.write",
+      "arguments":{
+        "content":"Project Apollo uses port 9090",
+        "knowledge_context":"demo"
+      }
+    }
+  }'
+```
+
+**Example: Write a fact (with API key)**
+```bash
+# API key automatically creates/finds user and infers user ID
+curl -X POST "http://localhost:8080/mcp" \
+  -H "knowledgeplane-key: <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":2,
+    "method":"tools/call",
+    "params":{
+      "name":"facts.write",
+      "arguments":{
+        "content":"Project Apollo uses port 9090",
+        "knowledge_context":"demo"
+      }
+    }
+  }'
+```
+
+**Example: Write a fact (fallback via query params)**
+```bash
+# If not authenticated, username/email can be provided in query params
+# created_by and last_updated_by are automatically populated from the user context
 curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" \
   -H "Content-Type: application/json" \
   -H "mcp-session-id: test-session-123" \
@@ -519,6 +591,9 @@ KnowledgePlane runs itself: it monitors usage, updates docs, and manages its own
 - ✅ Session-based context management
 - ✅ Health check endpoint
 - ✅ Swagger documentation
+- ✅ Web UI for browsing facts with pagination and filtering
+- ✅ Web UI for browsing users with pagination
+- ✅ tRPC routes for listing facts and users
 
 **Planned Features:**
 - 🔲 Semantic search with pgvector embeddings
