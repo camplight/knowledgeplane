@@ -119,6 +119,7 @@ export default async function mcpRoutes(app: FastifyInstance) {
     }
 
     let transport: StreamableHTTPServerTransport;
+    let isNewTransport = false;
 
     if (sessionId && transports.has(sessionId)) {
       // Reuse existing transport
@@ -137,7 +138,18 @@ export default async function mcpRoutes(app: FastifyInstance) {
       }
     } else {
       // Create new transport for initialization
+      // If sessionId was provided but doesn't exist (likely server restart),
+      // we still use it - the transport will handle reinitialization via MCP protocol
       const newSessionId = sessionId || randomUUID();
+
+      if (sessionId && !transports.has(sessionId)) {
+        app.log.info(
+          { sessionId },
+          "MCP: Server restarted, creating new transport for reconnecting client",
+        );
+      }
+
+      isNewTransport = true;
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => newSessionId,
         onsessioninitialized: (id: string) => {
@@ -172,11 +184,17 @@ export default async function mcpRoutes(app: FastifyInstance) {
 
       // Connect transport to shared server
       await mcpServer.connect(transport);
-      app.log.debug("MCP: New transport created and connected");
+      app.log.debug(
+        {
+          sessionId: transport.sessionId || newSessionId,
+          isReconnect: !!sessionId && !transports.has(sessionId),
+        },
+        "MCP: New transport created and connected",
+      );
     }
 
     // Determine the sessionId to use for context
-    const effectiveSessionId = sessionId || transport.sessionId || "";
+    const effectiveSessionId = transport.sessionId || sessionId || "";
 
     try {
       // Run the request handler within the async local storage context
@@ -188,6 +206,15 @@ export default async function mcpRoutes(app: FastifyInstance) {
           ? requestContext
           : undefined;
 
+      // Check if reply was already sent (e.g., by transport initialization)
+      if (reply.sent) {
+        app.log.warn(
+          { sessionId: effectiveSessionId },
+          "MCP: Reply already sent, skipping handleRequest",
+        );
+        return;
+      }
+
       if (contextToStore) {
         await contextStorage.run(contextToStore, async () => {
           await transport.handleRequest(request.raw, reply.raw, request.body);
@@ -195,12 +222,49 @@ export default async function mcpRoutes(app: FastifyInstance) {
       } else {
         await transport.handleRequest(request.raw, reply.raw, request.body);
       }
+
+      // Check if reply was sent and log status
+      if (reply.sent) {
+        // Try to get status code from reply
+        const statusCode =
+          (reply as any).statusCode || (reply as any).status || "unknown";
+        if (statusCode >= 400) {
+          app.log.warn(
+            {
+              sessionId: transport.sessionId || effectiveSessionId,
+              statusCode,
+              isNewTransport,
+              hadSessionId: !!sessionId,
+            },
+            "MCP: Request completed with error status - client may need to reinitialize",
+          );
+        }
+      }
+
+      // Log if this was a successful reconnect
+      if (
+        isNewTransport &&
+        sessionId &&
+        reply.sent &&
+        (reply as any).statusCode < 400
+      ) {
+        app.log.info(
+          {
+            sessionId: transport.sessionId || sessionId,
+          },
+          "MCP: Client reconnected after server restart",
+        );
+      }
     } catch (error: any) {
       app.log.error(
         {
           error: error.message,
           stack: error.stack,
-          sessionId: transport.sessionId,
+          sessionId: transport.sessionId || effectiveSessionId,
+          isNewTransport,
+          replySent: reply.sent,
+          requestMethod: request.method,
+          requestUrl: request.url,
         },
         "MCP: Error handling request",
       );

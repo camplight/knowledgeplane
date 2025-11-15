@@ -7,6 +7,9 @@
     "apps/*",
     "packages/*"
   ],
+  "dependencies": {
+    "@knowledgeplane/file-processor": "*"
+  },
   "scripts": {
     "bootstrap": "npm install",
     "dev": "concurrently -n \"infra,mcp-server,webapp\" -c \"blue,green,yellow\" \"npm run dev:infra\" \"npm run dev:mcp-server\" \"npm run dev:webapp\"",
@@ -16,9 +19,10 @@
     "dev:stop": "docker compose -f infra/docker-compose.dev.yml down",
     "migrate": "node scripts/migrate.js",
     "lint": "npm run lint --workspaces --if-present",
-    "build": "npm run build --workspace=packages/db && npm run build --workspaces --if-present",
+    "build": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "rebuild": "npm run build && docker compose -f infra/docker-compose.dev.yml down -v && docker compose -f infra/docker-compose.dev.yml up -d && node scripts/wait-for-db.js"
+    "rebuild": "npm run typecheck && docker compose -f infra/docker-compose.dev.yml down -v && docker compose -f infra/docker-compose.dev.yml up -d && node scripts/wait-for-db.js"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

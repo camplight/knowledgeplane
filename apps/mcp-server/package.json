@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "dotenv -e .env.dev -- tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "tsx src/index.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest",
@@ -20,6 +20,7 @@
     "@fastify/swagger": "^9.0.0",
     "@fastify/swagger-ui": "^5.0.0",
     "@knowledgeplane/db": "*",
+    "@knowledgeplane/file-processor": "*",
     "@modelcontextprotocol/sdk": "^1.20.2",
     "@types/jsonwebtoken": "^9.0.10",
     "dotenv": "^16.4.5",
@@ -28,6 +29,7 @@
     "jsonwebtoken": "^9.0.2",
     "jwks-rsa": "^3.2.0",
     "node-fetch": "^3.3.2",
+    "openai": "^4.20.0",
     "pgvector": "^0.1.8"
   },
   "devDependencies": {

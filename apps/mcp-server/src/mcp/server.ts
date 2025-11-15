@@ -5,6 +5,10 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyLoggerInstance } from "fastify";
 import { factsWriteTool, handleFactsWrite } from "./handlers/facts.write.js";
+import {
+  factsBulkWriteTool,
+  handleFactsBulkWrite,
+} from "./handlers/facts.bulkwrite.js";
 import { factsSearchTool, handleFactsSearch } from "./handlers/facts.search.js";
 import { factsUpdateTool, handleFactsUpdate } from "./handlers/facts.update.js";
 import { factsTrashTool, handleFactsTrash } from "./handlers/facts.trash.js";
@@ -16,6 +20,10 @@ import {
   knowledgeContextsListTool,
   handleKnowledgeContextsList,
 } from "./handlers/knowledgecontexts.list.js";
+import {
+  filesUploadTool,
+  handleFilesUpload,
+} from "./handlers/files.upload.js";
 
 export interface McpContext {
   userId?: string;
@@ -25,11 +33,13 @@ export interface McpContext {
 // Tool definitions from handlers
 const tools = [
   factsWriteTool,
+  factsBulkWriteTool,
   factsSearchTool,
   factsUpdateTool,
   factsTrashTool,
   usersRegisterTool,
   knowledgeContextsListTool,
+  filesUploadTool,
 ];
 
 export function createMcpServer(
@@ -106,6 +116,28 @@ export function createMcpServer(
       }
 
       handler = handleFactsWrite;
+    } else if (name === "facts.bulkwrite") {
+      // Merge context into args for facts.bulkwrite
+      handlerArgs = { ...args } as any;
+
+      // Infer userId from context and apply to all facts if available
+      if (context?.userId && handlerArgs.facts) {
+        handlerArgs.facts = handlerArgs.facts.map((fact: any) => ({
+          ...fact,
+          created_by: fact.created_by || context.userId,
+          last_updated_by: fact.last_updated_by || context.userId,
+        }));
+      }
+
+      // Set knowledge_context from context if available (apply to all facts that don't have one)
+      if (context?.knowledgeContext && handlerArgs.facts) {
+        handlerArgs.facts = handlerArgs.facts.map((fact: any) => ({
+          ...fact,
+          knowledge_context: fact.knowledge_context || context.knowledgeContext,
+        }));
+      }
+
+      handler = handleFactsBulkWrite;
     } else if (name === "facts.search") {
       // Merge context into args for facts.search
       handlerArgs = { ...args } as any;
@@ -143,6 +175,21 @@ export function createMcpServer(
     } else if (name === "knowledgecontexts.list") {
       handlerArgs = { ...args } as any;
       handler = handleKnowledgeContextsList;
+    } else if (name === "files.upload") {
+      // Merge context into args for files.upload
+      handlerArgs = { ...args } as any;
+      if (context) {
+        if (context.userId) {
+          // Use context userId as default for created_by if not provided
+          handlerArgs.created_by =
+            handlerArgs.created_by || context.userId;
+        }
+        if (context.knowledgeContext) {
+          handlerArgs.knowledge_context =
+            handlerArgs.knowledge_context || context.knowledgeContext;
+        }
+      }
+      handler = handleFilesUpload;
     } else {
       const error = `Unknown tool: ${name}`;
       if (logger) {

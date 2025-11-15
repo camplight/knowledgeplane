@@ -1,4 +1,5 @@
-import { query } from "../db.js";
+import { collections } from "../db.js";
+import { triggerWebhook } from "../lib/webhook-trigger.js";
 
 export interface FactInput {
   content: string;
@@ -9,6 +10,8 @@ export interface FactInput {
 }
 
 export interface FactRecord {
+  _key?: string;
+  _id?: string;
   id: string;
   content: string;
   metadata: Record<string, string>;
@@ -42,75 +45,120 @@ export interface FactUpdateInput {
 
 export class Fact {
   static async write(input: FactInput): Promise<FactRecord> {
-    const result = await query(
-      `INSERT INTO fact(content, metadata, created_by, last_updated_by, knowledge_context)
-       VALUES($1, $2, $3, $4, $5)
-       RETURNING id, content, metadata, created_at, updated_at, created_by, last_updated_by, knowledge_context, trashed`,
-      [
-        input.content,
-        input.metadata || {},
-        input.created_by,
-        input.last_updated_by,
-        input.knowledge_context || "",
-      ],
-    );
+    const now = new Date().toISOString();
+    const doc = {
+      content: input.content,
+      metadata: input.metadata || {},
+      created_by: input.created_by,
+      last_updated_by: input.last_updated_by,
+      knowledge_context: input.knowledge_context || "",
+      trashed: false,
+      created_at: now,
+      updated_at: now,
+    };
 
-    return result.rows[0] as FactRecord;
+    const result = await collections.facts.save(doc, { returnNew: true });
+    const record = this._normalizeRecord(result.new!);
+    
+    // Trigger webhook
+    triggerWebhook("fact.created", record).catch((error) => {
+      console.error("Failed to trigger fact.created webhook:", error);
+    });
+    
+    return record;
+  }
+
+  static async bulkWrite(inputs: FactInput[]): Promise<FactRecord[]> {
+    if (inputs.length === 0) {
+      return [];
+    }
+
+    const now = new Date().toISOString();
+    const docs = inputs.map((input) => ({
+      content: input.content,
+      metadata: input.metadata || {},
+      created_by: input.created_by,
+      last_updated_by: input.last_updated_by,
+      knowledge_context: input.knowledge_context || "",
+      trashed: false,
+      created_at: now,
+      updated_at: now,
+    }));
+
+    const result = await collections.facts.saveAll(docs, {
+      returnNew: true,
+    });
+    const records = (result as any).saved?.map((doc: any) => this._normalizeRecord(doc.new)) || [];
+    
+    // Trigger webhooks for each fact
+    for (const record of records) {
+      triggerWebhook("fact.created", record).catch((error) => {
+        console.error("Failed to trigger fact.created webhook:", error);
+      });
+    }
+    
+    return records;
   }
 
   static async update(input: FactUpdateInput): Promise<FactRecord> {
-    const updates: string[] = [];
-    const params: any[] = [];
-    let paramIndex = 1;
+    const updates: any = {
+      last_updated_by: input.last_updated_by,
+      updated_at: new Date().toISOString(),
+    };
 
     if (input.content !== undefined) {
-      updates.push(`content = $${paramIndex++}`);
-      params.push(input.content);
+      updates.content = input.content;
     }
-
     if (input.metadata !== undefined) {
-      updates.push(`metadata = $${paramIndex++}`);
-      params.push(input.metadata);
+      updates.metadata = input.metadata;
     }
-
     if (input.knowledge_context !== undefined) {
-      updates.push(`knowledge_context = $${paramIndex++}`);
-      params.push(input.knowledge_context);
+      updates.knowledge_context = input.knowledge_context;
     }
 
-    updates.push(`last_updated_by = $${paramIndex++}`);
-    params.push(input.last_updated_by);
+    const key = this._extractKey(input.id);
+    const result = await collections.facts.update(key, updates, {
+      returnNew: true,
+    });
 
-    params.push(input.id);
-
-    const sql = `UPDATE fact
-                 SET ${updates.join(", ")}
-                 WHERE id = $${paramIndex}
-                 RETURNING id, content, metadata, created_at, updated_at, created_by, last_updated_by, knowledge_context, trashed`;
-
-    const result = await query(sql, params);
-
-    if (result.rows.length === 0) {
+    if (!result) {
       throw new Error(`Fact with id ${input.id} not found`);
     }
 
-    return result.rows[0] as FactRecord;
+    const record = this._normalizeRecord(result.new!);
+    
+    // Trigger webhook
+    triggerWebhook("fact.updated", record).catch((error) => {
+      console.error("Failed to trigger fact.updated webhook:", error);
+    });
+    
+    return record;
   }
 
   static async trash(id: string, last_updated_by: string): Promise<FactRecord> {
-    const result = await query(
-      `UPDATE fact
-       SET trashed = true, last_updated_by = $2
-       WHERE id = $1
-       RETURNING id, content, metadata, created_at, updated_at, created_by, last_updated_by, knowledge_context, trashed`,
-      [id, last_updated_by],
+    const key = this._extractKey(id);
+    const result = await collections.facts.update(
+      key,
+      {
+        trashed: true,
+        last_updated_by,
+        updated_at: new Date().toISOString(),
+      },
+      { returnNew: true },
     );
 
-    if (result.rows.length === 0) {
+    if (!result) {
       throw new Error(`Fact with id ${id} not found`);
     }
 
-    return result.rows[0] as FactRecord;
+    const record = this._normalizeRecord(result.new!);
+    
+    // Trigger webhook
+    triggerWebhook("fact.trashed", record).catch((error) => {
+      console.error("Failed to trigger fact.trashed webhook:", error);
+    });
+    
+    return record;
   }
 
   static async search(params: FactSearchParams): Promise<FactSearchResult[]> {
@@ -120,48 +168,43 @@ export class Fact {
 
     const isWildcard = params.query === "*";
 
-    let sql: string;
-    let queryParams: any[];
+    let aql: string;
+    const bindVars: any = {
+      limit,
+      offset,
+      includeTrashed,
+    };
 
     if (isWildcard) {
-      sql = `SELECT id, content, metadata, created_at, updated_at, created_by, last_updated_by, knowledge_context, trashed,
-                   1.0 AS score
-             FROM fact
-             WHERE ($1::text IS NULL OR knowledge_context = $1)
-               AND (trashed = false OR $4::boolean = true)
-             ORDER BY updated_at DESC, created_at DESC
-             LIMIT $2 OFFSET $3;`;
-      queryParams = [
-        params.knowledge_context || null,
-        limit,
-        offset,
-        includeTrashed,
-      ];
+      aql = `
+        FOR fact IN facts
+          FILTER (fact.trashed == false || @includeTrashed == true)
+          FILTER (@knowledgeContext == null || fact.knowledge_context == @knowledgeContext)
+          SORT fact.updated_at DESC, fact.created_at DESC
+          LIMIT @offset, @limit
+          RETURN { fact: fact, score: 1.0 }
+      `;
+      bindVars.knowledgeContext = params.knowledge_context || null;
     } else {
-      const searchPattern = `%${params.query.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
-      sql = `SELECT id, content, metadata, created_at, updated_at, created_by, last_updated_by, knowledge_context, trashed,
-                   1.0 AS score
-             FROM fact
-             WHERE ($1::text IS NULL OR knowledge_context = $1)
-               AND content ILIKE $4
-               AND (trashed = false OR $5::boolean = true)
-             ORDER BY updated_at DESC, created_at DESC
-             LIMIT $2 OFFSET $3;`;
-      queryParams = [
-        params.knowledge_context || null,
-        limit,
-        offset,
-        searchPattern,
-        includeTrashed,
-      ];
+      aql = `
+        FOR fact IN FULLTEXT(facts, "content", @query)
+          FILTER (fact.trashed == false || @includeTrashed == true)
+          FILTER (@knowledgeContext == null || fact.knowledge_context == @knowledgeContext)
+          SORT fact.updated_at DESC, fact.created_at DESC
+          LIMIT @offset, @limit
+          RETURN { fact: fact, score: BM25(fact) }
+      `;
+      bindVars.query = params.query;
+      bindVars.knowledgeContext = params.knowledge_context || null;
     }
 
-    const result = await query(sql, queryParams);
+    const cursor = await collections.facts.database.query(aql, bindVars);
+    const results = await cursor.all();
 
-    return result.rows.map((row) => ({
-      ...row,
-      score: parseFloat(row.score) || 0,
-    })) as FactSearchResult[];
+    return results.map((r: any) => ({
+      ...this._normalizeRecord(r.fact),
+      score: r.score || 1.0,
+    }));
   }
 
   static async list(
@@ -169,33 +212,103 @@ export class Fact {
     offset: number = 0,
     includeTrashed: boolean = false,
   ): Promise<FactRecord[]> {
-    const sql = `SELECT id, content, metadata, created_at, updated_at, created_by, last_updated_by, knowledge_context, trashed
-                 FROM fact
-                 WHERE (trashed = false OR $3::boolean = true)
-                 ORDER BY updated_at DESC, created_at DESC
-                 LIMIT $1 OFFSET $2;`;
-    const result = await query(sql, [limit, offset, includeTrashed]);
-    return result.rows as FactRecord[];
+    const aql = `
+      FOR fact IN facts
+        FILTER (fact.trashed == false || @includeTrashed == true)
+        SORT fact.updated_at DESC, fact.created_at DESC
+        LIMIT @offset, @limit
+        RETURN fact
+    `;
+
+    const cursor = await collections.facts.database.query(aql, {
+      limit,
+      offset,
+      includeTrashed,
+    });
+    const results = await cursor.all();
+
+    return results.map((r: any) => this._normalizeRecord(r));
   }
 
   static async count(includeTrashed: boolean = false): Promise<number> {
-    const sql = `SELECT COUNT(*) as count
-                 FROM fact
-                 WHERE (trashed = false OR $1::boolean = true);`;
-    const result = await query(sql, [includeTrashed]);
-    return parseInt(result.rows[0].count, 10);
+    const aql = `
+      LET count = LENGTH(
+        FOR fact IN facts
+          FILTER (fact.trashed == false || @includeTrashed == true)
+          RETURN fact
+      )
+      RETURN count
+    `;
+
+    const cursor = await collections.facts.database.query(aql, {
+      includeTrashed,
+    });
+    const result = await cursor.next();
+
+    return result || 0;
   }
 
   static async listKnowledgeContexts(
     includeTrashed: boolean = false,
   ): Promise<string[]> {
-    const sql = `SELECT DISTINCT knowledge_context
-                 FROM fact
-                 WHERE (trashed = false OR $1::boolean = true)
-                   AND knowledge_context IS NOT NULL
-                   AND knowledge_context != ''
-                 ORDER BY knowledge_context;`;
-    const result = await query(sql, [includeTrashed]);
-    return result.rows.map((row) => row.knowledge_context as string);
+    const aql = `
+      FOR fact IN facts
+        FILTER (fact.trashed == false || @includeTrashed == true)
+        FILTER fact.knowledge_context != null && fact.knowledge_context != ""
+        COLLECT knowledge_context = fact.knowledge_context
+        SORT knowledge_context
+        RETURN knowledge_context
+    `;
+
+    const cursor = await collections.facts.database.query(aql, {
+      includeTrashed,
+    });
+    const results = await cursor.all();
+
+    return results;
+  }
+
+  static async findById(id: string): Promise<FactRecord | null> {
+    const key = this._extractKey(id);
+    try {
+      const doc = await collections.facts.document(key);
+      return this._normalizeRecord(doc);
+    } catch (error: any) {
+      if (error.errorNum === 1202) {
+        // Document not found
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  static async queryAQL(aql: string, bindVars?: any): Promise<any[]> {
+    const cursor = await collections.facts.database.query(aql, bindVars || {});
+    return await cursor.all();
+  }
+
+  // Helper methods
+  static _extractKey(id: string): string {
+    // Handle both _key format and _id format
+    if (id.includes("/")) {
+      return id.split("/")[1];
+    }
+    return id;
+  }
+
+  static _normalizeRecord(doc: any): FactRecord {
+    return {
+      id: doc._id || `facts/${doc._key}`,
+      _key: doc._key,
+      _id: doc._id,
+      content: doc.content,
+      metadata: doc.metadata || {},
+      created_at: doc.created_at,
+      updated_at: doc.updated_at,
+      created_by: doc.created_by,
+      last_updated_by: doc.last_updated_by,
+      knowledge_context: doc.knowledge_context || "",
+      trashed: doc.trashed || false,
+    };
   }
 }

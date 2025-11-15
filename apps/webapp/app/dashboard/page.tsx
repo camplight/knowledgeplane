@@ -66,6 +66,24 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="flex items-center gap-4">
+              <button
+                onClick={() => router.push("/upload")}
+                className="px-4 py-2 text-sm font-medium text-blue-700 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"
+              >
+                Upload Files
+              </button>
+              <button
+                onClick={() => router.push("/editor")}
+                className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Editor
+              </button>
+              <button
+                onClick={() => router.push("/chat")}
+                className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Chat
+              </button>
               <div className="text-sm text-slate-600">
                 <span className="font-medium">{user.username}</span>
                 <span className="text-slate-400 mx-2">•</span>

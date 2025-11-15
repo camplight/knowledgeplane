@@ -19,7 +19,21 @@ MCP-compliant server – works out-of-the-box with Claude Desktop, VS Code MCP h
 
 Knowledge contexts – organize memory using flexible `knowledge_context` field for scoping facts.
 
-Full-text search – keyword search using PostgreSQL full-text search with GIN indexes.
+Full-text search – keyword search using ArangoDB full-text indexes.
+
+Graph database – ArangoDB provides native graph capabilities for modeling relationships between facts.
+
+Relations – facts can be linked together with typed relationships (references, depends_on, related_to, part_of, etc.).
+
+AQL queries – support for ArangoDB Query Language (AQL) for advanced graph queries and traversals.
+
+Card consolidation – background worker automatically consolidates related facts into summary cards using OpenAI agents.
+
+Category organization – background worker organizes cards into hierarchical category trees.
+
+Webhooks – register webhooks to receive notifications on fact/card events.
+
+REST API – comprehensive REST API for programmatic access.
 
 User management – automatic user creation and tracking via username/email.
 
@@ -29,15 +43,19 @@ Docker-first deployment – one-command local or hosted setup.
 
 🧩 Architecture Overview
 ```
-Web Dashboard (React + tRPC)
+Web Dashboard (React + Next.js + tRPC)
+   ↓
+Editor (Knowledge Base Browser)
    ↓
 [Fastify Server + tRPC]
    ↓
 Clients (Claude Desktop, VS Code, Cursor)
    ↓
-[MCP Server over HTTP]
+[MCP Server over HTTP]  [REST API]
    ↓
-PostgreSQL (memory store with full-text search)
+Background Workers (Card Consolidation, Category Organization)
+   ↓
+ArangoDB (graph database with full-text search)
 ```
 
 🔐 MCP Tools
@@ -45,11 +63,13 @@ PostgreSQL (memory store with full-text search)
 | Tool | Description |
 |------|-------------|
 | `facts.write` | Write a fact with content, metadata, user tracking, and optional knowledge context |
+| `facts.bulkwrite` | Write multiple facts to the knowledge base in a single operation |
 | `facts.search` | Search facts using full-text search with optional knowledge context filtering and pagination. Trashed facts are excluded by default |
 | `facts.update` | Update a fact in the knowledge base. Only provided fields will be updated |
 | `facts.trash` | Mark a fact as trashed. Trashed facts are excluded from search results unless explicitly included |
 | `users.register` | Register a new user or update an existing user's email if the username already exists |
 | `knowledgecontexts.list` | List all distinct knowledge contexts stored in the database. Trashed facts are excluded by default |
+| `files.upload` | Upload a file and automatically extract facts and relations using AI. The file content is analyzed using OpenAI to identify key information and relationships |
 
 **facts.write Parameters:**
 - `content` (required): The content of the fact
@@ -57,6 +77,14 @@ PostgreSQL (memory store with full-text search)
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 - `knowledge_context` (optional): Context or namespace for organizing facts
+
+**facts.bulkwrite Parameters:**
+- `facts` (required): Array of fact objects to write. Each fact object has the same parameters as `facts.write`:
+  - `content` (required): The content of the fact
+  - `metadata` (optional): Key-value pairs of metadata
+  - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
+  - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
+  - `knowledge_context` (optional): Context or namespace for organizing facts
 
 **facts.search Parameters:**
 - `query` (required): Search query for full-text search. Use '*' to search all facts
@@ -83,8 +111,16 @@ PostgreSQL (memory store with full-text search)
 **knowledgecontexts.list Parameters:**
 - `include_trashed` (optional): If true, includes knowledge contexts from trashed facts (default: false)
 
+**files.upload Parameters:**
+- `filename` (required): Original filename of the file being uploaded
+- `mimeType` (required): MIME type of the file (e.g., 'text/plain', 'application/json')
+- `data` (required): Base64-encoded file content
+- `knowledge_context` (optional): Knowledge context for organizing extracted facts
+- `created_by` (optional): User ID of the uploader. If not provided, inferred from authenticated session (OAuth token or API key)
+
 🔌 API Endpoints
 
+**MCP Server Endpoints:**
 | Endpoint | Description |
 |----------|-------------|
 | `POST /mcp` | MCP protocol endpoint (StreamableHTTPServerTransport) |
@@ -107,8 +143,36 @@ PostgreSQL (memory store with full-text search)
 | `POST /register` | OAuth 2.0 Dynamic Client Registration endpoint (RFC7591) |
 | `ALL /trpc/*` | tRPC endpoint for type-safe API calls |
 | `GET /dashboard` | User dashboard (protected, requires session) |
+| `GET /editor` | Knowledge base editor page (protected, requires session) |
+| `GET /chat` | AI chat interface with MCP server connection (protected, requires session) |
+| `GET /upload` | File upload page with AI-powered fact extraction (protected, requires session) |
 | `GET /facts` | Browse facts page (protected, requires session) |
 | `GET /users` | Browse users page (protected, requires session) |
+
+**REST API Endpoints (Port 8081):**
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Health check endpoint |
+| `GET /api/facts` | List facts with pagination and filtering |
+| `GET /api/facts/:id` | Get a specific fact |
+| `POST /api/facts` | Create a new fact |
+| `PUT /api/facts/:id` | Update a fact |
+| `DELETE /api/facts/:id` | Trash a fact |
+| `POST /api/facts/search` | Search facts |
+| `GET /api/relations` | List relations with filtering |
+| `POST /api/relations` | Create a new relation |
+| `GET /api/facts/:id/relations` | Get relations for a fact |
+| `POST /api/query` | Execute AQL query |
+| `GET /api/cards` | List cards |
+| `GET /api/cards/:id` | Get a specific card |
+| `GET /api/categories` | List categories |
+| `GET /api/categories/tree` | Get category tree |
+| `GET /api/categories/:id` | Get a specific category |
+| `POST /api/categories` | Create a new category |
+| `GET /api/webhooks` | List webhooks |
+| `POST /api/webhooks` | Create a new webhook |
+| `PUT /api/webhooks/:id` | Update a webhook |
+| `DELETE /api/webhooks/:id` | Delete a webhook |
 
 **Session Management:**
 
@@ -142,26 +206,94 @@ KnowledgePlane supports three types of authentication:
 - Knowledge context can be provided via query param: `?knowledge_context=project-alpha`
 - Authentication via `Authorization: Bearer <token>` header (OAuth) or `knowledgeplane-key` header (API key)
 - For `facts.write`, `created_by` and `last_updated_by` are automatically set from the authenticated user's ID if not explicitly provided
+- **Server Restart Handling**: When the server restarts, in-memory session state is lost. Clients reconnecting with an existing `mcp-session-id` will have a new transport created. The MCP protocol requires clients to send an `initialize` request before any other requests. If a client sends a non-initialize request after a server restart, it will receive a 400 error and should reinitialize the session.
 
 🗄️ Data Model
 
-**User Table:**
-- `id` (UUID): Primary key
-- `username` (text): Unique username
-- `email` (text): User email
-- `api_key` (text): Optional API key stored in user profile (for API key-based authentication)
-- `created_at` (timestamptz): Creation timestamp
+**User Collection:**
+- `_id` (ArangoDB document ID): Primary key
+- `_key` (string): Document key
+- `username` (string): Unique username
+- `email` (string): User email
+- `api_key` (string): Optional API key stored in user profile (for API key-based authentication)
+- `created_at` (string): Creation timestamp (ISO 8601)
 
-**Fact Table:**
-- `id` (UUID): Primary key
-- `content` (text): Fact content
-- `metadata` (jsonb): Key-value metadata
-- `created_at` (timestamptz): Creation timestamp
-- `updated_at` (timestamptz): Last update timestamp
-- `created_by` (UUID): Reference to user
-- `last_updated_by` (UUID): Reference to user
-- `knowledge_context` (text): Optional context for organizing facts
+**Fact Collection:**
+- `_id` (ArangoDB document ID): Primary key
+- `_key` (string): Document key
+- `content` (string): Fact content
+- `metadata` (object): Key-value metadata
+- `created_at` (string): Creation timestamp (ISO 8601)
+- `updated_at` (string): Last update timestamp (ISO 8601)
+- `created_by` (string): Reference to user ID
+- `last_updated_by` (string): Reference to user ID
+- `knowledge_context` (string): Optional context for organizing facts
 - `trashed` (boolean): Whether the fact has been trashed (default: false)
+
+**Relation Collection (Edges):**
+- `_id` (ArangoDB edge ID): Primary key
+- `_key` (string): Document key
+- `_from` (string): Source fact document ID
+- `_to` (string): Target fact document ID
+- `from_fact` (string): Source fact ID (normalized)
+- `to_fact` (string): Target fact ID (normalized)
+- `type` (string): Relation type (e.g., "references", "depends_on", "related_to", "part_of")
+- `metadata` (object): Additional relation metadata
+- `created_by` (string): Reference to user ID
+- `created_at` (string): Creation timestamp (ISO 8601)
+
+**Card Collection:**
+- `_id` (ArangoDB document ID): Primary key
+- `_key` (string): Document key
+- `title` (string): Card title
+- `summary` (string): Brief summary
+- `content` (string): Full consolidated content
+- `fact_ids` (array): Array of fact IDs that were consolidated
+- `knowledge_context` (string): Knowledge context
+- `created_by` (string): Reference to user ID
+- `last_updated_by` (string): Reference to user ID
+- `metadata` (object): Additional metadata
+- `created_at` (string): Creation timestamp (ISO 8601)
+- `updated_at` (string): Last update timestamp (ISO 8601)
+- `category_id` (string): Optional reference to category
+
+**Category Collection:**
+- `_id` (ArangoDB document ID): Primary key
+- `_key` (string): Document key
+- `name` (string): Category name
+- `description` (string): Category description
+- `parent_id` (string): Optional reference to parent category
+- `knowledge_context` (string): Knowledge context
+- `created_by` (string): Reference to user ID
+- `created_at` (string): Creation timestamp (ISO 8601)
+- `updated_at` (string): Last update timestamp (ISO 8601)
+- `path` (array): Array of category IDs representing the path from root
+
+**Webhook Collection:**
+- `_id` (ArangoDB document ID): Primary key
+- `_key` (string): Document key
+- `url` (string): Webhook URL
+- `events` (array): Array of event names to subscribe to (e.g., ["fact.created", "card.updated"])
+- `secret` (string): Optional secret for webhook signature
+- `active` (boolean): Whether the webhook is active
+- `created_by` (string): Reference to user ID
+- `created_at` (string): Creation timestamp (ISO 8601)
+- `updated_at` (string): Last update timestamp (ISO 8601)
+
+**File Collection:**
+- `_id` (ArangoDB document ID): Primary key
+- `_key` (string): Document key
+- `filename` (string): Stored filename
+- `original_filename` (string): Original filename from upload
+- `mime_type` (string): MIME type of the file
+- `size` (number): File size in bytes
+- `storage_path` (string): Path where file is stored on disk
+- `uploaded_by` (string): Reference to user ID
+- `knowledge_context` (string): Knowledge context
+- `metadata` (object): Additional metadata
+- `created_at` (string): Creation timestamp (ISO 8601)
+- `updated_at` (string): Last update timestamp (ISO 8601)
+- `fact_ids` (array): Array of fact IDs extracted from this file
 
 🔐 OAuth Authentication
 
@@ -251,6 +383,12 @@ API key behavior:
 - API key authentication takes precedence over Bearer token authentication if both are provided
 
 **Environment Variables:**
+
+**MCP Server:**
+- `ARANGO_URL` - ArangoDB connection URL (default: `http://localhost:8529`)
+- `ARANGO_DB_NAME` - ArangoDB database name (default: `knowledgeplane`)
+- `ARANGO_USER` - ArangoDB username (default: `root`)
+- `ARANGO_PASSWORD` - ArangoDB password (default: empty)
 - `GOOGLE_CLIENT_ID` - Google OAuth client ID
 - `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
 - `GITHUB_CLIENT_ID` - GitHub OAuth client ID
@@ -262,6 +400,24 @@ API key behavior:
 - `OAUTH_PROVIDER` - Force a specific provider: `google` or `github` (optional)
 - `JWKS_URI` - JWKS endpoint for custom OAuth providers (optional)
 - `JWT_SECRET` - Secret for JWT verification (development only)
+- `PORT` - Server port (default: `8080`)
+- `OPENAI_API_KEY` - OpenAI API key (required for file upload fact extraction)
+- `OPENAI_MODEL` - OpenAI model to use (default: `gpt-4`)
+- `UPLOADS_DIR` - Directory for storing uploaded files (default: `./uploads`)
+
+**Background Worker:**
+- `ARANGO_URL` - ArangoDB connection URL
+- `ARANGO_DB_NAME` - ArangoDB database name
+- `ARANGO_USER` - ArangoDB username
+- `ARANGO_PASSWORD` - ArangoDB password
+- `OPENAI_API_KEY` - OpenAI API key (required for card consolidation and category organization)
+
+**REST API:**
+- `ARANGO_URL` - ArangoDB connection URL
+- `ARANGO_DB_NAME` - ArangoDB database name
+- `ARANGO_USER` - ArangoDB username
+- `ARANGO_PASSWORD` - ArangoDB password
+- `PORT` - Server port (default: `8081`)
 
 **Example: Using OAuth Token**
 ```bash
@@ -293,14 +449,15 @@ curl -X POST http://localhost:8080/mcp \
 🛠️ Tech Stack
 
 - **Fastify** + **TypeScript** backend
-- **React** + **Vite** frontend with **TypeScript**
+- **React** + **Next.js** frontend with **TypeScript**
 - **tRPC** for type-safe API communication between frontend and backend
-- **PostgreSQL** with full-text search (GIN indexes on tsvector)
+- **ArangoDB** graph database with full-text search and AQL query support
 - **MCP SDK** (`@modelcontextprotocol/sdk`) for protocol implementation
 - **Docker Compose** infrastructure
 - **OAuth2** authentication (`@fastify/oauth2`) - Google and GitHub support
 - **Session management** (`@fastify/secure-session`, `@fastify/cookie`) for OAuth state management and web user sessions
 - **JWT/JWKS** token validation for MCP sessions
+- **OpenAI API** for card consolidation and category organization
 - **Swagger/OpenAPI** documentation
 - **Tailwind CSS** for styling
 
@@ -385,6 +542,42 @@ curl -X POST "http://localhost:8080/mcp" \
       "arguments":{
         "content":"Project Apollo uses port 9090",
         "knowledge_context":"demo"
+      }
+    }
+  }'
+```
+
+**Example: Bulk write facts (with authentication)**
+```bash
+# User ID is automatically inferred from authenticated session (OAuth token or API key)
+# created_by and last_updated_by are automatically populated for all facts
+curl -X POST "http://localhost:8080/mcp" \
+  -H "Authorization: Bearer <oauth-token>" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":3,
+    "method":"tools/call",
+    "params":{
+      "name":"facts.bulkwrite",
+      "arguments":{
+        "facts":[
+          {
+            "content":"Project Apollo uses port 9090",
+            "knowledge_context":"demo",
+            "metadata":{"source":"deployment"}
+          },
+          {
+            "content":"Project Beta uses Redis for caching",
+            "knowledge_context":"demo",
+            "metadata":{"source":"architecture"}
+          },
+          {
+            "content":"Project Gamma uses PostgreSQL for persistence",
+            "knowledge_context":"demo"
+          }
+        ]
       }
     }
   }'
@@ -553,6 +746,36 @@ curl -X POST http://localhost:8080/mcp?knowledge_context=demo \
   }'
 ```
 
+**Example: Upload a file and extract facts**
+```bash
+# First, read file and encode as base64
+FILE_DATA=$(base64 -i document.txt)
+
+curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":8,
+    "method":"tools/call",
+    "params":{
+      "name":"files.upload",
+      "arguments":{
+        "filename":"document.txt",
+        "mimeType":"text/plain",
+        "data":"'$FILE_DATA'",
+        "knowledge_context":"project-docs"
+      }
+    }
+  }'
+```
+
+The response will include:
+- File information (id, filename, size, mime_type)
+- Number of facts created
+- Number of relations created
+- List of extracted facts with their IDs and content
+
 🔗 Integrate (Claude Desktop)
 
 For stdio-based MCP (using adapter directly):
@@ -577,6 +800,204 @@ Configure your MCP client to connect to `http://localhost:8080/mcp` with appropr
 
 KnowledgePlane runs itself: it monitors usage, updates docs, and manages its own release notes — a self-sustaining memory platform for the agentic era.
 
+🔗 Relations and Graph Queries
+
+KnowledgePlane supports typed relationships between facts, enabling graph-based knowledge modeling.
+
+**Relation Types:**
+- `references` - One fact references another
+- `depends_on` - One fact depends on another
+- `related_to` - General relationship between facts
+- `part_of` - One fact is part of another
+- Custom types can be defined as needed
+
+**Creating Relations:**
+```bash
+curl -X POST http://localhost:8081/api/relations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from_fact": "facts/123",
+    "to_fact": "facts/456",
+    "type": "references",
+    "metadata": {"strength": "strong"},
+    "created_by": "users/789"
+  }'
+```
+
+**Querying Relations:**
+```bash
+# Get all relations for a fact
+curl http://localhost:8081/api/facts/facts/123/relations
+
+# Get relations by type
+curl "http://localhost:8081/api/relations?type=references"
+```
+
+**AQL Queries:**
+
+KnowledgePlane supports ArangoDB Query Language (AQL) for advanced graph queries:
+
+```bash
+curl -X POST http://localhost:8081/api/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "FOR fact IN facts FILTER fact.knowledge_context == @context RETURN fact",
+    "bindVars": {"context": "project-alpha"}
+  }'
+```
+
+**Graph Traversal Example:**
+```aql
+FOR fact, relation, related IN 1..2 OUTBOUND 'facts/123' relations
+  RETURN {fact: fact, relation: relation, related: related}
+```
+
+🤖 Background Workers
+
+KnowledgePlane includes background workers that automatically maintain and organize the knowledge base:
+
+**Card Consolidator:**
+- Runs every 5 minutes
+- Identifies unconsolidated facts
+- Groups facts by knowledge context
+- Uses graph traversal to find related facts
+- Leverages OpenAI GPT-4 to create consolidated summary cards
+- Creates cards with title, summary, and comprehensive content
+
+**Category Organizer:**
+- Runs every 30 minutes
+- Analyzes uncategorized cards
+- Uses OpenAI GPT-4 to suggest hierarchical category structures
+- Creates and updates categories
+- Assigns cards to appropriate categories
+- Maintains category tree structure
+
+Both workers are designed to be:
+- Non-blocking and asynchronous
+- Resilient to failures
+- Configurable via environment variables
+
+🔔 Webhooks
+
+KnowledgePlane supports webhooks for event notifications:
+
+**Supported Events:**
+- `fact.created` - Triggered when a fact is created
+- `fact.updated` - Triggered when a fact is updated
+- `fact.trashed` - Triggered when a fact is trashed
+- `card.created` - Triggered when a card is created
+- `card.updated` - Triggered when a card is updated
+
+**Creating a Webhook:**
+```bash
+curl -X POST http://localhost:8081/api/webhooks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/webhook",
+    "events": ["fact.created", "card.updated"],
+    "secret": "your-webhook-secret",
+    "active": true,
+    "created_by": "users/123"
+  }'
+```
+
+**Webhook Payload:**
+```json
+{
+  "event": "fact.created",
+  "data": {
+    "id": "facts/123",
+    "content": "...",
+    "knowledge_context": "project-alpha",
+    ...
+  },
+  "timestamp": "2024-01-01T00:00:00Z"
+}
+```
+
+**Webhook Signature:**
+If a secret is provided, webhooks include an `X-KnowledgePlane-Signature` header with an HMAC-SHA256 signature:
+```
+X-KnowledgePlane-Signature: sha256=<signature>
+```
+
+💬 AI Chat Interface
+
+KnowledgePlane includes an AI chat interface that combines OpenAI's language model with access to your knowledge base via MCP server:
+
+**Features:**
+- Real-time chat interface with conversation history
+- Automatic fact retrieval from knowledge base based on user queries
+- Context-aware responses using relevant facts
+- Knowledge context filtering
+- Visual indication of which facts were used in responses
+
+**How it works:**
+1. User sends a message in the chat interface
+2. System searches the knowledge base for relevant facts using the MCP server
+3. Relevant facts are included as context in the OpenAI API call
+4. AI generates a response using both its training and the knowledge base facts
+5. Response is displayed with information about which facts were used
+
+**Access:**
+Navigate to `/chat` in the web application (requires authentication).
+
+**Example Usage:**
+- Ask questions about stored facts: "What do we know about project Apollo?"
+- Request summaries: "Summarize all facts about deployment processes"
+- Get insights: "What are the relationships between our different projects?"
+
+The chat interface automatically:
+- Maintains conversation context
+- Filters facts by knowledge context when specified
+- Shows which facts were referenced in each response
+- Handles errors gracefully
+
+📁 File Upload and AI Extraction
+
+KnowledgePlane supports file uploads with automatic fact and relation extraction using OpenAI:
+
+**Features:**
+- Upload various file types (text, markdown, JSON, PDF, Word docs, etc.)
+- Automatic text extraction from files
+- AI-powered fact extraction using OpenAI GPT-4
+- Automatic relation identification between extracted facts
+- Preservation of original file with links to extracted facts
+- Knowledge context assignment for organized storage
+
+**How it works:**
+1. User uploads a file through the web interface
+2. File is stored and text content is extracted
+3. OpenAI analyzes the content and extracts:
+   - Discrete facts with metadata
+   - Relationships between facts (references, depends_on, related_to, etc.)
+4. Facts and relations are created in the knowledge base
+5. Original file is linked to all extracted facts
+6. Facts include metadata pointing back to the source file
+
+**Supported File Types:**
+- Text files (.txt, .md)
+- JSON files (.json)
+- PDF documents (.pdf) - requires additional processing
+- Word documents (.doc, .docx) - requires additional processing
+- Other text-based formats
+
+**File Model:**
+- Stores file metadata (filename, size, mime type, storage path)
+- Tracks which facts were extracted from the file
+- Links facts back to source file via metadata
+- Supports knowledge context organization
+
+**Access:**
+Navigate to `/upload` in the web application (requires authentication).
+
+**Example Workflow:**
+1. Upload a project documentation file
+2. AI extracts key facts about the project
+3. Identifies relationships (e.g., "Feature A depends on Feature B")
+4. All facts are linked to the original file
+5. Facts can be queried, and you can trace them back to the source document
+
 📝 Implementation Status
 
 **Current Features:**
@@ -594,12 +1015,22 @@ KnowledgePlane runs itself: it monitors usage, updates docs, and manages its own
 - ✅ Web UI for browsing facts with pagination and filtering
 - ✅ Web UI for browsing users with pagination
 - ✅ tRPC routes for listing facts and users
+- ✅ AI Chat interface with OpenAI integration and MCP server connection
+- ✅ File upload with AI-powered fact and relation extraction
+- ✅ ArangoDB graph database with relations support
+- ✅ AQL query support
+- ✅ Card consolidation via background worker
+- ✅ Category organization via background worker
+- ✅ Webhook support
+- ✅ REST API endpoints
+- ✅ Knowledge base editor page
 
 **Planned Features:**
-- 🔲 Semantic search with pgvector embeddings
-- 🔲 REST API endpoints (beyond MCP)
-- 🔲 Namespace/project organization
+- 🔲 Semantic search with vector embeddings
+- 🔲 Advanced graph visualization in editor
 - 🔲 Audit logs
 - 🔲 Retention policies
 - 🔲 RBAC and advanced authentication
 - 🔲 Analytics and telemetry
+- 🔲 Card merging and deduplication
+- 🔲 Fact versioning

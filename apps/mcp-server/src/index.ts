@@ -4,7 +4,7 @@ import cookie from "@fastify/cookie";
 import secureSession from "@fastify/secure-session";
 import swagger from "@fastify/swagger";
 import swaggerUI from "@fastify/swagger-ui";
-import { init as initDb, pool } from "@knowledgeplane/db";
+import { init as initDb } from "@knowledgeplane/db";
 import health from "./routes/health.js";
 import mcp from "./routes/mcp.js";
 import oauthRoutes from "./routes/oauth.js";
@@ -86,7 +86,7 @@ async function startServer() {
     app.log.info({ signal }, "Shutting down gracefully...");
     try {
       await app.close();
-      await pool.end();
+      // ArangoDB connection cleanup is handled automatically
       app.log.info("Server closed");
       process.exit(0);
     } catch (err) {

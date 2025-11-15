@@ -1,0 +1,750 @@
+[
+  {
+    "content": "Item: тоалетна моноблок, Price: 339, Contractor: Илстрой 2008, Location: 3ти етаж - банята, Purchased by: Ние, Quantity: 1",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "тоалетна моноблок",
+      "price": "339",
+      "contractor": "Илстрой 2008",
+      "location": "3ти етаж - банята",
+      "purchase_by": "Ние",
+      "quantity": "1"
+    }
+  },
+  {
+    "content": "Item: линеен сифон, Price: 131.79",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "линеен сифон",
+      "price": "131.79",
+      "contractor": "none",
+      "location": "none",
+      "purchase_by": "none",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: мивка със шкаф и огледало (преместени до вратата), Price: 359, Contractor: Илстрой 2008, Purchased by: Ние, Quantity: 1",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "мивка със шкаф и огледало (преместени до вратата)",
+      "price": "359",
+      "contractor": "Илстрой 2008",
+      "location": "none",
+      "purchase_by": "Ние",
+      "quantity": "1"
+    }
+  },
+  {
+    "content": "Item: смесител, Price: 299.9",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "смесител",
+      "price": "299.9",
+      "contractor": "none",
+      "location": "none",
+      "purchase_by": "none",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: смесител, Price: 69.99",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "смесител",
+      "price": "69.99",
+      "contractor": "none",
+      "location": "none",
+      "purchase_by": "none",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: шкаф с умивалник, Price: 379, Purchased by: Ние",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "шкаф с умивалник",
+      "price": "379",
+      "contractor": "none",
+      "location": "none",
+      "purchase_by": "Ние",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: плочки под, Price: 0, Contractor: Илстрой 2008, Purchased by: Ние, Quantity: 4 m2",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "плочки под",
+      "price": "0",
+      "contractor": "Илстрой 2008",
+      "location": "none",
+      "purchase_by": "Ние",
+      "quantity": "4 m2"
+    }
+  },
+  {
+    "content": "Item: плочки стени, Price: 609,2, Contractor: Илстрой 2008, Purchased by: Ние, Quantity: 15 m2",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "плочки стени",
+      "price": "609,2",
+      "contractor": "Илстрой 2008",
+      "location": "none",
+      "purchase_by": "Ние",
+      "quantity": "15 m2"
+    }
+  },
+  {
+    "content": "Item: корниз, уплътнител и др., Price: 78.83",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "корниз, уплътнител и др.",
+      "price": "78.83",
+      "contractor": "none",
+      "location": "none",
+      "purchase_by": "none",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: душ интимен, Price: 136.67",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "душ интимен",
+      "price": "136.67",
+      "contractor": "none",
+      "location": "none",
+      "purchase_by": "none",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: лира за баня, Price: 107.33",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "лира за баня",
+      "price": "107.33",
+      "contractor": "none",
+      "location": "none",
+      "purchase_by": "none",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: тръбно окачване, Price: 119.99",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "тръбно окачване",
+      "price": "119.99",
+      "contractor": "none",
+      "location": "none",
+      "purchase_by": "none",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: бойлер, Price: 599, Contractor: Илстрой 2008, Purchased by: Ние, Quantity: 1",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "бойлер",
+      "price": "599",
+      "contractor": "Илстрой 2008",
+      "location": "none",
+      "purchase_by": "Ние",
+      "quantity": "1"
+    }
+  },
+  {
+    "content": "Item: поставяне на душ слушалка под прозореца, Price: 100, Contractor: Илстрой 2008, Purchased by: Ние",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "поставяне на душ слушалка под прозореца",
+      "price": "100",
+      "contractor": "Илстрой 2008",
+      "location": "none",
+      "purchase_by": "Ние",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: алуминиева врата, Price: 400, Contractor: Експорт Дорс, Purchased by: Ние",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "алуминиева врата",
+      "price": "400",
+      "contractor": "Експорт Дорс",
+      "location": "none",
+      "purchase_by": "Ние",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: врати към стаите и стълбището, Price: 1651, Contractor: Експорт Дорс, Purchased by: Ние",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "врати към стаите и стълбището",
+      "price": "1651",
+      "contractor": "Експорт Дорс",
+      "location": "none",
+      "purchase_by": "Ние",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: плочки под и перваз, Price: 600, Contractor: Илстрой 2008, Purchased by: Ние, Quantity: 13 m2",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "плочки под и перваз",
+      "price": "600",
+      "contractor": "Илстрой 2008",
+      "location": "none",
+      "purchase_by": "Ние",
+      "quantity": "13 m2"
+    }
+  },
+  {
+    "content": "Item: кабелен канал, Price: 21.95",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "кабелен канал",
+      "price": "21.95",
+      "contractor": "none",
+      "location": "none",
+      "purchase_by": "none",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: входна врата, Price: 879, Contractor: Експорт Дорс, Purchased by: Ние",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "входна врата",
+      "price": "879",
+      "contractor": "Експорт Дорс",
+      "location": "none",
+      "purchase_by": "Ние",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: Труд, Price: 12500, Contractor: Илстрой 2008",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "Труд",
+      "price": "12500",
+      "contractor": "Илстрой 2008",
+      "location": "none",
+      "purchase_by": "none",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Item: Труд, Price: 500, Contractor: Експорт Дорс",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "Труд",
+      "price": "500",
+      "contractor": "Експорт Дорс",
+      "location": "none",
+      "purchase_by": "none",
+      "quantity": "none"
+    }
+  },
+  {
+    "content": "Estimated total for the project: 19272.45",
+    "knowledge_context": "project_finances",
+    "metadata": {
+      "type": "total",
+      "category": "estimated",
+      "amount": "19272.45"
+    }
+  },
+  {
+    "content": "Payment to Илстрой 2008: 4000. дадени на Момчил за авансово плащане",
+    "knowledge_context": "project_payments",
+    "metadata": {
+      "type": "payment",
+      "contractor": "Илстрой 2008",
+      "amount": "4000",
+      "note": "дадени на Момчил за авансово плащане"
+    }
+  },
+  {
+    "content": "Payment to Експорт Дорс: 3000. дадени на Мама за да заплати на човека с вратите",
+    "knowledge_context": "project_payments",
+    "metadata": {
+      "type": "payment",
+      "contractor": "Експорт Дорс",
+      "amount": "3000",
+      "note": "дадени на Мама за да заплати на човека с вратите"
+    }
+  },
+  {
+    "content": "Payment to Илстрой 2008: 500. дадени на Момчил, 25та седмица от 2025",
+    "knowledge_context": "project_payments",
+    "metadata": {
+      "type": "payment",
+      "contractor": "Илстрой 2008",
+      "amount": "500",
+      "note": "дадени на Момчил, 25та седмица от 2025"
+    }
+  },
+  {
+    "content": "Payment to ние: 600. плочки 2ри етаж",
+    "knowledge_context": "project_payments",
+    "metadata": {
+      "type": "payment",
+      "contractor": "ние",
+      "amount": "600",
+      "note": "плочки 2ри етаж"
+    }
+  },
+  {
+    "content": "Payment to ние: 600.9. плочки баня 3ти етаж",
+    "knowledge_context": "project_payments",
+    "metadata": {
+      "type": "payment",
+      "contractor": "ние",
+      "amount": "600.9",
+      "note": "плочки баня 3ти етаж"
+    }
+  },
+  {
+    "content": "Payment to Илстрой 2008: 4000. дадени на Момчил, 26ма седмица",
+    "knowledge_context": "project_payments",
+    "metadata": {
+      "type": "payment",
+      "contractor": "Илстрой 2008",
+      "amount": "4000",
+      "note": "дадени на Момчил, 26ма седмица"
+    }
+  },
+  {
+    "content": "Payment to Илстрой 2008: 1000. дадени на Момчил, 27та седмица",
+    "knowledge_context": "project_payments",
+    "metadata": {
+      "type": "payment",
+      "contractor": "Илстрой 2008",
+      "amount": "1000",
+      "note": "дадени на Момчил, 27та седмица"
+    }
+  },
+  {
+    "content": "Payment to Илстрой 2008: 1000. 2025-08-19 дадени на Момчил",
+    "knowledge_context": "project_payments",
+    "metadata": {
+      "type": "payment",
+      "contractor": "Илстрой 2008",
+      "amount": "1000",
+      "note": "2025-08-19 дадени на Момчил"
+    }
+  },
+  {
+    "content": "Payment to Илстрой 2008: 1500. 2025-08-26 00:00:00",
+    "knowledge_context": "project_payments",
+    "metadata": {
+      "type": "payment",
+      "contractor": "Илстрой 2008",
+      "amount": "1500",
+      "note": "2025-08-26 00:00:00"
+    }
+  },
+  {
+    "content": "Item: ДОПЪЛНИТЕЛНО ИЗВЪН ДОГОВОРА ОБЩО 3600, Price: 1300, Contractor: Илстрой 2008, Quantity: 2025-09-01 00:00:00",
+    "knowledge_context": "project_items",
+    "metadata": {
+      "type": "item",
+      "item_name": "ДОПЪЛНИТЕЛНО ИЗВЪН ДОГОВОРА ОБЩО 3600",
+      "price": "1300",
+      "contractor": "Илстрой 2008",
+      "location": "none",
+      "purchase_by": "none",
+      "quantity": "2025-09-01 00:00:00"
+    }
+  },
+  {
+    "content": "Payment to Илстрой 2008: 1800. 2025-09-02 От общо 3600, 500лв удържани за дефекти",
+    "knowledge_context": "project_payments",
+    "metadata": {
+      "type": "payment",
+      "contractor": "Илстрой 2008",
+      "amount": "1800",
+      "note": "2025-09-02 От общо 3600, 500лв удържани за дефекти"
+    }
+  },
+  {
+    "content": "Actual total paid: 19300.9",
+    "knowledge_context": "project_finances",
+    "metadata": {
+      "type": "total",
+      "category": "actual",
+      "amount": "19300.9"
+    }
+  },
+  {
+    "content": "Additional expense: 500. Прагове 3ти етаж и тапети",
+    "knowledge_context": "project_expenses",
+    "metadata": {
+      "type": "expense",
+      "amount": "500",
+      "note": "Прагове 3ти етаж и тапети"
+    }
+  },
+  {
+    "content": "Additional expense: 700. Праг врата стълбище и тапети и праг баня 3ти етаж",
+    "knowledge_context": "project_expenses",
+    "metadata": {
+      "type": "expense",
+      "amount": "700",
+      "note": "Праг врата стълбище и тапети и праг баня 3ти етаж"
+    }
+  },
+  {
+    "content": "Additional expense: 1200. Нова врата стълбище",
+    "knowledge_context": "project_expenses",
+    "metadata": {
+      "type": "expense",
+      "amount": "1200",
+      "note": "Нова врата стълбище"
+    }
+  },
+  {
+    "content": "Additional expense: -500. удържани заради втората врата",
+    "knowledge_context": "project_expenses",
+    "metadata": {
+      "type": "expense",
+      "amount": "-500",
+      "note": "удържани заради втората врата"
+    }
+  },
+  {
+    "content": "Additional expense: 500. почистване 3ти етаж",
+    "knowledge_context": "project_expenses",
+    "metadata": {
+      "type": "expense",
+      "amount": "500",
+      "note": "почистване 3ти етаж"
+    }
+  },
+  {
+    "content": "Grand total (including additional expenses): 21700.9",
+    "knowledge_context": "project_finances",
+    "metadata": {
+      "type": "total",
+      "category": "grand_total",
+      "amount": "21700.9"
+    }
+  },
+  {
+    "content": "Completed: свършено",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "completed",
+      "description": "свършено"
+    }
+  },
+  {
+    "content": "Note/Issue: извън договора",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "note",
+      "description": "извън договора"
+    }
+  },
+  {
+    "content": "Note/Issue: забележки",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "note",
+      "description": "забележки"
+    }
+  },
+  {
+    "content": "Note/Issue: забележки по мазилката в стълбището (вкопаната тръба и дефектите на третия етаж)",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "note",
+      "description": "забележки по мазилката в стълбището (вкопаната тръба и дефектите на третия етаж)"
+    }
+  },
+  {
+    "content": "Note/Issue: забележки по таван и тръби баня 2ри",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "note",
+      "description": "забележки по таван и тръби баня 2ри"
+    }
+  },
+  {
+    "content": "Remaining work: оставащо",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "оставащо"
+    }
+  },
+  {
+    "content": "Remaining work: фуги баня 3ет рекламация - разминавания (това не може да се оправи защото плочките са сложени грешно), бяла и кафява омесване (това има ли как да се оправи?)",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "фуги баня 3ет рекламация - разминавания (това не може да се оправи защото плочките са сложени грешно), бяла и кафява омесване (това има ли как да се оправи?)"
+    }
+  },
+  {
+    "content": "Remaining work: воден тест баня на наклона на пода за сифона",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "воден тест баня на наклона на пода за сифона"
+    }
+  },
+  {
+    "content": "Remaining work: обръщане врата баня 3 етаж",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "обръщане врата баня 3 етаж"
+    }
+  },
+  {
+    "content": "Remaining work: окичване баня 3ет и тест (лира, моноблок, тръбно окачване душ, смесител интимен душ, закачалка за душ слушалка под прозореца)",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "окичване баня 3ет и тест (лира, моноблок, тръбно окачване душ, смесител интимен душ, закачалка за душ слушалка под прозореца)"
+    }
+  },
+  {
+    "content": "Remaining work: тест парно налягане за лирата",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "тест парно налягане за лирата"
+    }
+  },
+  {
+    "content": "Remaining work: контакт баня 3ет за сешоар (водонепромокаем)",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "контакт баня 3ет за сешоар (водонепромокаем)"
+    }
+  },
+  {
+    "content": "Remaining work: боядисване таван баня 3ет",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "боядисване таван баня 3ет"
+    }
+  },
+  {
+    "content": "Remaining work: тест 3ет: пералня + климатик + хладилник + бойлер",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "тест 3ет: пералня + климатик + хладилник + бойлер"
+    }
+  },
+  {
+    "content": "Remaining work: Монтаж LED ленти 3 етаж - 180 или 240 диода на метър / жълта светлина <4000K",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "Монтаж LED ленти 3 етаж - 180 или 240 диода на метър / жълта светлина <4000K"
+    }
+  },
+  {
+    "content": "Remaining work: LED трансформатори ток - решение за кутия?",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "LED трансформатори ток - решение за кутия?"
+    }
+  },
+  {
+    "content": "Remaining work: Махане на лампи 3етаж коридор и мазилка",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "Махане на лампи 3етаж коридор и мазилка"
+    }
+  },
+  {
+    "content": "Remaining work: 3ет ключове за осветление - бели (както в другите стаи)",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "3ет ключове за осветление - бели (както в другите стаи)"
+    }
+  },
+  {
+    "content": "Remaining work: прагове врати (входна + трети етаж)",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "прагове врати (входна + трети етаж)"
+    }
+  },
+  {
+    "content": "Remaining work: оправяне на мазилката в стълбището (вкопаната тръба и дефектите на третия етаж)",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "оправяне на мазилката в стълбището (вкопаната тръба и дефектите на третия етаж)"
+    }
+  },
+  {
+    "content": "Remaining work: 2ет баня - гипсокартон таван",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "2ет баня - гипсокартон таван"
+    }
+  },
+  {
+    "content": "Remaining work: грубо почистване и износване на остатъчни стройтелни материали",
+    "knowledge_context": "project_status",
+    "metadata": {
+      "type": "status",
+      "status": "remaining",
+      "description": "грубо почистване и износване на остатъчни стройтелни материали"
+    }
+  },
+  {
+    "content": "Contact: Илстрой 2008, Phone: Момчил +359893724347, Scope: Момчил Мирков, Results: НЕ СТАВА",
+    "knowledge_context": "project_contacts",
+    "metadata": {
+      "type": "contact",
+      "name": "Илстрой 2008",
+      "phone": "Момчил +359893724347",
+      "scope": "Момчил Мирков",
+      "results": "НЕ СТАВА"
+    }
+  },
+  {
+    "content": "Contact: Експорт Дорс, Phone: Росен Добрев-врати\n+359 87 833 7821, Scope: Врати, Results: НЕ СТАВА",
+    "knowledge_context": "project_contacts",
+    "metadata": {
+      "type": "contact",
+      "name": "Експорт Дорс",
+      "phone": "Росен Добрев-врати\n+359 87 833 7821",
+      "scope": "Врати",
+      "results": "НЕ СТАВА"
+    }
+  },
+  {
+    "content": "Contact: прагове \"Дом на камъка\", Phone: 879066753",
+    "knowledge_context": "project_contacts",
+    "metadata": {
+      "type": "contact",
+      "name": "прагове \"Дом на камъка\"",
+      "phone": "879066753",
+      "scope": "none",
+      "results": "none"
+    }
+  },
+  {
+    "content": "Contact: Пенко, Phone: 884539688, Scope: Довършителни, Results: взимат скъпо",
+    "knowledge_context": "project_contacts",
+    "metadata": {
+      "type": "contact",
+      "name": "Пенко",
+      "phone": "884539688",
+      "scope": "Довършителни",
+      "results": "взимат скъпо"
+    }
+  },
+  {
+    "content": "Contact: Румяна Няголова Никотекс, Phone: 878242746, Scope: Врати, Results: добри са",
+    "knowledge_context": "project_contacts",
+    "metadata": {
+      "type": "contact",
+      "name": "Румяна Няголова Никотекс",
+      "phone": "878242746",
+      "scope": "Врати",
+      "results": "добри са"
+    }
+  },
+  {
+    "content": "Total paid to contractor Илстрой 2008: 13800.0",
+    "knowledge_context": "project_finances",
+    "metadata": {
+      "type": "contractor_total",
+      "contractor": "Илстрой 2008",
+      "total_amount": "13800.0"
+    }
+  },
+  {
+    "content": "Total paid to contractor Експорт Дорс: 3000.0",
+    "knowledge_context": "project_finances",
+    "metadata": {
+      "type": "contractor_total",
+      "contractor": "Експорт Дорс",
+      "total_amount": "3000.0"
+    }
+  },
+  {
+    "content": "Total paid to contractor ние: 1200.9",
+    "knowledge_context": "project_finances",
+    "metadata": {
+      "type": "contractor_total",
+      "contractor": "ние",
+      "total_amount": "1200.9"
+    }
+  },
+  {
+    "content": "Difference between actual and estimated: 28.450000000000728 (actual is 28.450000000000728 above estimated)",
+    "knowledge_context": "project_finances",
+    "metadata": {
+      "type": "difference",
+      "estimated": "19272.45",
+      "actual": "19300.9",
+      "difference": "28.450000000000728"
+    }
+  }
+]

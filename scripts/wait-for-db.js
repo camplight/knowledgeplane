@@ -1,28 +1,32 @@
 #!/usr/bin/env node
-import pg from "pg";
-
-const pool = new pg.Pool({
-  connectionString: "postgres://postgres:postgres@localhost:5432/knowledgeplane",
-});
-
+/**
+ * Wait for ArangoDB to be ready
+ */
 async function waitForDb() {
-  for (let i = 0; i < 30; i++) {
+  const dbUrl = process.env.ARANGO_URL || "http://localhost:8529";
+  const maxRetries = 30;
+  const retryDelay = 2000; // 2 seconds
+
+  for (let i = 0; i < maxRetries; i++) {
     try {
-      await pool.query("SELECT 1");
-      console.log("✓ Database is ready");
-      await pool.end();
-      process.exit(0);
-    } catch (err) {
-      if (i === 0) {
-        process.stdout.write("Waiting for database");
-      } else {
-        process.stdout.write(".");
+      const response = await fetch(`${dbUrl}/_api/version`);
+      if (response.ok) {
+        console.log("✓ ArangoDB is ready");
+        return;
       }
-      await new Promise((r) => setTimeout(r, 1000));
+    } catch (error) {
+      // Database not ready yet
+    }
+
+    if (i < maxRetries - 1) {
+      console.log(
+        `Waiting for ArangoDB... (${i + 1}/${maxRetries})`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
     }
   }
-  console.error("\n✗ Database failed to start after 30 seconds");
-  await pool.end();
+
+  console.error("✗ ArangoDB failed to start");
   process.exit(1);
 }
 

@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "@knowledgeplane/db": "*",
+    "@knowledgeplane/file-processor": "*",
+    "@knowledgeplane/aimodel": "*",
     "@tailwindcss/postcss": "^4.1.16",
     "@tanstack/react-query": "^5.62.11",
     "@trpc/client": "^11.0.0-rc.713",

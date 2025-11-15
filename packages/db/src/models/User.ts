@@ -1,6 +1,8 @@
-import { query } from "../db.js";
+import { collections } from "../db.js";
 
 export interface UserRecord {
+  _key?: string;
+  _id?: string;
   id: string;
   username: string;
   email: string;
@@ -15,42 +17,85 @@ export interface UserInput {
 
 export class User {
   static async create(input: UserInput, apiKey?: string): Promise<UserRecord> {
-    const result = await query(
-      `INSERT INTO "user"(username, email, api_key)
-       VALUES($1, $2, $3)
-       ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, api_key = COALESCE(EXCLUDED.api_key, "user".api_key)
-       RETURNING id, username, email, api_key, created_at`,
-      [input.username, input.email, apiKey || null],
-    );
+    const doc = {
+      username: input.username,
+      email: input.email,
+      api_key: apiKey || null,
+      created_at: new Date().toISOString(),
+    };
 
-    return result.rows[0] as UserRecord;
+    try {
+      const result = await collections.users.save(doc, { returnNew: true });
+      return this._normalizeRecord(result.new!);
+    } catch (error: any) {
+      if (error.errorNum === 1210) {
+        // Unique constraint violation - try to update
+        const existing = await this.findByUsername(input.username);
+        if (existing) {
+          const key = this._extractKey(existing.id);
+          const result = await collections.users.update(
+            key,
+            {
+              email: input.email,
+              api_key: apiKey || existing.api_key,
+            },
+            { returnNew: true },
+          );
+          return this._normalizeRecord(result.new!);
+        }
+      }
+      throw error;
+    }
   }
 
   static async findById(id: string): Promise<UserRecord | null> {
-    const result = await query(
-      `SELECT id, username, email, api_key, created_at FROM "user" WHERE id = $1`,
-      [id],
-    );
-
-    return result.rows[0] as UserRecord | null;
+    const key = this._extractKey(id);
+    try {
+      const doc = await collections.users.document(key);
+      return this._normalizeRecord(doc);
+    } catch (error: any) {
+      if (error.errorNum === 1202) {
+        // Document not found
+        return null;
+      }
+      throw error;
+    }
   }
 
   static async findByUsername(username: string): Promise<UserRecord | null> {
-    const result = await query(
-      `SELECT id, username, email, api_key, created_at FROM "user" WHERE username = $1`,
-      [username],
-    );
+    const aql = `
+      FOR user IN users
+        FILTER user.username == @username
+        LIMIT 1
+        RETURN user
+    `;
 
-    return result.rows[0] as UserRecord | null;
+    const cursor = await collections.users.database.query(aql, { username });
+    const results = await cursor.all();
+
+    if (results.length === 0) {
+      return null;
+    }
+
+    return this._normalizeRecord(results[0]);
   }
 
   static async findByApiKey(apiKey: string): Promise<UserRecord | null> {
-    const result = await query(
-      `SELECT id, username, email, api_key, created_at FROM "user" WHERE api_key = $1`,
-      [apiKey],
-    );
+    const aql = `
+      FOR user IN users
+        FILTER user.api_key == @apiKey
+        LIMIT 1
+        RETURN user
+    `;
 
-    return result.rows[0] as UserRecord | null;
+    const cursor = await collections.users.database.query(aql, { apiKey });
+    const results = await cursor.all();
+
+    if (results.length === 0) {
+      return null;
+    }
+
+    return this._normalizeRecord(results[0]);
   }
 
   static async getOrCreate(
@@ -63,12 +108,16 @@ export class User {
         existing.email !== input.email ||
         (apiKey && existing.api_key !== apiKey)
       ) {
-        const result = await query(
-          `UPDATE "user" SET email = $1, api_key = COALESCE($3, api_key) WHERE username = $2
-           RETURNING id, username, email, api_key, created_at`,
-          [input.email, input.username, apiKey || null],
+        const key = this._extractKey(existing.id);
+        const result = await collections.users.update(
+          key,
+          {
+            email: input.email,
+            api_key: apiKey || existing.api_key,
+          },
+          { returnNew: true },
         );
-        return result.rows[0] as UserRecord;
+        return this._normalizeRecord(result.new!);
       }
       return existing;
     }
@@ -93,19 +142,52 @@ export class User {
     limit: number = 50,
     offset: number = 0,
   ): Promise<UserRecord[]> {
-    const result = await query(
-      `SELECT id, username, email, api_key, created_at
-       FROM "user"
-       ORDER BY created_at DESC
-       LIMIT $1 OFFSET $2`,
-      [limit, offset],
-    );
-    return result.rows as UserRecord[];
+    const aql = `
+      FOR user IN users
+        SORT user.created_at DESC
+        LIMIT @offset, @limit
+        RETURN user
+    `;
+
+    const cursor = await collections.users.database.query(aql, {
+      limit,
+      offset,
+    });
+    const results = await cursor.all();
+
+    return results.map((r: any) => this._normalizeRecord(r));
   }
 
   static async count(): Promise<number> {
-    const result = await query(`SELECT COUNT(*) as count FROM "user"`);
-    return parseInt(result.rows[0].count, 10);
+    const aql = `
+      LET count = LENGTH(FOR user IN users RETURN user)
+      RETURN count
+    `;
+
+    const cursor = await collections.users.database.query(aql);
+    const result = await cursor.next();
+
+    return result || 0;
+  }
+
+  // Helper methods
+  static _extractKey(id: string): string {
+    // Handle both _key format and _id format
+    if (id.includes("/")) {
+      return id.split("/")[1];
+    }
+    return id;
+  }
+
+  static _normalizeRecord(doc: any): UserRecord {
+    return {
+      id: doc._id || `users/${doc._key}`,
+      _key: doc._key,
+      _id: doc._id,
+      username: doc.username,
+      email: doc.email,
+      api_key: doc.api_key,
+      created_at: doc.created_at,
+    };
   }
 }
-

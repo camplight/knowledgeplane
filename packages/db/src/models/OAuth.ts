@@ -1,6 +1,8 @@
-import { query } from "../db.js";
+import { collections } from "../db.js";
 
 export interface AuthorizationRequestRecord {
+  _key?: string;
+  _id?: string;
   key: string;
   client_id: string;
   redirect_uri: string;
@@ -13,6 +15,8 @@ export interface AuthorizationRequestRecord {
 }
 
 export interface AuthorizationCodeRecord {
+  _key?: string;
+  _id?: string;
   code: string;
   client_id: string;
   redirect_uri: string;
@@ -51,154 +55,187 @@ export interface AuthorizationCodeInput {
 }
 
 export class OAuthAuthorizationRequest {
-  static async create(input: AuthorizationRequestInput): Promise<AuthorizationRequestRecord> {
-    const result = await query(
-      `INSERT INTO oauth_authorization_request(key, client_id, redirect_uri, state, code_challenge, code_challenge_method, scope, expires_at)
-       VALUES($1, $2, $3, $4, $5, $6, $7, to_timestamp($8 / 1000.0))
-       RETURNING key, client_id, redirect_uri, state, code_challenge, code_challenge_method, scope, expires_at, created_at`,
-      [
-        input.key,
-        input.client_id,
-        input.redirect_uri,
-        input.state,
-        input.code_challenge,
-        input.code_challenge_method,
-        input.scope || null,
-        input.expires_at,
-      ],
-    );
-
-    const row = result.rows[0];
-    return {
-      key: row.key,
-      client_id: row.client_id,
-      redirect_uri: row.redirect_uri,
-      state: row.state,
-      code_challenge: row.code_challenge,
-      code_challenge_method: row.code_challenge_method,
-      scope: row.scope,
-      expires_at: new Date(row.expires_at),
-      created_at: new Date(row.created_at),
+  static async create(
+    input: AuthorizationRequestInput,
+  ): Promise<AuthorizationRequestRecord> {
+    const now = new Date();
+    const doc = {
+      key: input.key,
+      client_id: input.client_id,
+      redirect_uri: input.redirect_uri,
+      state: input.state,
+      code_challenge: input.code_challenge,
+      code_challenge_method: input.code_challenge_method,
+      scope: input.scope || null,
+      expires_at: new Date(input.expires_at),
+      created_at: now,
     };
+
+    const collection = collections.oauth_authorization_requests || collections.facts.database.collection("oauth_authorization_requests");
+    const result = await collection.save(doc, {
+      returnNew: true,
+    });
+    return this._normalizeRequestRecord(result.new!);
   }
 
-  static async findByKey(key: string): Promise<AuthorizationRequestRecord | null> {
-    const result = await query(
-      `SELECT key, client_id, redirect_uri, state, code_challenge, code_challenge_method, scope, expires_at, created_at
-       FROM oauth_authorization_request
-       WHERE key = $1 AND expires_at > NOW()`,
-      [key],
-    );
+  static async findByKey(
+    key: string,
+  ): Promise<AuthorizationRequestRecord | null> {
+    const collection = collections.oauth_authorization_requests || collections.facts.database.collection("oauth_authorization_requests");
+    const aql = `
+      FOR req IN oauth_authorization_requests
+        FILTER req.key == @key
+        FILTER req.expires_at > DATE_NOW()
+        LIMIT 1
+        RETURN req
+    `;
 
-    if (result.rows.length === 0) {
+    const cursor = await collection.database.query(
+      aql,
+      { key },
+    );
+    const results = await cursor.all();
+
+    if (results.length === 0) {
       return null;
     }
 
-    const row = result.rows[0];
-    return {
-      key: row.key,
-      client_id: row.client_id,
-      redirect_uri: row.redirect_uri,
-      state: row.state,
-      code_challenge: row.code_challenge,
-      code_challenge_method: row.code_challenge_method,
-      scope: row.scope,
-      expires_at: new Date(row.expires_at),
-      created_at: new Date(row.created_at),
-    };
+    return this._normalizeRequestRecord(results[0]);
   }
 
   static async delete(key: string): Promise<void> {
-    await query(
-      `DELETE FROM oauth_authorization_request WHERE key = $1`,
-      [key],
-    );
+    const collection = collections.oauth_authorization_requests || collections.facts.database.collection("oauth_authorization_requests");
+    const aql = `
+      FOR req IN oauth_authorization_requests
+        FILTER req.key == @key
+        REMOVE req IN oauth_authorization_requests
+    `;
+
+    await collection.database.query(aql, {
+      key,
+    });
   }
 
   static async cleanupExpired(): Promise<number> {
-    const result = await query(
-      `DELETE FROM oauth_authorization_request WHERE expires_at <= NOW()`,
-    );
-    return result.rowCount || 0;
+    const collection = collections.oauth_authorization_requests || collections.facts.database.collection("oauth_authorization_requests");
+    const aql = `
+      FOR req IN oauth_authorization_requests
+        FILTER req.expires_at <= DATE_NOW()
+        REMOVE req IN oauth_authorization_requests
+    `;
+
+    const cursor = await collection.database.query(aql);
+    const results = await cursor.all();
+    return results.length;
+  }
+
+  static _normalizeRequestRecord(doc: any): AuthorizationRequestRecord {
+    return {
+      _key: doc._key,
+      _id: doc._id,
+      key: doc.key,
+      client_id: doc.client_id,
+      redirect_uri: doc.redirect_uri,
+      state: doc.state,
+      code_challenge: doc.code_challenge,
+      code_challenge_method: doc.code_challenge_method,
+      scope: doc.scope,
+      expires_at: new Date(doc.expires_at),
+      created_at: new Date(doc.created_at),
+    };
   }
 }
 
 export class OAuthAuthorizationCode {
-  static async create(input: AuthorizationCodeInput): Promise<AuthorizationCodeRecord> {
-    const result = await query(
-      `INSERT INTO oauth_authorization_code(code, client_id, redirect_uri, code_challenge, code_challenge_method, user_id, scope, oauth_access_token, provider, expires_at)
-       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, to_timestamp($10 / 1000.0))
-       RETURNING code, client_id, redirect_uri, code_challenge, code_challenge_method, user_id, scope, oauth_access_token, provider, expires_at, created_at`,
-      [
-        input.code,
-        input.client_id,
-        input.redirect_uri,
-        input.code_challenge,
-        input.code_challenge_method,
-        input.user_id,
-        input.scope || null,
-        input.oauth_access_token,
-        input.provider,
-        input.expires_at,
-      ],
-    );
-
-    const row = result.rows[0];
-    return {
-      code: row.code,
-      client_id: row.client_id,
-      redirect_uri: row.redirect_uri,
-      code_challenge: row.code_challenge,
-      code_challenge_method: row.code_challenge_method,
-      user_id: row.user_id,
-      scope: row.scope,
-      oauth_access_token: row.oauth_access_token,
-      provider: row.provider,
-      expires_at: new Date(row.expires_at),
-      created_at: new Date(row.created_at),
+  static async create(
+    input: AuthorizationCodeInput,
+  ): Promise<AuthorizationCodeRecord> {
+    const now = new Date();
+    const doc = {
+      code: input.code,
+      client_id: input.client_id,
+      redirect_uri: input.redirect_uri,
+      code_challenge: input.code_challenge,
+      code_challenge_method: input.code_challenge_method,
+      user_id: input.user_id,
+      scope: input.scope || null,
+      oauth_access_token: input.oauth_access_token,
+      provider: input.provider,
+      expires_at: new Date(input.expires_at),
+      created_at: now,
     };
+
+    const collection = collections.oauth_authorization_codes || collections.facts.database.collection("oauth_authorization_codes");
+    const result = await collection.save(doc, {
+      returnNew: true,
+    });
+    return this._normalizeCodeRecord(result.new!);
   }
 
-  static async findByCode(code: string): Promise<AuthorizationCodeRecord | null> {
-    const result = await query(
-      `SELECT code, client_id, redirect_uri, code_challenge, code_challenge_method, user_id, scope, oauth_access_token, provider, expires_at, created_at
-       FROM oauth_authorization_code
-       WHERE code = $1 AND expires_at > NOW()`,
-      [code],
-    );
+  static async findByCode(
+    code: string,
+  ): Promise<AuthorizationCodeRecord | null> {
+    const collection = collections.oauth_authorization_codes || collections.facts.database.collection("oauth_authorization_codes");
+    const aql = `
+      FOR code IN oauth_authorization_codes
+        FILTER code.code == @code
+        FILTER code.expires_at > DATE_NOW()
+        LIMIT 1
+        RETURN code
+    `;
 
-    if (result.rows.length === 0) {
+    const cursor = await collection.database.query(
+      aql,
+      { code },
+    );
+    const results = await cursor.all();
+
+    if (results.length === 0) {
       return null;
     }
 
-    const row = result.rows[0];
-    return {
-      code: row.code,
-      client_id: row.client_id,
-      redirect_uri: row.redirect_uri,
-      code_challenge: row.code_challenge,
-      code_challenge_method: row.code_challenge_method,
-      user_id: row.user_id,
-      scope: row.scope,
-      oauth_access_token: row.oauth_access_token,
-      provider: row.provider,
-      expires_at: new Date(row.expires_at),
-      created_at: new Date(row.created_at),
-    };
+    return this._normalizeCodeRecord(results[0]);
   }
 
   static async delete(code: string): Promise<void> {
-    await query(
-      `DELETE FROM oauth_authorization_code WHERE code = $1`,
-      [code],
-    );
+    const collection = collections.oauth_authorization_codes || collections.facts.database.collection("oauth_authorization_codes");
+    const aql = `
+      FOR code IN oauth_authorization_codes
+        FILTER code.code == @code
+        REMOVE code IN oauth_authorization_codes
+    `;
+
+    await collection.database.query(aql, { code });
   }
 
   static async cleanupExpired(): Promise<number> {
-    const result = await query(
-      `DELETE FROM oauth_authorization_code WHERE expires_at <= NOW()`,
-    );
-    return result.rowCount || 0;
+    const collection = collections.oauth_authorization_codes || collections.facts.database.collection("oauth_authorization_codes");
+    const aql = `
+      FOR code IN oauth_authorization_codes
+        FILTER code.expires_at <= DATE_NOW()
+        REMOVE code IN oauth_authorization_codes
+    `;
+
+    const cursor = await collection.database.query(aql);
+    const results = await cursor.all();
+    return results.length;
+  }
+
+  static _normalizeCodeRecord(doc: any): AuthorizationCodeRecord {
+    return {
+      _key: doc._key,
+      _id: doc._id,
+      code: doc.code,
+      client_id: doc.client_id,
+      redirect_uri: doc.redirect_uri,
+      code_challenge: doc.code_challenge,
+      code_challenge_method: doc.code_challenge_method,
+      user_id: doc.user_id,
+      scope: doc.scope,
+      oauth_access_token: doc.oauth_access_token,
+      provider: doc.provider,
+      expires_at: new Date(doc.expires_at),
+      created_at: new Date(doc.created_at),
+    };
   }
 }
-
