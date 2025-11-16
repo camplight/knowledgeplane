@@ -7,4 +7,5 @@ export * from "./models/Card";
 export * from "./models/Webhook";
 export * from "./models/Category";
 export * from "./models/File";
+export * from "./models/Invitation";
 export * from "./lib/webhook-trigger";

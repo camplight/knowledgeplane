@@ -84,6 +84,18 @@ export default function DashboardPage() {
               >
                 Chat
               </button>
+              <button
+                onClick={() => router.push("/users")}
+                className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Users
+              </button>
+              <button
+                onClick={() => router.push("/profile")}
+                className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Profile
+              </button>
               <div className="text-sm text-slate-600">
                 <span className="font-medium">{user.username}</span>
                 <span className="text-slate-400 mx-2">•</span>

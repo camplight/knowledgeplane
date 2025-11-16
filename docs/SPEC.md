@@ -37,6 +37,8 @@ REST API – comprehensive REST API for programmatic access.
 
 User management – automatic user creation and tracking via username/email.
 
+User invitations – send invitations to users to join the system, track invitation status, and view all users and their invitation history.
+
 Session-based context – MCP sessions maintain user and knowledge context across requests.
 
 Docker-first deployment – one-command local or hosted setup.
@@ -147,7 +149,8 @@ ArangoDB (graph database with full-text search)
 | `GET /chat` | AI chat interface with MCP server connection (protected, requires session) |
 | `GET /upload` | File upload page with AI-powered fact extraction (protected, requires session) |
 | `GET /facts` | Browse facts page (protected, requires session) |
-| `GET /users` | Browse users page (protected, requires session) |
+| `GET /users` | Users and invitations management page (protected, requires session) - view all users, send invitations, and manage invitation status |
+| `GET /profile` | User profile and management page (protected, requires session) |
 
 **REST API Endpoints (Port 8081):**
 | Endpoint | Description |
@@ -295,6 +298,17 @@ KnowledgePlane supports three types of authentication:
 - `updated_at` (string): Last update timestamp (ISO 8601)
 - `fact_ids` (array): Array of fact IDs extracted from this file
 
+**Invitation Collection:**
+- `_id` (ArangoDB document ID): Primary key
+- `_key` (string): Document key
+- `email` (string): Email address of the invited user
+- `invited_by` (string): Reference to user ID who sent the invitation
+- `token` (string): Unique invitation token
+- `status` (string): Invitation status - "pending", "accepted", or "expired"
+- `expires_at` (string): Expiration timestamp (ISO 8601)
+- `accepted_at` (string): Acceptance timestamp (ISO 8601, only set when status is "accepted")
+- `created_at` (string): Creation timestamp (ISO 8601)
+
 🔐 OAuth Authentication
 
 KnowledgePlane supports OAuth2 authentication with Google (Gmail) and GitHub, and implements OAuth 2.1 compliant authorization server for MCP clients.
@@ -353,8 +367,20 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Facts list with pagination, metadata display, and knowledge context tags
   - Logout functionality
   - Automatic redirect to landing page for unauthenticated users
+- User profile page (`/profile`) with:
+  - Profile information display (username, email, account creation date)
+  - Profile editing (update username and email)
+  - API key management (view, generate, regenerate, and remove API keys)
+  - Secure API key display with show/hide functionality
+  - Copy-to-clipboard functionality for API keys
 - Facts browsing page (`/facts`) with pagination, filtering, and detailed fact display
-- Users browsing page (`/users`) with user listing and API key status
+- Users and invitations management page (`/users`) with:
+  - User listing with invitation status (pending, accepted, none)
+  - Invitation management (create, view, track status)
+  - Tabbed interface for switching between users and invitations views
+  - Invitation form with email and expiration settings
+  - Invitation status badges (pending, accepted, expired)
+  - Pagination for both users and invitations
 
 **Token-Based Authentication:**
 All endpoints support Bearer token authentication via the `Authorization` header:
@@ -468,6 +494,10 @@ curl -X POST http://localhost:8080/mcp \
   - Must use Node.js fetch (not browser fetch) for ArangoDB compatibility
   - Configured in Next.js via `serverExternalPackages` (Next.js 15+) to prevent client bundling
   - ArangoDB requires `Content-Length` header and does not support `Transfer-Encoding: chunked`
+  - The db package patches `globalThis.fetch` to use `undici.fetch` in server environments to ensure
+    Content-Length headers are sent instead of chunked encoding, which is required for ArangoDB compatibility
+  - This fix is necessary because Next.js route handlers may use a fetch implementation that uses
+    chunked encoding, which ArangoDB rejects with a 501 Not Implemented error
 
 🚀 Quick Start
 
@@ -1021,8 +1051,12 @@ Navigate to `/upload` in the web application (requires authentication).
 - ✅ Health check endpoint
 - ✅ Swagger documentation
 - ✅ Web UI for browsing facts with pagination and filtering
-- ✅ Web UI for browsing users with pagination
+- ✅ Web UI for browsing users with pagination and invitation status
+- ✅ User profile and management page with profile editing and API key management
+- ✅ User invitation system with email-based invitations, expiration tracking, and status management
+- ✅ Users and invitations management page for viewing all users and managing invitations
 - ✅ tRPC routes for listing facts and users
+- ✅ tRPC routes for user profile management (update profile, generate/remove API keys)
 - ✅ AI Chat interface with OpenAI integration and MCP server connection
 - ✅ File upload with AI-powered fact and relation extraction
 - ✅ ArangoDB graph database with relations support

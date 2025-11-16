@@ -1,4 +1,5 @@
 import { collections } from "../db";
+import crypto from "crypto";
 
 export interface UserRecord {
   _key?: string;
@@ -172,6 +173,30 @@ export class User {
     const result = await cursor.next();
 
     return result || 0;
+  }
+
+  static async update(
+    id: string,
+    updates: Partial<Pick<UserRecord, "username" | "email" | "api_key">>,
+  ): Promise<UserRecord> {
+    const key = this._extractKey(id);
+    const result = await collections.users.update(
+      key,
+      updates,
+      { returnNew: true },
+    );
+    return this._normalizeRecord(result.new!);
+  }
+
+  static async generateApiKey(id: string): Promise<string> {
+    // Generate a secure random API key
+    const apiKey = `kp_${crypto.randomBytes(32).toString("base64url")}`;
+    await this.update(id, { api_key: apiKey });
+    return apiKey;
+  }
+
+  static async removeApiKey(id: string): Promise<void> {
+    await this.update(id, { api_key: null });
   }
 
   // Helper methods

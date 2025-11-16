@@ -1,0 +1,355 @@
+"use client";
+
+import { trpc } from "../../utils/trpc";
+import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+
+export default function ProfilePage() {
+  const router = useRouter();
+  const [isEditing, setIsEditing] = useState(false);
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const { data: userData, isLoading: userLoading, refetch: refetchProfile } = trpc.auth.me.useQuery();
+  const { data: profileData, refetch: refetchUserProfile } = trpc.user.getProfile.useQuery(undefined, {
+    enabled: !!userData?.user,
+  });
+
+  const updateProfileMutation = trpc.user.updateProfile.useMutation({
+    onSuccess: () => {
+      setSuccess("Profile updated successfully!");
+      setError(null);
+      setIsEditing(false);
+      refetchProfile();
+      refetchUserProfile();
+      setTimeout(() => setSuccess(null), 3000);
+    },
+    onError: (error) => {
+      setError(error.message);
+      setSuccess(null);
+    },
+  });
+
+  const generateApiKeyMutation = trpc.user.generateApiKey.useMutation({
+    onSuccess: () => {
+      setSuccess("API key generated successfully!");
+      setError(null);
+      refetchUserProfile();
+      setTimeout(() => setSuccess(null), 3000);
+    },
+    onError: (error) => {
+      setError(error.message);
+      setSuccess(null);
+    },
+  });
+
+  const removeApiKeyMutation = trpc.user.removeApiKey.useMutation({
+    onSuccess: () => {
+      setSuccess("API key removed successfully!");
+      setError(null);
+      setShowApiKey(false);
+      refetchUserProfile();
+      setTimeout(() => setSuccess(null), 3000);
+    },
+    onError: (error) => {
+      setError(error.message);
+      setSuccess(null);
+    },
+  });
+
+  useEffect(() => {
+    if (!userLoading && !userData?.user) {
+      router.push("/");
+    }
+  }, [userLoading, userData, router]);
+
+  useEffect(() => {
+    if (profileData) {
+      setUsername(profileData.username);
+      setEmail(profileData.email);
+    }
+  }, [profileData]);
+
+  const handleSave = () => {
+    setError(null);
+    setSuccess(null);
+    if (!username.trim() || !email.trim()) {
+      setError("Username and email are required");
+      return;
+    }
+    updateProfileMutation.mutate({
+      username: username.trim(),
+      email: email.trim(),
+    });
+  };
+
+  const handleCancel = () => {
+    if (profileData) {
+      setUsername(profileData.username);
+      setEmail(profileData.email);
+    }
+    setIsEditing(false);
+    setError(null);
+    setSuccess(null);
+  };
+
+  const handleCopyApiKey = () => {
+    if (profileData?.api_key) {
+      navigator.clipboard.writeText(profileData.api_key);
+      setApiKeyCopied(true);
+      setTimeout(() => setApiKeyCopied(false), 2000);
+    }
+  };
+
+  const handleGenerateApiKey = () => {
+    if (confirm("Are you sure you want to generate a new API key? The old key will be invalidated.")) {
+      generateApiKeyMutation.mutate();
+    }
+  };
+
+  const handleRemoveApiKey = () => {
+    if (confirm("Are you sure you want to remove your API key? You won't be able to use it for authentication.")) {
+      removeApiKeyMutation.mutate();
+    }
+  };
+
+  if (userLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl text-slate-600">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!userData?.user || !profileData) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen bg-white">
+      {/* Navigation */}
+      <nav className="border-b border-slate-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </div>
+              <span className="text-xl font-bold bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 bg-clip-text text-transparent">
+                KnowledgePlane
+              </span>
+            </div>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Dashboard
+              </button>
+              <div className="text-sm text-slate-600">
+                <span className="font-medium">{userData.user.username}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-4xl">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-slate-900 mb-2">Profile Settings</h1>
+          <p className="text-lg text-slate-600">
+            Manage your account information and API keys
+          </p>
+        </div>
+
+        {/* Success/Error Messages */}
+        {success && (
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">
+            {success}
+          </div>
+        )}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
+            {error}
+          </div>
+        )}
+
+        {/* Profile Information Card */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 mb-6">
+          <div className="p-6 border-b border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">Profile Information</h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  Update your username and email address
+                </p>
+              </div>
+              {!isEditing && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                >
+                  Edit Profile
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="p-6">
+            {isEditing ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Username"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Email"
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={handleSave}
+                    disabled={updateProfileMutation.isPending}
+                    className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
+                  </button>
+                  <button
+                    onClick={handleCancel}
+                    disabled={updateProfileMutation.isPending}
+                    className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-500 mb-1">
+                    Username
+                  </label>
+                  <p className="text-lg text-slate-900">{profileData.username}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-500 mb-1">
+                    Email
+                  </label>
+                  <p className="text-lg text-slate-900">{profileData.email}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-500 mb-1">
+                    Account Created
+                  </label>
+                  <p className="text-lg text-slate-900">
+                    {new Date(profileData.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* API Key Management Card */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200">
+          <div className="p-6 border-b border-slate-200">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900">API Key Management</h2>
+              <p className="text-sm text-slate-600 mt-1">
+                Generate and manage API keys for programmatic access
+              </p>
+            </div>
+          </div>
+
+          <div className="p-6">
+            {profileData.api_key ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    API Key
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      value={profileData.api_key}
+                      readOnly
+                      className="flex-1 px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 font-mono text-sm"
+                    />
+                    <button
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                    >
+                      {showApiKey ? "Hide" : "Show"}
+                    </button>
+                    <button
+                      onClick={handleCopyApiKey}
+                      className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                    >
+                      {apiKeyCopied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Use this key in the <code className="bg-slate-100 px-1 py-0.5 rounded">knowledgeplane-key</code> header for API authentication
+                  </p>
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={handleGenerateApiKey}
+                    disabled={generateApiKeyMutation.isPending}
+                    className="px-6 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generateApiKeyMutation.isPending ? "Generating..." : "Generate New Key"}
+                  </button>
+                  <button
+                    onClick={handleRemoveApiKey}
+                    disabled={removeApiKeyMutation.isPending}
+                    className="px-6 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {removeApiKeyMutation.isPending ? "Removing..." : "Remove Key"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-slate-600">
+                  You don't have an API key yet. Generate one to enable programmatic access to your knowledge base.
+                </p>
+                <button
+                  onClick={handleGenerateApiKey}
+                  disabled={generateApiKeyMutation.isPending}
+                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {generateApiKeyMutation.isPending ? "Generating..." : "Generate API Key"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
