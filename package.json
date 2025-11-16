@@ -12,11 +12,11 @@
   },
   "scripts": {
     "bootstrap": "npm install",
-    "dev": "concurrently -n \"infra,mcp-server,webapp,background-worker\" -c \"blue,green,yellow,magenta\" \"npm run dev:infra\" \"npm run dev:mcp-server\" \"npm run dev:webapp\" \"npm run dev:background-worker\"",
+    "dev": "concurrently -n \"infra,mcp-server,webapp,background-workers\" -c \"blue,green,yellow,magenta\" \"npm run dev:infra\" \"npm run dev:mcp-server\" \"npm run dev:webapp\" \"npm run dev:background-workers\"",
     "dev:infra": "docker compose -f infra/docker-compose.dev.yml up",
     "dev:mcp-server": "node scripts/wait-for-db.js && npm run dev --workspace=apps/mcp-server",
     "dev:webapp": "npm run dev --workspace=apps/webapp",
-    "dev:background-worker": "node scripts/wait-for-db.js && npm run dev --workspace=apps/background-worker",
+    "dev:background-workers": "node scripts/wait-for-db.js && npm run dev --workspace=apps/background-workers",
     "dev:stop": "docker compose -f infra/docker-compose.dev.yml down",
     "migrate": "node scripts/migrate.js",
     "lint": "npm run lint --workspaces --if-present",

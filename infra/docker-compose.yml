@@ -44,8 +44,8 @@ services:
         condition: service_healthy
     ports: [ "3000:3000" ]
 
-  background-worker:
-    build: ../apps/background-worker
+  background-workers:
+    build: ../apps/background-workers
     environment:
       - ARANGO_URL=http://db:8529
       - ARANGO_DB_NAME=knowledgeplane

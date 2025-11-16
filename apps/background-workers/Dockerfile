@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-COPY apps/background-worker/package*.json ./apps/background-worker/
+COPY apps/background-workers/package*.json ./apps/background-workers/
 COPY packages/db/package*.json ./packages/db/
 
 # Install dependencies
@@ -14,9 +14,9 @@ RUN npm install
 COPY . .
 
 # Build
-RUN npm run build --workspace=apps/background-worker
+RUN npm run build --workspace=apps/background-workers
 
-WORKDIR /app/apps/background-worker
+WORKDIR /app/apps/background-workers
 
 CMD ["node", "dist/index.js"]
 
