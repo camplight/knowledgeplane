@@ -109,6 +109,16 @@ export function Navigation() {
             >
               Users
             </button>
+            <button
+              onClick={() => router.push("/worker-logs")}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                isActive("/worker-logs")
+                  ? "bg-blue-600 text-white hover:bg-blue-700"
+                  : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+            >
+              Worker Logs
+            </button>
             
             {/* User Menu with Dropdown */}
             <div className="relative" ref={dropdownRef}>

@@ -11,13 +11,13 @@ Teams need a collaborative, auditable memory that works across agents and enviro
 💡 Solution
 
 KnowledgePlane provides a shared knowledge base for agents, exposed as an MCP server over HTTP.
-Agents can write, recall, and search "facts" within knowledge contexts — with user tracking and session management.
+Agents can write, recall, and search "facts" — with user tracking and session management.
 
 ⚙️ Core Features
 
 MCP-compliant server – works out-of-the-box with Claude Desktop, VS Code MCP host, Cursor, Windsurf, LangChain/LangGraph, etc.
 
-Knowledge contexts – organize memory using flexible `knowledge_context` field for scoping facts.
+Facts and categories – organize memory using facts and hierarchical categories.
 
 Full-text search – keyword search using ArangoDB full-text indexes.
 
@@ -70,7 +70,6 @@ ArangoDB (graph database with full-text search)
 | `facts.update` | Update a fact in the knowledge base. Only provided fields will be updated |
 | `facts.trash` | Mark a fact as trashed. Trashed facts are excluded from search results unless explicitly included |
 | `users.register` | Register a new user or update an existing user's email if the username already exists |
-| `knowledgecontexts.list` | List all distinct knowledge contexts stored in the database. Trashed facts are excluded by default |
 | `files.upload` | Upload a file and automatically extract facts and relations using AI. The file content is analyzed using OpenAI to identify key information and relationships |
 
 **facts.write Parameters:**
@@ -78,7 +77,6 @@ ArangoDB (graph database with full-text search)
 - `metadata` (optional): Key-value pairs of metadata
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
-- `knowledge_context` (optional): Context or namespace for organizing facts
 
 **facts.bulkwrite Parameters:**
 - `facts` (required): Array of fact objects to write. Each fact object has the same parameters as `facts.write`:
@@ -86,7 +84,6 @@ ArangoDB (graph database with full-text search)
   - `metadata` (optional): Key-value pairs of metadata
   - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
   - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
-  - `knowledge_context` (optional): Context or namespace for organizing facts
 
 **facts.search Parameters:**
 - `query` (required): Search query for full-text search. Use '*' to search all facts
@@ -230,7 +227,6 @@ KnowledgePlane supports three types of authentication:
 - `updated_at` (string): Last update timestamp (ISO 8601)
 - `created_by` (string): Reference to user ID
 - `last_updated_by` (string): Reference to user ID
-- `knowledge_context` (string): Optional context for organizing facts
 - `trashed` (boolean): Whether the fact has been trashed (default: false)
 
 **Relation Collection (Edges):**
@@ -252,7 +248,6 @@ KnowledgePlane supports three types of authentication:
 - `summary` (string): Brief summary
 - `content` (string): Full consolidated content
 - `fact_ids` (array): Array of fact IDs that were consolidated
-- `knowledge_context` (string): Knowledge context
 - `created_by` (string): Reference to user ID
 - `last_updated_by` (string): Reference to user ID
 - `metadata` (object): Additional metadata
@@ -266,7 +261,6 @@ KnowledgePlane supports three types of authentication:
 - `name` (string): Category name
 - `description` (string): Category description
 - `parent_id` (string): Optional reference to parent category
-- `knowledge_context` (string): Knowledge context
 - `created_by` (string): Reference to user ID
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
@@ -292,7 +286,6 @@ KnowledgePlane supports three types of authentication:
 - `size` (number): File size in bytes
 - `storage_path` (string): Path where file is stored on disk
 - `uploaded_by` (string): Reference to user ID
-- `knowledge_context` (string): Knowledge context
 - `metadata` (object): Additional metadata
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
@@ -427,8 +420,11 @@ API key behavior:
 - `JWKS_URI` - JWKS endpoint for custom OAuth providers (optional)
 - `JWT_SECRET` - Secret for JWT verification (development only)
 - `PORT` - Server port (default: `8080`)
-- `OPENAI_API_KEY` - OpenAI API key (required for file upload fact extraction)
-- `OPENAI_MODEL` - OpenAI model to use (default: `gpt-4`)
+- `AI_PROVIDER` - AI provider to use: `openai` or `anthropic` (default: `openai`)
+- `OPENAI_API_KEY` - OpenAI API key (required if using OpenAI provider)
+- `OPENAI_MODEL` - OpenAI model to use (default: `gpt-4o`)
+- `ANTHROPIC_API_KEY` - Anthropic API key (required if using Anthropic provider)
+- `ANTHROPIC_MODEL` - Anthropic model to use (default: `claude-3-5-sonnet-20241022`)
 - `UPLOADS_DIR` - Directory for storing uploaded files (default: `./uploads`)
 
 **Background Worker:**
@@ -436,7 +432,9 @@ API key behavior:
 - `ARANGO_DB_NAME` - ArangoDB database name
 - `ARANGO_USER` - ArangoDB username
 - `ARANGO_PASSWORD` - ArangoDB password
-- `OPENAI_API_KEY` - OpenAI API key (required for card consolidation and category organization)
+- `AI_PROVIDER` - AI provider to use: `openai` or `anthropic` (default: `openai`)
+- `OPENAI_API_KEY` - OpenAI API key (required if using OpenAI provider)
+- `ANTHROPIC_API_KEY` - Anthropic API key (required if using Anthropic provider)
 
 **REST API:**
 - `ARANGO_URL` - ArangoDB connection URL

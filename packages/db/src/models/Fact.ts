@@ -6,7 +6,6 @@ export interface FactInput {
   metadata?: Record<string, string>;
   created_by: string; // User ID
   last_updated_by: string; // User ID
-  knowledge_context?: string;
 }
 
 export interface FactRecord {
@@ -19,7 +18,6 @@ export interface FactRecord {
   updated_at: string;
   created_by: string;
   last_updated_by: string;
-  knowledge_context: string;
   trashed: boolean;
 }
 
@@ -29,7 +27,6 @@ export interface FactSearchResult extends FactRecord {
 
 export interface FactSearchParams {
   query: string;
-  knowledge_context?: string;
   k?: number;
   offset?: number;
   include_trashed?: boolean;
@@ -40,7 +37,6 @@ export interface FactUpdateInput {
   content?: string;
   metadata?: Record<string, string>;
   last_updated_by: string; // User ID
-  knowledge_context?: string;
 }
 
 export class Fact {
@@ -51,7 +47,6 @@ export class Fact {
       metadata: input.metadata || {},
       created_by: input.created_by,
       last_updated_by: input.last_updated_by,
-      knowledge_context: input.knowledge_context || "",
       trashed: false,
       created_at: now,
       updated_at: now,
@@ -79,7 +74,6 @@ export class Fact {
       metadata: input.metadata || {},
       created_by: input.created_by,
       last_updated_by: input.last_updated_by,
-      knowledge_context: input.knowledge_context || "",
       trashed: false,
       created_at: now,
       updated_at: now,
@@ -111,9 +105,6 @@ export class Fact {
     }
     if (input.metadata !== undefined) {
       updates.metadata = input.metadata;
-    }
-    if (input.knowledge_context !== undefined) {
-      updates.knowledge_context = input.knowledge_context;
     }
 
     const key = this._extractKey(input.id);
@@ -179,23 +170,19 @@ export class Fact {
       aql = `
         FOR fact IN facts
           FILTER (fact.trashed == false || @includeTrashed == true)
-          FILTER (@knowledgeContext == null || fact.knowledge_context == @knowledgeContext)
           SORT fact.updated_at DESC, fact.created_at DESC
           LIMIT @offset, @limit
           RETURN { fact: fact, score: 1.0 }
       `;
-      bindVars.knowledgeContext = params.knowledge_context || null;
     } else {
       aql = `
         FOR fact IN FULLTEXT(facts, "content", @query)
           FILTER (fact.trashed == false || @includeTrashed == true)
-          FILTER (@knowledgeContext == null || fact.knowledge_context == @knowledgeContext)
           SORT fact.updated_at DESC, fact.created_at DESC
           LIMIT @offset, @limit
           RETURN { fact: fact, score: BM25(fact) }
       `;
       bindVars.query = params.query;
-      bindVars.knowledgeContext = params.knowledge_context || null;
     }
 
     const cursor = await collections.facts.database.query(aql, bindVars);
@@ -248,25 +235,6 @@ export class Fact {
     return result || 0;
   }
 
-  static async listKnowledgeContexts(
-    includeTrashed: boolean = false,
-  ): Promise<string[]> {
-    const aql = `
-      FOR fact IN facts
-        FILTER (fact.trashed == false || @includeTrashed == true)
-        FILTER fact.knowledge_context != null && fact.knowledge_context != ""
-        COLLECT knowledge_context = fact.knowledge_context
-        SORT knowledge_context
-        RETURN knowledge_context
-    `;
-
-    const cursor = await collections.facts.database.query(aql, {
-      includeTrashed,
-    });
-    const results = await cursor.all();
-
-    return results;
-  }
 
   static async findById(id: string): Promise<FactRecord | null> {
     const key = this._extractKey(id);
@@ -307,7 +275,6 @@ export class Fact {
       updated_at: doc.updated_at,
       created_by: doc.created_by,
       last_updated_by: doc.last_updated_by,
-      knowledge_context: doc.knowledge_context || "",
       trashed: doc.trashed || false,
     };
   }

@@ -15,7 +15,6 @@ export const factsWriteTool: Tool = {
       },
       created_by: { type: "string", description: "User ID of the creator (optional, inferred from session if authenticated)" },
       last_updated_by: { type: "string", description: "User ID of the last updater (optional, inferred from session if authenticated)" },
-      knowledge_context: { type: "string", description: "Context or namespace for organizing facts" },
     },
     required: ["content"],
   },
@@ -26,7 +25,6 @@ export async function handleFactsWrite(args: {
   metadata?: Record<string, string>;
   created_by?: string;
   last_updated_by?: string;
-  knowledge_context?: string;
 }) {
   // Validate that user IDs are provided (either from args or should be inferred from context)
   if (!args.created_by || !args.last_updated_by) {
@@ -38,7 +36,6 @@ export async function handleFactsWrite(args: {
     metadata: args.metadata,
     created_by: args.created_by,
     last_updated_by: args.last_updated_by,
-    knowledge_context: args.knowledge_context || "",
   });
 
   return {

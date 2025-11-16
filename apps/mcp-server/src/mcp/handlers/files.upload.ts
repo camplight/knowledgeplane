@@ -20,11 +20,6 @@ export const filesUploadTool: Tool = {
         type: "string",
         description: "Base64-encoded file content",
       },
-      knowledge_context: {
-        type: "string",
-        description:
-          "Optional knowledge context for organizing extracted facts",
-      },
       created_by: {
         type: "string",
         description:
@@ -39,7 +34,6 @@ export async function handleFilesUpload(args: {
   filename: string;
   mimeType: string;
   data: string; // Base64 encoded
-  knowledge_context?: string;
   created_by?: string;
 }) {
   // Validate that user ID is provided
@@ -58,7 +52,6 @@ export async function handleFilesUpload(args: {
     filename: args.filename,
     mimeType: args.mimeType,
     uploadedBy: args.created_by,
-    knowledgeContext: args.knowledge_context,
     openaiApiKey: process.env.OPENAI_API_KEY,
     openaiModel: process.env.OPENAI_MODEL,
     uploadsDir: process.env.UPLOADS_DIR,

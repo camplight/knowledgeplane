@@ -17,6 +17,18 @@ export interface ChatMessage {
 }
 
 /**
+ * Tool definition for function calling
+ */
+export interface Tool {
+  type: "function";
+  function: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, any>;
+  };
+}
+
+/**
  * Chat completion options
  */
 export interface ChatCompletionOptions {
@@ -24,6 +36,20 @@ export interface ChatCompletionOptions {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: "json_object" | "text";
+  tools?: Tool[];
+  toolChoice?: "auto" | "none" | { type: "function"; function: { name: string } };
+}
+
+/**
+ * Tool call result
+ */
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
 }
 
 /**
@@ -32,6 +58,7 @@ export interface ChatCompletionOptions {
 export interface ChatCompletionResult {
   content: string;
   model: string;
+  toolCalls?: ToolCall[];
   usage?: {
     promptTokens?: number;
     completionTokens?: number;

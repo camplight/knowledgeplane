@@ -9,14 +9,13 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   factsUsed?: number;
-  facts?: Array<{ id: string; content: string; knowledge_context: string }>;
+  facts?: Array<{ id: string; content: string }>;
 }
 
 export default function ChatPage() {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [knowledgeContext, setKnowledgeContext] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -87,7 +86,6 @@ export default function ChatPage() {
       await sendMessageMutation.mutateAsync({
         message: userMessage.content,
         conversationHistory,
-        knowledgeContext: knowledgeContext || undefined,
       });
     } catch (error) {
       // Error handled in onError
@@ -119,17 +117,6 @@ export default function ChatPage() {
 
       {/* Chat Container */}
       <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
-        {/* Knowledge Context Filter */}
-        <div className="mb-4">
-          <input
-            type="text"
-            placeholder="Filter by knowledge context (optional)"
-            value={knowledgeContext}
-            onChange={(e) => setKnowledgeContext(e.target.value)}
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-
         {/* Messages */}
         <div className="flex-1 overflow-y-auto mb-4 space-y-4">
           {messages.length === 0 ? (
@@ -172,9 +159,6 @@ export default function ChatPage() {
                             {message.facts.map((fact, factIdx) => (
                               <div key={factIdx} className="text-xs bg-slate-50 p-2 rounded border border-slate-200">
                                 <p className="text-slate-700">{fact.content}</p>
-                                {fact.knowledge_context && (
-                                  <p className="text-slate-500 mt-1">Context: {fact.knowledge_context}</p>
-                                )}
                               </div>
                             ))}
                           </div>

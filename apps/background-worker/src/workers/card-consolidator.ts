@@ -1,4 +1,4 @@
-import { Fact, Card, Relation } from "@knowledgeplane/db";
+import { Fact, Card, Relation, WorkerLog } from "@knowledgeplane/db";
 import {
   createAIModelClient,
   type ChatMessage,
@@ -11,9 +11,9 @@ export class CardConsolidator {
   private running = false;
 
   constructor() {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      throw new Error("OPENAI_API_KEY environment variable is required");
+      throw new Error("AI API key environment variable is required");
     }
     this.aiClient = createAIModelClient(
       (process.env.AI_PROVIDER as any) || "openai",
@@ -50,24 +50,68 @@ export class CardConsolidator {
       return; // Skip if already running
     }
 
+    const startTime = Date.now();
     this.running = true;
+    let cardsCreated = 0;
+    let factsProcessed = 0;
+    let error: string | undefined;
+
     try {
       // Get facts that haven't been consolidated into cards
       const facts = await this.getUnconsolidatedFacts();
 
       if (facts.length === 0) {
-        console.log("No unconsolidated facts found");
+        await WorkerLog.create({
+          worker_name: "card-consolidator",
+          task_type: "consolidation",
+          status: "success",
+          message: "No unconsolidated facts found",
+          execution_time_ms: Date.now() - startTime,
+          items_processed: 0,
+          items_created: 0,
+        });
         return;
       }
 
+      factsProcessed = facts.length;
       console.log(`Processing ${facts.length} unconsolidated facts`);
 
-      // Group facts by knowledge context
-      const factsByContext = this.groupByContext(facts);
+      // Group facts by related clusters
+      const factClusters = await this.groupRelatedFacts(facts);
 
-      for (const [context, contextFacts] of Object.entries(factsByContext)) {
-        await this.consolidateContext(context, contextFacts);
+      for (const cluster of factClusters) {
+        const card = await this.consolidateCluster(cluster);
+        if (card) {
+          cardsCreated++;
+        }
       }
+
+      const executionTime = Date.now() - startTime;
+      await WorkerLog.create({
+        worker_name: "card-consolidator",
+        task_type: "consolidation",
+        status: "success",
+        message: `Consolidated ${factsProcessed} facts into ${cardsCreated} cards`,
+        execution_time_ms: executionTime,
+        items_processed: factsProcessed,
+        items_created: cardsCreated,
+      });
+
+      console.log(`Created ${cardsCreated} cards from ${factsProcessed} facts`);
+    } catch (err: any) {
+      error = err.message || String(err);
+      const executionTime = Date.now() - startTime;
+      await WorkerLog.create({
+        worker_name: "card-consolidator",
+        task_type: "consolidation",
+        status: "error",
+        message: "Card consolidation failed",
+        execution_time_ms: executionTime,
+        items_processed: factsProcessed,
+        items_created: cardsCreated,
+        error: error,
+      });
+      throw err;
     } finally {
       this.running = false;
     }
@@ -92,55 +136,64 @@ export class CardConsolidator {
     return await Fact.queryAQL(aql);
   }
 
-  private groupByContext(facts: any[]): Record<string, any[]> {
-    const grouped: Record<string, any[]> = {};
+  private async groupRelatedFacts(facts: any[]): Promise<any[][]> {
+    // Group facts by their relationships
+    const clusters: any[][] = [];
+    const processed = new Set<string>();
+
     for (const fact of facts) {
-      const context = fact.knowledge_context || "default";
-      if (!grouped[context]) {
-        grouped[context] = [];
+      if (processed.has(fact._id || fact.id)) {
+        continue;
       }
-      grouped[context].push(fact);
+
+      const cluster = await this.getRelatedFacts([fact]);
+      for (const f of cluster) {
+        processed.add(f._id || f.id);
+      }
+      clusters.push(cluster);
     }
-    return grouped;
+
+    return clusters;
   }
 
-  private async consolidateContext(
-    context: string,
-    facts: any[],
-  ): Promise<void> {
-    console.log(`Consolidating ${facts.length} facts for context: ${context}`);
+  private async consolidateCluster(facts: any[]): Promise<any | null> {
+    if (facts.length === 0) {
+      return null;
+    }
 
-    // Get related facts using graph traversal
-    const relatedFacts = await this.getRelatedFacts(facts);
+    console.log(`Consolidating ${facts.length} related facts`);
 
-    // Prepare content for OpenAI
-    const factContents = relatedFacts
+    // Prepare content for AI
+    const factContents = facts
       .map((f) => `- ${f.content}`)
       .join("\n");
 
-    // Use OpenAI agent to consolidate
-    const consolidation = await this.consolidateWithOpenAI(
-      context,
+    // Use AI agent to consolidate
+    const consolidation = await this.consolidateWithAI(
       factContents,
-      relatedFacts,
+      facts,
     );
 
-    // Create or update card
-    const card = await this.createOrUpdateCard(
-      context,
-      consolidation,
-      relatedFacts.map((f) => f._id || f.id),
-    );
+    // Create card
+    const card = await Card.create({
+      title: consolidation.title,
+      summary: consolidation.summary,
+      content: consolidation.content,
+      fact_ids: facts.map((f) => f._id || f.id),
+      created_by: "system",
+      last_updated_by: "system",
+    });
 
-    console.log(`Created/updated card: ${card.id}`);
+    console.log(`Created card: ${card.id}`);
+    return card;
   }
 
-  private async getRelatedFacts(facts: any[]): Promise<any[]> {
+  private async getRelatedFacts(seedFacts: any[]): Promise<any[]> {
     // Use graph traversal to find related facts
-    const factIds = facts.map((f) => f._id || f.id);
+    const factIds = seedFacts.map((f) => f._id || f.id);
     const allRelated: Set<string> = new Set(factIds);
 
-    for (const fact of facts) {
+    for (const fact of seedFacts) {
       const factId = fact._id || fact.id;
       const outgoing = await Relation.getRelatedFacts(factId);
       const incoming = await Relation.getIncomingRelations(factId);
@@ -165,14 +218,11 @@ export class CardConsolidator {
     return relatedFacts;
   }
 
-  private async consolidateWithOpenAI(
-    context: string,
+  private async consolidateWithAI(
     factContents: string,
     facts: any[],
   ): Promise<{ title: string; summary: string; content: string }> {
     const systemPrompt = `You are a knowledge consolidation agent. Your task is to analyze a collection of related facts and create a comprehensive, well-organized summary card.
-
-The facts are from the knowledge context: "${context}"
 
 Create a card with:
 1. A clear, descriptive title (max 100 characters)
@@ -203,7 +253,7 @@ Provide your response as JSON with the following structure:
     ];
 
     const chatOptions: ChatCompletionOptions = {
-      model: process.env.OPENAI_MODEL || "gpt-4o",
+      model: process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || "gpt-4o",
       temperature: 0.7,
       responseFormat: "json_object",
     };
@@ -214,37 +264,11 @@ Provide your response as JSON with the following structure:
       throw new Error("No response from AI model");
     }
 
-    const content = response.content;
-
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(response.content);
     return {
       title: parsed.title || "Untitled Card",
       summary: parsed.summary || "",
       content: parsed.content || "",
     };
   }
-
-  private async createOrUpdateCard(
-    context: string,
-    consolidation: { title: string; summary: string; content: string },
-    factIds: string[],
-  ): Promise<any> {
-    // Check if card exists for this context
-    const existingCards = await Card.list(10, 0, context);
-
-    // For now, create a new card. In the future, we could update existing cards
-    // or merge related cards
-    const card = await Card.create({
-      title: consolidation.title,
-      summary: consolidation.summary,
-      content: consolidation.content,
-      fact_ids: factIds,
-      knowledge_context: context,
-      created_by: "system", // System user
-      last_updated_by: "system",
-    });
-
-    return card;
-  }
 }
-

@@ -8,11 +8,10 @@ import {
 } from "@knowledgeplane/aimodel";
 
 // MCP client helper to call facts.search
-async function searchFacts(query: string, knowledgeContext?: string) {
+async function searchFacts(query: string) {
   try {
     const results = await Fact.search({
       query: query === "*" ? "*" : query,
-      knowledge_context: knowledgeContext,
       k: 10,
       offset: 0,
       include_trashed: false,
@@ -37,14 +36,13 @@ export const chatRouter = router({
             }),
           )
           .optional(),
-        knowledgeContext: z.string().optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      const { message, conversationHistory = [], knowledgeContext } = input;
+      const { message, conversationHistory = [] } = input;
 
       // Search facts relevant to the user's message
-      const relevantFacts = await searchFacts(message, knowledgeContext);
+      const relevantFacts = await searchFacts(message);
 
       // Build context from facts
       const factsContext =
@@ -52,7 +50,7 @@ export const chatRouter = router({
           ? `\n\nRelevant knowledge from the knowledge base:\n${relevantFacts
               .map(
                 (fact, idx) =>
-                  `${idx + 1}. ${fact.content}${fact.knowledge_context ? ` (Context: ${fact.knowledge_context})` : ""}`,
+                  `${idx + 1}. ${fact.content}`,
               )
               .join("\n")}`
           : "";

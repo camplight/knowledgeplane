@@ -96,25 +96,18 @@ export default async function mcpRoutes(app: FastifyInstance) {
       }
     }
 
-    // Extract knowledge_context from queryParams
-    const knowledgeContext = query.knowledge_context;
-
     // Build context for this request
     const requestContext: McpContext = {};
     if (userId) {
       requestContext.userId = userId;
     }
-    if (knowledgeContext) {
-      requestContext.knowledgeContext = knowledgeContext;
-    }
 
     // Store context for this session (if sessionId exists)
-    if (sessionId && (userId || knowledgeContext)) {
+    if (sessionId && userId) {
       const existingContext = sessionContexts.get(sessionId) || {};
       sessionContexts.set(sessionId, {
         ...existingContext,
         userId: userId || existingContext.userId,
-        knowledgeContext: knowledgeContext || existingContext.knowledgeContext,
       });
     }
 
@@ -127,13 +120,11 @@ export default async function mcpRoutes(app: FastifyInstance) {
       app.log.debug({ sessionId }, "MCP: Reusing existing transport");
 
       // Update context for existing session if new params provided
-      if (userId || knowledgeContext) {
+      if (userId) {
         const existingContext = sessionContexts.get(sessionId) || {};
         sessionContexts.set(sessionId, {
           ...existingContext,
           userId: userId || existingContext.userId,
-          knowledgeContext:
-            knowledgeContext || existingContext.knowledgeContext,
         });
       }
     } else {
@@ -155,10 +146,9 @@ export default async function mcpRoutes(app: FastifyInstance) {
         onsessioninitialized: (id: string) => {
           transports.set(id, transport);
           // Set context for new session if available
-          if (userId || knowledgeContext) {
+          if (userId) {
             sessionContexts.set(id, {
               userId,
-              knowledgeContext,
             });
           }
           app.log.info({ sessionId: id }, "MCP: Session initialized");

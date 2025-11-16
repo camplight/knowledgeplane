@@ -170,6 +170,7 @@ export const collections = {
   invitations: db.collection("invitations"),
   oauth_authorization_requests: db.collection("oauth_authorization_requests"),
   oauth_authorization_codes: db.collection("oauth_authorization_codes"),
+  worker_logs: db.collection("worker_logs"),
 };
 
 // Graph for relations
@@ -210,6 +211,7 @@ export async function init() {
     "invitations",
     "oauth_authorization_requests",
     "oauth_authorization_codes",
+    "worker_logs",
   ];
 
   for (const name of documentCollectionNames) {
@@ -261,11 +263,6 @@ export async function init() {
 
   // Create indexes
   try {
-    await collections.facts.ensureIndex({
-      type: "persistent",
-      fields: ["knowledge_context"],
-      name: "idx_fact_knowledge_context",
-    });
     await collections.facts.ensureIndex({
       type: "persistent",
       fields: ["created_by"],
@@ -327,6 +324,21 @@ export async function init() {
       type: "persistent",
       fields: ["type"],
       name: "idx_relation_type",
+    });
+    await collections.worker_logs.ensureIndex({
+      type: "persistent",
+      fields: ["worker_name"],
+      name: "idx_worker_log_worker_name",
+    });
+    await collections.worker_logs.ensureIndex({
+      type: "persistent",
+      fields: ["status"],
+      name: "idx_worker_log_status",
+    });
+    await collections.worker_logs.ensureIndex({
+      type: "persistent",
+      fields: ["created_at"],
+      name: "idx_worker_log_created_at",
     });
   } catch (error: any) {
     console.warn("Index creation warning:", error.message);

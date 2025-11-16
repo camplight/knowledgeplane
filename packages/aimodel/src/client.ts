@@ -1,6 +1,7 @@
 import type { Provider } from "./types";
 import type { AIModelProvider } from "./providers/base";
 import { OpenAIProvider } from "./providers/openai";
+import { AnthropicProvider } from "./providers/anthropic";
 
 /**
  * AI Model Client - Facade for interacting with different AI providers
@@ -16,8 +17,8 @@ export class AIModelClient {
         this.provider = new OpenAIProvider(apiKey);
         break;
       case "anthropic":
-        // TODO: Implement Anthropic provider
-        throw new Error("Anthropic provider not yet implemented");
+        this.provider = new AnthropicProvider(apiKey);
+        break;
       case "google":
         // TODO: Implement Google provider
         throw new Error("Google provider not yet implemented");

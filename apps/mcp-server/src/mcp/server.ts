@@ -17,17 +17,12 @@ import {
   handleUsersRegister,
 } from "./handlers/users.register.js";
 import {
-  knowledgeContextsListTool,
-  handleKnowledgeContextsList,
-} from "./handlers/knowledgecontexts.list.js";
-import {
   filesUploadTool,
   handleFilesUpload,
 } from "./handlers/files.upload.js";
 
 export interface McpContext {
   userId?: string;
-  knowledgeContext?: string;
 }
 
 // Tool definitions from handlers
@@ -38,7 +33,6 @@ const tools = [
   factsUpdateTool,
   factsTrashTool,
   usersRegisterTool,
-  knowledgeContextsListTool,
   filesUploadTool,
 ];
 
@@ -109,12 +103,6 @@ export function createMcpServer(
           handlerArgs.last_updated_by || context.userId;
       }
 
-      // Set knowledge_context from context if available
-      if (context?.knowledgeContext) {
-        handlerArgs.knowledge_context =
-          handlerArgs.knowledge_context || context.knowledgeContext;
-      }
-
       handler = handleFactsWrite;
     } else if (name === "facts.bulkwrite") {
       // Merge context into args for facts.bulkwrite
@@ -129,22 +117,9 @@ export function createMcpServer(
         }));
       }
 
-      // Set knowledge_context from context if available (apply to all facts that don't have one)
-      if (context?.knowledgeContext && handlerArgs.facts) {
-        handlerArgs.facts = handlerArgs.facts.map((fact: any) => ({
-          ...fact,
-          knowledge_context: fact.knowledge_context || context.knowledgeContext,
-        }));
-      }
-
       handler = handleFactsBulkWrite;
     } else if (name === "facts.search") {
-      // Merge context into args for facts.search
       handlerArgs = { ...args } as any;
-      if (context?.knowledgeContext) {
-        handlerArgs.knowledge_context =
-          handlerArgs.knowledge_context || context.knowledgeContext;
-      }
       handler = handleFactsSearch;
     } else if (name === "facts.update") {
       // Merge context into args for facts.update
@@ -154,10 +129,6 @@ export function createMcpServer(
           // Use context userId as default for last_updated_by if not provided
           handlerArgs.last_updated_by =
             handlerArgs.last_updated_by || context.userId;
-        }
-        if (context.knowledgeContext) {
-          handlerArgs.knowledge_context =
-            handlerArgs.knowledge_context || context.knowledgeContext;
         }
       }
       handler = handleFactsUpdate;
@@ -172,9 +143,6 @@ export function createMcpServer(
     } else if (name === "users.register") {
       handlerArgs = { ...args } as any;
       handler = handleUsersRegister;
-    } else if (name === "knowledgecontexts.list") {
-      handlerArgs = { ...args } as any;
-      handler = handleKnowledgeContextsList;
     } else if (name === "files.upload") {
       // Merge context into args for files.upload
       handlerArgs = { ...args } as any;
@@ -183,10 +151,6 @@ export function createMcpServer(
           // Use context userId as default for created_by if not provided
           handlerArgs.created_by =
             handlerArgs.created_by || context.userId;
-        }
-        if (context.knowledgeContext) {
-          handlerArgs.knowledge_context =
-            handlerArgs.knowledge_context || context.knowledgeContext;
         }
       }
       handler = handleFilesUpload;

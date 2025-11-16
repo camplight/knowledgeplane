@@ -6,7 +6,6 @@ export interface CardInput {
   summary: string;
   content: string; // Full consolidated content
   fact_ids: string[]; // Array of fact IDs that were consolidated
-  knowledge_context?: string;
   created_by: string;
   last_updated_by: string;
   metadata?: Record<string, any>;
@@ -20,7 +19,6 @@ export interface CardRecord {
   summary: string;
   content: string;
   fact_ids: string[];
-  knowledge_context: string;
   created_by: string;
   last_updated_by: string;
   metadata: Record<string, any>;
@@ -35,7 +33,6 @@ export interface CardUpdateInput {
   summary?: string;
   content?: string;
   fact_ids?: string[];
-  knowledge_context?: string;
   last_updated_by: string;
   metadata?: Record<string, any>;
   category_id?: string;
@@ -49,7 +46,6 @@ export class Card {
       summary: input.summary,
       content: input.content,
       fact_ids: input.fact_ids,
-      knowledge_context: input.knowledge_context || "",
       created_by: input.created_by,
       last_updated_by: input.last_updated_by,
       metadata: input.metadata || {},
@@ -78,8 +74,6 @@ export class Card {
     if (input.summary !== undefined) updates.summary = input.summary;
     if (input.content !== undefined) updates.content = input.content;
     if (input.fact_ids !== undefined) updates.fact_ids = input.fact_ids;
-    if (input.knowledge_context !== undefined)
-      updates.knowledge_context = input.knowledge_context;
     if (input.metadata !== undefined) updates.metadata = input.metadata;
     if (input.category_id !== undefined) updates.category_id = input.category_id;
 
@@ -118,17 +112,12 @@ export class Card {
   static async list(
     limit: number = 50,
     offset: number = 0,
-    knowledge_context?: string,
     category_id?: string,
   ): Promise<CardRecord[]> {
     let aql = `FOR card IN cards`;
     const bindVars: any = { limit, offset };
     const filters: string[] = [];
 
-    if (knowledge_context) {
-      filters.push(`card.knowledge_context == @knowledgeContext`);
-      bindVars.knowledgeContext = knowledge_context;
-    }
     if (category_id) {
       filters.push(`card.category_id == @categoryId`);
       bindVars.categoryId = category_id;
@@ -168,7 +157,6 @@ export class Card {
       summary: doc.summary,
       content: doc.content,
       fact_ids: doc.fact_ids || [],
-      knowledge_context: doc.knowledge_context || "",
       created_by: doc.created_by,
       last_updated_by: doc.last_updated_by,
       metadata: doc.metadata || {},

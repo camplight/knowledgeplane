@@ -15,7 +15,6 @@ export const factsUpdateTool: Tool = {
         additionalProperties: { type: "string" },
       },
       last_updated_by: { type: "string", description: "User ID of the person updating the fact" },
-      knowledge_context: { type: "string", description: "Updated context or namespace for organizing facts" },
     },
     required: ["id", "last_updated_by"],
   },
@@ -26,14 +25,12 @@ export async function handleFactsUpdate(args: {
   content?: string;
   metadata?: Record<string, string>;
   last_updated_by: string;
-  knowledge_context?: string;
 }) {
   const fact = await Fact.update({
     id: args.id,
     content: args.content,
     metadata: args.metadata,
     last_updated_by: args.last_updated_by,
-    knowledge_context: args.knowledge_context,
   });
 
   return {

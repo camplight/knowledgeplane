@@ -4,7 +4,6 @@ export interface CategoryInput {
   name: string;
   description?: string;
   parent_id?: string; // Reference to parent category
-  knowledge_context?: string;
   created_by: string;
 }
 
@@ -15,7 +14,6 @@ export interface CategoryRecord {
   name: string;
   description?: string;
   parent_id?: string;
-  knowledge_context: string;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -27,7 +25,6 @@ export interface CategoryUpdateInput {
   name?: string;
   description?: string;
   parent_id?: string;
-  knowledge_context?: string;
 }
 
 export class Category {
@@ -41,7 +38,6 @@ export class Category {
       name: input.name,
       description: input.description || null,
       parent_id: input.parent_id || null,
-      knowledge_context: input.knowledge_context || "",
       created_by: input.created_by,
       created_at: now,
       updated_at: now,
@@ -68,8 +64,6 @@ export class Category {
 
     if (input.name !== undefined) updates.name = input.name;
     if (input.description !== undefined) updates.description = input.description;
-    if (input.knowledge_context !== undefined)
-      updates.knowledge_context = input.knowledge_context;
 
     // If parent_id changes, recalculate path
     if (input.parent_id !== undefined) {
@@ -111,17 +105,12 @@ export class Category {
   }
 
   static async list(
-    knowledge_context?: string,
     parent_id?: string,
   ): Promise<CategoryRecord[]> {
     let aql = `FOR category IN categories`;
     const bindVars: any = {};
     const filters: string[] = [];
 
-    if (knowledge_context) {
-      filters.push(`category.knowledge_context == @knowledgeContext`);
-      bindVars.knowledgeContext = knowledge_context;
-    }
     if (parent_id !== undefined) {
       if (parent_id === null) {
         filters.push(`category.parent_id == null`);
@@ -143,11 +132,9 @@ export class Category {
     return results.map((r: any) => this._normalizeRecord(r));
   }
 
-  static async getTree(
-    knowledge_context?: string,
-  ): Promise<CategoryRecord[]> {
+  static async getTree(): Promise<CategoryRecord[]> {
     // Get all categories and build tree structure
-    const categories = await this.list(knowledge_context);
+    const categories = await this.list();
     return this._buildTree(categories);
   }
 
@@ -202,7 +189,6 @@ export class Category {
       name: doc.name,
       description: doc.description,
       parent_id: doc.parent_id,
-      knowledge_context: doc.knowledge_context || "",
       created_by: doc.created_by,
       created_at: doc.created_at,
       updated_at: doc.updated_at,

@@ -7,7 +7,6 @@ export interface FileInput {
   size: number;
   storage_path: string; // Path where file is stored
   uploaded_by: string; // User ID
-  knowledge_context?: string;
   metadata?: Record<string, any>;
 }
 
@@ -21,7 +20,6 @@ export interface FileRecord {
   size: number;
   storage_path: string;
   uploaded_by: string;
-  knowledge_context: string;
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -30,7 +28,6 @@ export interface FileRecord {
 
 export interface FileUpdateInput {
   id: string;
-  knowledge_context?: string;
   metadata?: Record<string, any>;
   fact_ids?: string[];
 }
@@ -45,7 +42,6 @@ export class File {
       size: input.size,
       storage_path: input.storage_path,
       uploaded_by: input.uploaded_by,
-      knowledge_context: input.knowledge_context || "",
       metadata: input.metadata || {},
       fact_ids: [],
       created_at: now,
@@ -61,8 +57,6 @@ export class File {
       updated_at: new Date().toISOString(),
     };
 
-    if (input.knowledge_context !== undefined)
-      updates.knowledge_context = input.knowledge_context;
     if (input.metadata !== undefined) updates.metadata = input.metadata;
     if (input.fact_ids !== undefined) updates.fact_ids = input.fact_ids;
 
@@ -94,20 +88,9 @@ export class File {
   static async list(
     limit: number = 50,
     offset: number = 0,
-    knowledge_context?: string,
   ): Promise<FileRecord[]> {
     let aql = `FOR file IN files`;
     const bindVars: any = { limit, offset };
-    const filters: string[] = [];
-
-    if (knowledge_context) {
-      filters.push(`file.knowledge_context == @knowledgeContext`);
-      bindVars.knowledgeContext = knowledge_context;
-    }
-
-    if (filters.length > 0) {
-      aql += ` FILTER ${filters.join(" && ")}`;
-    }
 
     aql += ` SORT file.created_at DESC LIMIT @offset, @limit RETURN file`;
 
@@ -149,7 +132,6 @@ export class File {
       size: doc.size,
       storage_path: doc.storage_path,
       uploaded_by: doc.uploaded_by,
-      knowledge_context: doc.knowledge_context || "",
       metadata: doc.metadata || {},
       created_at: doc.created_at,
       updated_at: doc.updated_at,

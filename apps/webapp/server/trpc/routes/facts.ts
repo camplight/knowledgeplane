@@ -23,7 +23,6 @@ export const factsRouter = router({
     .input(
       z.object({
         query: z.string(),
-        knowledge_context: z.string().optional(),
         k: z.number().min(1).max(100).default(10),
         offset: z.number().min(0).default(0),
         include_trashed: z.boolean().default(false),
@@ -32,12 +31,30 @@ export const factsRouter = router({
     .query(async ({ input }) => {
       const results = await Fact.search({
         query: input.query,
-        knowledge_context: input.knowledge_context,
         k: input.k,
         offset: input.offset,
         include_trashed: input.include_trashed,
       });
       return { results };
+    }),
+  create: protectedProcedure
+    .input(
+      z.object({
+        content: z.string().min(1),
+        metadata: z.record(z.string()).optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      if (!ctx.user) {
+        throw new Error("User not authenticated");
+      }
+      const fact = await Fact.write({
+        content: input.content,
+        metadata: input.metadata,
+        created_by: ctx.user.userId,
+        last_updated_by: ctx.user.userId,
+      });
+      return { fact };
     }),
 });
 

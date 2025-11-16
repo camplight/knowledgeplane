@@ -21,7 +21,6 @@ export const factsBulkWriteTool: Tool = {
             },
             created_by: { type: "string", description: "User ID of the creator (optional, inferred from session if authenticated)" },
             last_updated_by: { type: "string", description: "User ID of the last updater (optional, inferred from session if authenticated)" },
-            knowledge_context: { type: "string", description: "Context or namespace for organizing facts" },
           },
           required: ["content"],
         },
@@ -37,7 +36,6 @@ export async function handleFactsBulkWrite(args: {
     metadata?: Record<string, string>;
     created_by?: string;
     last_updated_by?: string;
-    knowledge_context?: string;
   }>;
 }) {
   // Validate that facts array is not empty
@@ -62,7 +60,6 @@ export async function handleFactsBulkWrite(args: {
     metadata: fact.metadata,
     created_by: fact.created_by!,
     last_updated_by: fact.last_updated_by!,
-    knowledge_context: fact.knowledge_context || "",
   }));
 
   const facts = await Fact.bulkWrite(factInputs);

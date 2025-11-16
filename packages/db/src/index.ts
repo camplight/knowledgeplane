@@ -8,4 +8,5 @@ export * from "./models/Webhook";
 export * from "./models/Category";
 export * from "./models/File";
 export * from "./models/Invitation";
+export * from "./models/WorkerLog";
 export * from "./lib/webhook-trigger";

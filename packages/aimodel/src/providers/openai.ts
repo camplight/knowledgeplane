@@ -6,6 +6,7 @@ import type {
   FileUploadOptions,
   FileUploadResult,
   FileContentResult,
+  Tool,
 } from "../types";
 import type { AIModelProvider } from "./base";
 
@@ -51,6 +52,31 @@ export class OpenAIProvider implements AIModelProvider {
         }
       });
 
+    // Convert tools to OpenAI format
+    const openaiTools: OpenAI.Chat.Completions.ChatCompletionTool[] | undefined = options?.tools?.map((tool) => ({
+      type: "function",
+      function: {
+        name: tool.function.name,
+        description: tool.function.description,
+        parameters: tool.function.parameters || {},
+      },
+    }));
+
+    // Convert tool choice
+    let toolChoice: OpenAI.Chat.Completions.ChatCompletionToolChoiceOption | undefined;
+    if (options?.toolChoice) {
+      if (options.toolChoice === "auto") {
+        toolChoice = "auto";
+      } else if (options.toolChoice === "none") {
+        toolChoice = "none";
+      } else {
+        toolChoice = {
+          type: "function",
+          function: { name: options.toolChoice.function.name },
+        };
+      }
+    }
+
     const response = await this.client.chat.completions.create({
       model,
       messages: openaiMessages,
@@ -60,11 +86,24 @@ export class OpenAIProvider implements AIModelProvider {
         responseFormat === "json_object"
           ? { type: "json_object" }
           : undefined,
+      tools: openaiTools,
+      tool_choice: toolChoice,
     });
 
+    const message = response.choices[0]?.message;
+    const toolCalls = message?.tool_calls?.map((tc) => ({
+      id: tc.id,
+      type: "function" as const,
+      function: {
+        name: tc.function.name,
+        arguments: tc.function.arguments,
+      },
+    }));
+
     return {
-      content: response.choices[0]?.message?.content || "",
+      content: message?.content || "",
       model: response.model,
+      toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
       usage: {
         promptTokens: response.usage?.prompt_tokens,
         completionTokens: response.usage?.completion_tokens,

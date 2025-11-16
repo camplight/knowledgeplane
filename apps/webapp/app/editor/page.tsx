@@ -11,12 +11,20 @@ export default function EditorPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFact, setSelectedFact] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
-  const [knowledgeContext, setKnowledgeContext] = useState<string>("");
+  
+  // Create fact form state
+  const [showCreateFact, setShowCreateFact] = useState(false);
+  const [factContent, setFactContent] = useState("");
+  
+  // Create category form state
+  const [showCreateCategory, setShowCreateCategory] = useState(false);
+  const [categoryName, setCategoryName] = useState("");
+  const [categoryDescription, setCategoryDescription] = useState("");
 
   const { data: userData, isLoading: userLoading } = trpc.auth.me.useQuery();
   
   // Facts queries
-  const { data: factsData, isLoading: factsLoading } = trpc.facts.list.useQuery({
+  const { data: factsData, isLoading: factsLoading, refetch: refetchFacts } = trpc.facts.list.useQuery({
     limit: 50,
     offset: 0,
     includeTrashed: false,
@@ -26,11 +34,32 @@ export default function EditorPage() {
   const { data: searchResults, refetch: refetchSearch } = trpc.facts.search.useQuery(
     {
       query: searchQuery || "*",
-      knowledge_context: knowledgeContext || undefined,
       k: 20,
     },
     { enabled: false }
   );
+
+  // Categories queries
+  const { data: categoriesData, isLoading: categoriesLoading, refetch: refetchCategories } = trpc.categories.list.useQuery();
+
+  // Create fact mutation
+  const createFactMutation = trpc.facts.create.useMutation({
+    onSuccess: () => {
+      setFactContent("");
+      setShowCreateFact(false);
+      refetchFacts();
+    },
+  });
+
+  // Create category mutation
+  const createCategoryMutation = trpc.categories.create.useMutation({
+    onSuccess: () => {
+      setCategoryName("");
+      setCategoryDescription("");
+      setShowCreateCategory(false);
+      refetchCategories();
+    },
+  });
 
   useEffect(() => {
     if (!userLoading && !userData?.user) {
@@ -41,6 +70,23 @@ export default function EditorPage() {
   const handleSearch = () => {
     if (searchQuery) {
       refetchSearch();
+    }
+  };
+
+  const handleCreateFact = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (factContent.trim()) {
+      createFactMutation.mutate({ content: factContent.trim() });
+    }
+  };
+
+  const handleCreateCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (categoryName.trim()) {
+      createCategoryMutation.mutate({
+        name: categoryName.trim(),
+        description: categoryDescription.trim() || undefined,
+      });
     }
   };
 
@@ -57,6 +103,7 @@ export default function EditorPage() {
   }
 
   const facts = searchQuery && searchResults ? searchResults.results : (factsData?.facts || []);
+  const categories = categoriesData?.categories || [];
   const user = userData.user;
 
   return (
@@ -74,15 +121,6 @@ export default function EditorPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && handleSearch()}
-                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <div className="w-64">
-              <input
-                type="text"
-                placeholder="Knowledge context (optional)"
-                value={knowledgeContext}
-                onChange={(e) => setKnowledgeContext(e.target.value)}
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -147,12 +185,48 @@ export default function EditorPage() {
           <div className="lg:col-span-2">
             {selectedView === "facts" && (
               <div className="bg-white rounded-xl shadow-lg border border-slate-200">
-                <div className="p-6 border-b border-slate-200">
-                  <h2 className="text-2xl font-bold text-slate-900">Facts</h2>
-                  <p className="text-sm text-slate-600 mt-1">
-                    Browse and discover facts in your knowledge base
-                  </p>
+                <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900">Facts</h2>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Browse and discover facts in your knowledge base
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateFact(!showCreateFact)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                  >
+                    {showCreateFact ? "Cancel" : "+ New Fact"}
+                  </button>
                 </div>
+                
+                {showCreateFact && (
+                  <div className="p-6 border-b border-slate-200 bg-slate-50">
+                    <form onSubmit={handleCreateFact}>
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Fact Content
+                        </label>
+                        <textarea
+                          value={factContent}
+                          onChange={(e) => setFactContent(e.target.value)}
+                          placeholder="Enter fact content..."
+                          rows={4}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={createFactMutation.isPending}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50"
+                      >
+                        {createFactMutation.isPending ? "Creating..." : "Create Fact"}
+                      </button>
+                    </form>
+                  </div>
+                )}
+
                 {factsLoading ? (
                   <div className="p-8 text-center">
                     <div className="text-slate-600">Loading facts...</div>
@@ -174,11 +248,6 @@ export default function EditorPage() {
                       >
                         <p className="text-slate-900 mb-2 leading-relaxed">{fact.content}</p>
                         <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                          {fact.knowledge_context && (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-md">
-                              {fact.knowledge_context}
-                            </span>
-                          )}
                           <span>{new Date(fact.created_at).toLocaleDateString()}</span>
                         </div>
                       </div>
@@ -204,15 +273,87 @@ export default function EditorPage() {
 
             {selectedView === "categories" && (
               <div className="bg-white rounded-xl shadow-lg border border-slate-200">
-                <div className="p-6 border-b border-slate-200">
-                  <h2 className="text-2xl font-bold text-slate-900">Categories</h2>
-                  <p className="text-sm text-slate-600 mt-1">
-                    Organized knowledge categories
-                  </p>
+                <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900">Categories</h2>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Organized knowledge categories
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateCategory(!showCreateCategory)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                  >
+                    {showCreateCategory ? "Cancel" : "+ New Category"}
+                  </button>
                 </div>
-                <div className="p-8 text-center">
-                  <p className="text-slate-600">Category view coming soon</p>
-                </div>
+                
+                {showCreateCategory && (
+                  <div className="p-6 border-b border-slate-200 bg-slate-50">
+                    <form onSubmit={handleCreateCategory}>
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Category Name
+                        </label>
+                        <input
+                          type="text"
+                          value={categoryName}
+                          onChange={(e) => setCategoryName(e.target.value)}
+                          placeholder="Enter category name..."
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Description (optional)
+                        </label>
+                        <textarea
+                          value={categoryDescription}
+                          onChange={(e) => setCategoryDescription(e.target.value)}
+                          placeholder="Enter category description..."
+                          rows={3}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={createCategoryMutation.isPending}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50"
+                      >
+                        {createCategoryMutation.isPending ? "Creating..." : "Create Category"}
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {categoriesLoading ? (
+                  <div className="p-8 text-center">
+                    <div className="text-slate-600">Loading categories...</div>
+                  </div>
+                ) : categories.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <p className="text-lg font-medium text-slate-900 mb-2">No categories found</p>
+                    <p className="text-slate-600">Create your first category to get started</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-200">
+                    {categories.map((category: any) => (
+                      <div
+                        key={category.id}
+                        className="p-6 hover:bg-slate-50 transition-colors"
+                      >
+                        <h3 className="text-lg font-semibold text-slate-900 mb-1">{category.name}</h3>
+                        {category.description && (
+                          <p className="text-slate-600 mb-2">{category.description}</p>
+                        )}
+                        <div className="text-sm text-slate-500">
+                          Created {new Date(category.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -242,10 +383,6 @@ export default function EditorPage() {
                     <p className="text-slate-900">{facts.find((f: any) => f.id === selectedFact)?.content}</p>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Knowledge Context</p>
-                    <p className="text-slate-900">{facts.find((f: any) => f.id === selectedFact)?.knowledge_context || "None"}</p>
-                  </div>
-                  <div>
                     <p className="text-sm font-medium text-slate-600 mb-1">Created</p>
                     <p className="text-slate-900">
                       {new Date(facts.find((f: any) => f.id === selectedFact)?.created_at || "").toLocaleString()}
@@ -266,4 +403,3 @@ export default function EditorPage() {
     </div>
   );
 }
-

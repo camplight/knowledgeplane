@@ -33,7 +33,6 @@ export async function extractFactsAndRelationsFromFile(
   buffer: Buffer,
   filename: string,
   mimeType: string,
-  knowledgeContext?: string,
   options?: {
     openaiApiKey?: string;
     openaiModel?: string;
@@ -101,7 +100,6 @@ Return your response as JSON with this structure:
     const userPrompt = `Extract facts and relations from this image file:
 
 Filename: ${filename}
-${knowledgeContext ? `Knowledge Context: ${knowledgeContext}` : ""}
 
 Analyze the image content and extract all relevant facts and their relationships.`;
 
@@ -177,7 +175,6 @@ Analyze the image content and extract all relevant facts and their relationships
       const userPrompt = `Extract facts and relations from the following file that has been processed:
 
 Filename: ${filename}
-${knowledgeContext ? `Knowledge Context: ${knowledgeContext}` : ""}
 
 Processed File Content:
 ${textContent.substring(0, 200000)}`; // Limit to first 200k chars
@@ -225,7 +222,6 @@ ${textContent.substring(0, 200000)}`; // Limit to first 200k chars
 
 Filename: ${filename}
 File Type: ${mimeType}
-${knowledgeContext ? `Knowledge Context: ${knowledgeContext}` : ""}
 
 File Content:
 ${textContent.substring(0, 200000)}`; // Limit to first 200k chars
@@ -259,7 +255,6 @@ ${textContent.substring(0, 200000)}`; // Limit to first 200k chars
 export async function extractFactsAndRelations(
   text: string,
   filename: string,
-  knowledgeContext?: string,
   options?: {
     openaiApiKey?: string;
     openaiModel?: string;
@@ -271,7 +266,6 @@ export async function extractFactsAndRelations(
     buffer,
     filename,
     "text/plain",
-    knowledgeContext,
     options,
   );
 }

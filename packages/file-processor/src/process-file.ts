@@ -11,7 +11,6 @@ export interface ProcessFileOptions {
   filename: string;
   mimeType: string;
   uploadedBy: string;
-  knowledgeContext?: string;
   uploadsDir?: string;
   openaiApiKey?: string;
   openaiModel?: string;
@@ -46,7 +45,6 @@ export async function processFileUpload(
     filename,
     mimeType,
     uploadedBy,
-    knowledgeContext,
     uploadsDir = process.env.UPLOADS_DIR || join(process.cwd(), "uploads"),
     openaiApiKey,
     openaiModel,
@@ -76,7 +74,6 @@ export async function processFileUpload(
     size: buffer.length,
     storage_path: storagePath,
     uploaded_by: uploadedBy,
-    knowledge_context: knowledgeContext || "",
     metadata: {
       original_filename: filename,
     },
@@ -88,7 +85,6 @@ export async function processFileUpload(
     buffer,
     filename,
     mimeType,
-    knowledgeContext,
     {
       openaiApiKey,
       openaiModel,
@@ -108,7 +104,6 @@ export async function processFileUpload(
         },
         created_by: uploadedBy,
         last_updated_by: uploadedBy,
-        knowledge_context: knowledgeContext || "",
       }),
     ),
   );
