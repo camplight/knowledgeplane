@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "crypto";
-import { User } from "@knowledgeplane/db";
+import { User } from "@knowledgeplane/db/next";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -10,25 +10,31 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(new URL(`/auth/google?error=${error}`, request.url));
+    return NextResponse.redirect(
+      new URL(`/auth/google?error=${error}`, request.url),
+    );
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL("/auth/google?error=missing_code", request.url));
+    return NextResponse.redirect(
+      new URL("/auth/google?error=missing_code", request.url),
+    );
   }
 
   const cookieStore = await cookies();
   const storedState = cookieStore.get("oauthState")?.value;
-  
+
   if (!state || state !== storedState) {
-    return NextResponse.redirect(new URL("/auth/google?error=invalid_state", request.url));
+    return NextResponse.redirect(
+      new URL("/auth/google?error=invalid_state", request.url),
+    );
   }
 
   cookieStore.delete("oauthState");
   cookieStore.delete("oauthProvider");
 
   const redirectUri = `${process.env.NEXTAUTH_URL || process.env.OAUTH_REDIRECT_BASE_URL || "http://localhost:3000"}/api/auth/google/callback`;
-  
+
   try {
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -45,7 +51,9 @@ export async function GET(request: NextRequest) {
     });
 
     if (!tokenResponse.ok) {
-      return NextResponse.redirect(new URL("/auth/google?error=token_exchange_failed", request.url));
+      return NextResponse.redirect(
+        new URL("/auth/google?error=token_exchange_failed", request.url),
+      );
     }
 
     const tokenData = await tokenResponse.json();
@@ -61,12 +69,20 @@ export async function GET(request: NextRequest) {
     );
 
     if (!userInfoResponse.ok) {
-      return NextResponse.redirect(new URL("/auth/google?error=user_info_failed", request.url));
+      return NextResponse.redirect(
+        new URL("/auth/google?error=user_info_failed", request.url),
+      );
     }
 
     const userInfo = await userInfoResponse.json();
     const email = userInfo.email;
     const username = userInfo.email?.split("@")[0] || userInfo.id;
+
+    if (!email || !username) {
+      return NextResponse.redirect(
+        new URL("/auth/google?error=missing_user_info", request.url),
+      );
+    }
 
     const user = await User.getOrCreate({
       username,
@@ -89,7 +105,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   } catch (error: any) {
     console.error("Google OAuth callback error:", error);
-    return NextResponse.redirect(new URL("/auth/google?error=internal_error", request.url));
+    return NextResponse.redirect(
+      new URL("/auth/google?error=internal_error", request.url),
+    );
   }
 }
-

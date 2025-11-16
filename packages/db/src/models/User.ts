@@ -1,4 +1,4 @@
-import { collections } from "../db.js";
+import { collections } from "../db";
 
 export interface UserRecord {
   _key?: string;
@@ -73,7 +73,7 @@ export class User {
     const cursor = await collections.users.database.query(aql, { username });
     const results = await cursor.all();
 
-    if (results.length === 0) {
+    if (!results || results.length === 0) {
       return null;
     }
 
@@ -91,7 +91,7 @@ export class User {
     const cursor = await collections.users.database.query(aql, { apiKey });
     const results = await cursor.all();
 
-    if (results.length === 0) {
+    if (!results || results.length === 0) {
       return null;
     }
 
@@ -154,6 +154,10 @@ export class User {
       offset,
     });
     const results = await cursor.all();
+
+    if (!results) {
+      return [];
+    }
 
     return results.map((r: any) => this._normalizeRecord(r));
   }

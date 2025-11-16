@@ -1,6 +1,6 @@
-import type { Provider } from "./types.js";
-import type { AIModelProvider } from "./providers/base.js";
-import { OpenAIProvider } from "./providers/openai.js";
+import type { Provider } from "./types";
+import type { AIModelProvider } from "./providers/base";
+import { OpenAIProvider } from "./providers/openai";
 
 /**
  * AI Model Client - Facade for interacting with different AI providers

@@ -1,5 +1,5 @@
-import { collections } from "../db.js";
-import { triggerWebhook } from "../lib/webhook-trigger.js";
+import { collections } from "../db";
+import { triggerWebhook } from "../lib/webhook-trigger";
 
 export interface CardInput {
   title: string;

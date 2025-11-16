@@ -1,3 +1,3 @@
-export * from "./extract-facts.js";
-export * from "./process-file.js";
+export * from "./extract-facts";
+export * from "./process-file";
 

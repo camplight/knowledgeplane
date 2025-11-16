@@ -461,6 +461,14 @@ curl -X POST http://localhost:8080/mcp \
 - **Swagger/OpenAPI** documentation
 - **Tailwind CSS** for styling
 
+**Package Architecture:**
+- `@knowledgeplane/db` - Shared database package with ArangoDB models and connection logic
+  - Main export (`@knowledgeplane/db`) - For general Node.js servers (mcp-server, rest-api, background-worker)
+  - Next.js export (`@knowledgeplane/db/next`) - For Next.js apps with `server-only` protection
+  - Must use Node.js fetch (not browser fetch) for ArangoDB compatibility
+  - Configured in Next.js via `serverExternalPackages` (Next.js 15+) to prevent client bundling
+  - ArangoDB requires `Content-Length` header and does not support `Transfer-Encoding: chunked`
+
 🚀 Quick Start
 
 **Monorepo Structure:**
@@ -1034,3 +1042,12 @@ Navigate to `/upload` in the web application (requires authentication).
 - 🔲 Analytics and telemetry
 - 🔲 Card merging and deduplication
 - 🔲 Fact versioning
+
+📚 Documentation
+
+Each application in the KnowledgePlane monorepo has its own README with detailed setup instructions, environment variables, and usage information:
+
+- `apps/background-worker/README.md` - Background worker service documentation
+- `apps/mcp-server/README.md` - MCP server documentation
+- `apps/rest-api/README.md` - REST API documentation
+- `apps/webapp/README.md` - Web application documentation

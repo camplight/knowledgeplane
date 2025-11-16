@@ -1,4 +1,4 @@
-import { collections, knowledgeGraph } from "../db.js";
+import { collections, knowledgeGraph } from "../db";
 
 export interface RelationInput {
   from_fact: string; // Fact ID

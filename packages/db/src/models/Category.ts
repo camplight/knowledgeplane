@@ -1,4 +1,4 @@
-import { collections } from "../db.js";
+import { collections } from "../db";
 
 export interface CategoryInput {
   name: string;

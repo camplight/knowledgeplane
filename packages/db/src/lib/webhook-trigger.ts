@@ -1,4 +1,4 @@
-import { Webhook } from "../models/Webhook.js";
+import { Webhook } from "../models/Webhook";
 import crypto from "crypto";
 
 export interface WebhookPayload {

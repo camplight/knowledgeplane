@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { User } from "@knowledgeplane/db";
+import { User } from "@knowledgeplane/db/next";
 import { z } from "zod";
 
 export const userRouter = router({

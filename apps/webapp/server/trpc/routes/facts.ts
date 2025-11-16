@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { Fact } from "@knowledgeplane/db";
+import { Fact } from "@knowledgeplane/db/next";
 import { z } from "zod";
 
 export const factsRouter = router({
@@ -18,6 +18,26 @@ export const factsRouter = router({
       const facts = await Fact.list(limit, offset, includeTrashed);
       const total = await Fact.count(includeTrashed);
       return { facts, total, limit, offset };
+    }),
+  search: protectedProcedure
+    .input(
+      z.object({
+        query: z.string(),
+        knowledge_context: z.string().optional(),
+        k: z.number().min(1).max(100).default(10),
+        offset: z.number().min(0).default(0),
+        include_trashed: z.boolean().default(false),
+      }),
+    )
+    .query(async ({ input }) => {
+      const results = await Fact.search({
+        query: input.query,
+        knowledge_context: input.knowledge_context,
+        k: input.k,
+        offset: input.offset,
+        include_trashed: input.include_trashed,
+      });
+      return { results };
     }),
 });
 

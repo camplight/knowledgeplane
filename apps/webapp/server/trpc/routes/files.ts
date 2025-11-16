@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { File, Fact } from "@knowledgeplane/db";
+import { File, Fact } from "@knowledgeplane/db/next";
 import { processFileUpload } from "@knowledgeplane/file-processor";
 import { z } from "zod";
 

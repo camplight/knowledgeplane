@@ -5,7 +5,7 @@ import type {
   FileUploadOptions,
   FileUploadResult,
   FileContentResult,
-} from "../types.js";
+} from "../types";
 
 /**
  * Base interface for AI model providers

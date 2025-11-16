@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
-import { User } from "@knowledgeplane/db";
+import { User } from "@knowledgeplane/db/next";
 
 export interface SessionUser {
   userId: string;

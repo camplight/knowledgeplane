@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { Fact } from "@knowledgeplane/db";
+import { Fact } from "@knowledgeplane/db/next";
 import { z } from "zod";
 import {
   createAIModelClient,

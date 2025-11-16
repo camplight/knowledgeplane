@@ -6,8 +6,8 @@ import type {
   FileUploadOptions,
   FileUploadResult,
   FileContentResult,
-} from "../types.js";
-import type { AIModelProvider } from "./base.js";
+} from "../types";
+import type { AIModelProvider } from "./base";
 
 /**
  * OpenAI provider implementation
@@ -81,7 +81,8 @@ export class OpenAIProvider implements AIModelProvider {
     let fileInput: File | Buffer;
     try {
       // Try to use File API (available in Node.js 18+)
-      fileInput = new File([buffer], options.filename, {
+      // Convert Buffer to Uint8Array for File constructor compatibility
+      fileInput = new File([new Uint8Array(buffer)], options.filename, {
         type: options.mimeType,
       });
     } catch {

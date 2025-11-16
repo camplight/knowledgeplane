@@ -1,6 +1,6 @@
 import {
   extractFactsAndRelationsFromFile,
-} from "./extract-facts.js";
+} from "./extract-facts";
 import { File, Fact, Relation } from "@knowledgeplane/db";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";

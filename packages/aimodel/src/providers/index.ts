@@ -1,3 +1,3 @@
-export * from "./base.js";
-export * from "./openai.js";
+export * from "./base";
+export * from "./openai";
 

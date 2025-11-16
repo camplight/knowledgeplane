@@ -4,13 +4,23 @@ import "dotenv/config";
 const dbUrl = process.env.ARANGO_URL || "http://localhost:8529";
 const dbName = process.env.ARANGO_DB_NAME || "knowledgeplane";
 const dbUser = process.env.ARANGO_USER || "root";
-const dbPassword = process.env.ARANGO_PASSWORD || "";
+const dbPassword = process.env.ARANGO_PASSWORD || "root";
+
+// Ensure we use Node.js fetch, not browser fetch
+// By providing agentOptions (even empty), arangojs will use undici.fetch which is Node.js native
+// This prevents Next.js from using browser fetch polyfills that use Transfer-Encoding: chunked
+// ArangoDB requires Content-Length header and doesn't support Transfer-Encoding: chunked
+// Only use agentOptions in Node.js environment (not browser) to force undici usage
+// undici is installed as a dependency to ensure it's available
+// @ts-ignore-next-line: 'window' may be undefined in Node
+const agentOptions = typeof window === "undefined" ? {} : undefined;
 
 // Create database connection
 export const db = new Database({
   url: dbUrl,
   auth: { username: dbUser, password: dbPassword },
   databaseName: dbName,
+  ...(agentOptions && { agentOptions }), // This forces arangojs to use undici.fetch instead of globalThis.fetch
 });
 
 // Collections
@@ -34,6 +44,7 @@ export async function init() {
   const sysDb = new Database({
     url: dbUrl,
     auth: { username: dbUser, password: dbPassword },
+    ...(agentOptions && { agentOptions }), // Use same agentOptions to ensure undici.fetch is used
   });
 
   try {
@@ -46,11 +57,10 @@ export async function init() {
     }
   }
 
-  // Create collections
-  const collectionNames = [
+  // Create document collections
+  const documentCollectionNames = [
     "users",
     "facts",
-    "relations",
     "cards",
     "webhooks",
     "categories",
@@ -59,7 +69,7 @@ export async function init() {
     "oauth_authorization_codes",
   ];
 
-  for (const name of collectionNames) {
+  for (const name of documentCollectionNames) {
     try {
       const collection = db.collection(name);
       await collection.create();
@@ -69,6 +79,40 @@ export async function init() {
         // 1207 = collection already exists
         throw error;
       }
+    }
+  }
+
+  // Create edge collection for relations (required for graphs)
+  try {
+    const relationsCollection = db.collection("relations");
+    // Check if collection exists and its type
+    let needsRecreate = false;
+    try {
+      const info = await relationsCollection.get();
+      // Check if it's an edge collection (type: 3)
+      if (info.type !== 3) {
+        console.log(
+          "Relations collection exists as document collection, dropping to recreate as edge collection...",
+        );
+        await relationsCollection.drop();
+        needsRecreate = true;
+      } else {
+        console.log("Edge collection relations already exists");
+      }
+    } catch (e: any) {
+      // Collection doesn't exist, create it
+      needsRecreate = true;
+    }
+
+    if (needsRecreate) {
+      // Create as edge collection (type: 3)
+      await relationsCollection.create({ type: 3 });
+      console.log(`Edge collection relations created`);
+    }
+  } catch (error: any) {
+    if (error.errorNum !== 1207) {
+      // 1207 = collection already exists
+      throw error;
     }
   }
 
@@ -141,4 +185,3 @@ export async function init() {
     }
   }
 }
-

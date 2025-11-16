@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "crypto";
-import { User } from "@knowledgeplane/db";
+import { User } from "@knowledgeplane/db/next";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;

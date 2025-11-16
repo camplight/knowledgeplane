@@ -1,19 +1,50 @@
+const path = require("path");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'standalone',
-  transpilePackages: ['@knowledgeplane/db', '@knowledgeplane/aimodel', '@knowledgeplane/file-processor'],
-  webpack: (config, { isServer }) => {
-    // Allow importing TypeScript files from packages
+  output: "standalone",
+  outputFileTracingRoot: path.resolve(__dirname, "../.."),
+  // Turbopack config for dev mode (Next.js 16 uses Turbopack by default)
+  turbopack: {},
+  // Mark server-only packages as external to prevent client-side bundling
+  // This ensures they use Node.js modules (including Node.js fetch) instead of browser polyfills
+  // Note: In Next.js 15+, this option was renamed from serverComponentsExternalPackages
+  serverExternalPackages: [
+    "@knowledgeplane/db",
+    "@knowledgeplane/db/next",
+    "arangojs",
+  ],
+  webpack: (config, { isServer, webpack }) => {
+    // For server-side bundles, ensure Node.js modules are used
     if (isServer) {
-      config.resolve.extensionAlias = {
-        '.js': ['.ts', '.tsx', '.js', '.jsx'],
-        '.jsx': ['.tsx', '.jsx'],
+      // Explicitly externalize db package and arangojs to prevent bundling
+      // This ensures they use Node.js modules (including Node.js fetch) instead of browser polyfills
+      config.externals = config.externals || [];
+      
+      // Externalize the db package and arangojs as CommonJS modules
+      config.externals.push({
+        "@knowledgeplane/db": "commonjs @knowledgeplane/db",
+        "@knowledgeplane/db/next": "commonjs @knowledgeplane/db/next",
+        "arangojs": "commonjs arangojs",
+      });
+      
+      // Don't polyfill Node.js modules for server-side code
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+      };
+      
+      // Ensure we don't alias fetch to a browser polyfill
+      config.resolve.alias = {
+        ...config.resolve.alias,
       };
     }
+    
     return config;
   },
 };
 
 module.exports = nextConfig;
-
