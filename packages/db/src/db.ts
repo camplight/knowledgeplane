@@ -172,6 +172,7 @@ export const collections = {
   oauth_authorization_requests: db.collection("oauth_authorization_requests"),
   oauth_authorization_codes: db.collection("oauth_authorization_codes"),
   worker_logs: db.collection("worker_logs"),
+  worker_triggers: db.collection("worker_triggers"),
 };
 
 // Graph for relations
@@ -212,6 +213,7 @@ export async function init() {
     "oauth_authorization_requests",
     "oauth_authorization_codes",
     "worker_logs",
+    "worker_triggers",
   ];
 
   for (const name of documentCollectionNames) {

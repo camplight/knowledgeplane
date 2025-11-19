@@ -126,6 +126,20 @@ export class KnowledgeCard {
     return results.map((r: any) => this._normalizeRecord(r));
   }
 
+  static async count(): Promise<number> {
+    const aql = `
+      LET count = LENGTH(
+        FOR card IN knowledge_cards
+          RETURN card
+      )
+      RETURN count
+    `;
+
+    const cursor = await collections.knowledge_cards.database.query(aql);
+    const result = await cursor.next();
+    return result || 0;
+  }
+
   static async queryAQL(aql: string, bindVars?: any): Promise<any[]> {
     const cursor = await collections.knowledge_cards.database.query(aql, bindVars || {});
     return await cursor.all();

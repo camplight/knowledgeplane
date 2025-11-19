@@ -7,16 +7,20 @@ import { Navigation } from "../components/Navigation";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [page, setPage] = useState(0);
+  const [factsPage, setFactsPage] = useState(0);
+  const [cardsPage, setCardsPage] = useState(0);
   const limit = 10;
 
   const { data: userData, isLoading: userLoading } = trpc.auth.me.useQuery();
   const { data: factsData, isLoading: factsLoading } = trpc.facts.list.useQuery({
     limit,
-    offset: page * limit,
+    offset: factsPage * limit,
     includeTrashed: false,
   });
-  const { data: categoriesData } = trpc.categories.list.useQuery();
+  const { data: cardsData, isLoading: cardsLoading } = trpc.cards.list.useQuery({
+    limit,
+    offset: cardsPage * limit,
+  });
 
   useEffect(() => {
     if (!userLoading && !userData?.user) {
@@ -39,7 +43,10 @@ export default function DashboardPage() {
   const user = userData.user;
   const facts = factsData?.facts || [];
   const totalFacts = factsData?.total || 0;
-  const totalPages = Math.ceil(totalFacts / limit);
+  const factsTotalPages = Math.ceil(totalFacts / limit);
+  const cards = cardsData?.cards || [];
+  const totalCards = cardsData?.total || 0;
+  const cardsTotalPages = Math.ceil(totalCards / limit);
 
   return (
     <div className="min-h-screen bg-white">
@@ -75,12 +82,12 @@ export default function DashboardPage() {
           <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600 mb-1">Active Facts</p>
-                <p className="text-3xl font-bold text-slate-900">{facts.length}</p>
+                <p className="text-sm font-medium text-slate-600 mb-1">Knowledge Cards</p>
+                <p className="text-3xl font-bold text-slate-900">{totalCards}</p>
               </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                 </svg>
               </div>
             </div>
@@ -88,14 +95,12 @@ export default function DashboardPage() {
           <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600 mb-1">Categories</p>
-                <p className="text-3xl font-bold text-slate-900">
-                  {categoriesData?.categories?.length || 0}
-                </p>
+                <p className="text-sm font-medium text-slate-600 mb-1">Active Facts</p>
+                <p className="text-3xl font-bold text-slate-900">{facts.length}</p>
               </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
             </div>
@@ -153,22 +158,102 @@ export default function DashboardPage() {
               </div>
 
               {/* Pagination */}
-              {totalPages > 1 && (
+              {factsTotalPages > 1 && (
                 <div className="p-6 border-t border-slate-200 flex items-center justify-between">
                   <div className="text-sm text-slate-600">
-                    Showing {page * limit + 1} to {Math.min((page + 1) * limit, totalFacts)} of {totalFacts} facts
+                    Showing {factsPage * limit + 1} to {Math.min((factsPage + 1) * limit, totalFacts)} of {totalFacts} facts
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setPage(Math.max(0, page - 1))}
-                      disabled={page === 0}
+                      onClick={() => setFactsPage(Math.max(0, factsPage - 1))}
+                      disabled={factsPage === 0}
                       className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       Previous
                     </button>
                     <button
-                      onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
-                      disabled={page >= totalPages - 1}
+                      onClick={() => setFactsPage(Math.min(factsTotalPages - 1, factsPage + 1))}
+                      disabled={factsPage >= factsTotalPages - 1}
+                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Knowledge Cards List */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 mt-8">
+          <div className="p-6 border-b border-slate-200">
+            <h2 className="text-2xl font-bold text-slate-900">Knowledge Cards</h2>
+            <p className="text-sm text-slate-600 mt-1">
+              Consolidated knowledge cards from your facts
+            </p>
+          </div>
+
+          {cardsLoading ? (
+            <div className="p-8 text-center">
+              <div className="text-slate-600">Loading cards...</div>
+            </div>
+          ) : cards.length === 0 ? (
+            <div className="p-8 text-center">
+              <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              <p className="text-lg font-medium text-slate-900 mb-2">No knowledge cards yet</p>
+              <p className="text-slate-600">
+                Cards are created when facts are consolidated
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="divide-y divide-slate-200">
+                {cards.map((card) => (
+                  <div key={card.id} className="p-6 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-slate-900 mb-2">{card.title}</h3>
+                        <p className="text-slate-700 mb-3 leading-relaxed">{card.summary}</p>
+                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                          <span className="flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {new Date(card.updated_at).toLocaleDateString()}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            {card.fact_ids.length} fact{card.fact_ids.length !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {cardsTotalPages > 1 && (
+                <div className="p-6 border-t border-slate-200 flex items-center justify-between">
+                  <div className="text-sm text-slate-600">
+                    Showing {cardsPage * limit + 1} to {Math.min((cardsPage + 1) * limit, totalCards)} of {totalCards} cards
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setCardsPage(Math.max(0, cardsPage - 1))}
+                      disabled={cardsPage === 0}
+                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      onClick={() => setCardsPage(Math.min(cardsTotalPages - 1, cardsPage + 1))}
+                      disabled={cardsPage >= cardsTotalPages - 1}
                       className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       Next

@@ -4,6 +4,7 @@ import { createAIModelClient } from "@knowledgeplane/aimodel";
 export class EmbeddingsGenerator {
   private aiClient: ReturnType<typeof createAIModelClient>;
   private interval: NodeJS.Timeout | null = null;
+  private triggerCheckInterval: NodeJS.Timeout | null = null;
   private running = false;
   private embeddingModel: string;
 
@@ -26,9 +27,21 @@ export class EmbeddingsGenerator {
       });
     }, 10 * 60 * 1000);
 
+    // Check for manual triggers every 30 seconds
+    this.triggerCheckInterval = setInterval(() => {
+      this.checkAndProcessTrigger().catch((error) => {
+        console.error("Error checking for triggers:", error);
+      });
+    }, 30 * 1000);
+
     // Run immediately on start
     this.process().catch((error) => {
       console.error("Error in initial embeddings generation:", error);
+    });
+
+    // Check for triggers immediately on start
+    this.checkAndProcessTrigger().catch((error) => {
+      console.error("Error checking for initial triggers:", error);
     });
   }
 
@@ -37,8 +50,87 @@ export class EmbeddingsGenerator {
       clearInterval(this.interval);
       this.interval = null;
     }
+    if (this.triggerCheckInterval) {
+      clearInterval(this.triggerCheckInterval);
+      this.triggerCheckInterval = null;
+    }
     this.running = false;
     console.log("Embeddings generator stopped");
+  }
+
+  private async checkAndProcessTrigger() {
+    // Skip if worker is already running - will check again on next interval
+    if (this.running) {
+      return;
+    }
+
+    try {
+      // Check for pending triggers for this worker
+      const aql = `
+        FOR trigger IN worker_triggers
+          FILTER trigger.worker_name == "embeddings-generator"
+          FILTER trigger.status == "pending"
+          SORT trigger.created_at ASC
+          LIMIT 1
+          RETURN trigger
+      `;
+
+      const cursor = await collections.worker_triggers.database.query(aql);
+      const triggers = await cursor.all();
+
+      if (triggers.length === 0) {
+        return; // No pending triggers
+      }
+
+      const trigger = triggers[0];
+      const triggerId = trigger._id || `worker_triggers/${trigger._key}`;
+      const triggerKey = trigger._key;
+
+      console.log(`Manual trigger detected for embeddings-generator (trigger ID: ${triggerId})`);
+
+      // Mark trigger as processing
+      await collections.worker_triggers.update(triggerKey, {
+        status: "processing",
+        updated_at: new Date().toISOString(),
+      });
+
+      // Process the worker
+      await this.process();
+
+      // Mark trigger as completed
+      await collections.worker_triggers.update(triggerKey, {
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      console.log(`Trigger ${triggerId} completed successfully`);
+    } catch (error: any) {
+      console.error("Error processing trigger:", error);
+      // Try to mark trigger as failed if we can find it
+      try {
+        const aql = `
+          FOR trigger IN worker_triggers
+            FILTER trigger.worker_name == "embeddings-generator"
+            FILTER trigger.status == "processing"
+            SORT trigger.created_at DESC
+            LIMIT 1
+            RETURN trigger
+        `;
+        const cursor = await collections.worker_triggers.database.query(aql);
+        const triggers = await cursor.all();
+        if (triggers.length > 0) {
+          const trigger = triggers[0];
+          await collections.worker_triggers.update(trigger._key, {
+            status: "failed",
+            error: error.message || String(error),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      } catch (updateError) {
+        console.error("Failed to update trigger status:", updateError);
+      }
+    }
   }
 
   private async process() {

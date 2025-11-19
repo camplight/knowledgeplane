@@ -13,11 +13,21 @@ export default function WorkerLogsPage() {
   const limit = 20;
 
   const { data: userData, isLoading: userLoading } = trpc.auth.me.useQuery();
-  const { data: logsData, isLoading: logsLoading } = trpc.workerLogs.list.useQuery({
+  const { data: logsData, isLoading: logsLoading, refetch: refetchLogs } = trpc.workerLogs.list.useQuery({
     limit,
     offset: page * limit,
     worker_name: workerFilter || undefined,
     status: statusFilter || undefined,
+  });
+
+  const triggerWorker = trpc.workerLogs.trigger.useMutation({
+    onSuccess: () => {
+      // Refetch logs to show the new trigger log entry
+      refetchLogs();
+    },
+    onError: (error) => {
+      alert(`Failed to trigger worker: ${error.message}`);
+    },
   });
 
   useEffect(() => {
@@ -67,11 +77,29 @@ export default function WorkerLogsPage() {
       <Navigation />
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-slate-900">Background Worker Logs</h1>
-          <p className="text-slate-600 mt-2">
-            View execution results and status of background worker tasks
-          </p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Background Worker Logs</h1>
+            <p className="text-slate-600 mt-2">
+              View execution results and status of background worker tasks
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => triggerWorker.mutate({ worker: "card-consolidator" })}
+              disabled={triggerWorker.isPending}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+            >
+              {triggerWorker.isPending ? "Triggering..." : "Trigger Card Consolidator"}
+            </button>
+            <button
+              onClick={() => triggerWorker.mutate({ worker: "embeddings-generator" })}
+              disabled={triggerWorker.isPending}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+            >
+              {triggerWorker.isPending ? "Triggering..." : "Trigger Embeddings Generator"}
+            </button>
+          </div>
         </div>
 
         {/* Filters */}

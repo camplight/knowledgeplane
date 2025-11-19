@@ -38,6 +38,18 @@ export default function EditorPage() {
     includeTrashed: false,
   });
 
+  // Cards queries
+  const { data: cardsData, isLoading: cardsLoading, refetch: refetchCards } = trpc.cards.list.useQuery({
+    limit: 50,
+    offset: 0,
+  });
+
+  // Get selected card details
+  const { data: selectedCardData } = trpc.cards.getById.useQuery(
+    { id: selectedCard || "" },
+    { enabled: !!selectedCard }
+  );
+
   // Search facts
   const { data: searchResults, refetch: refetchSearch } = trpc.facts.search.useQuery(
     {
@@ -149,7 +161,10 @@ export default function EditorPage() {
         <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-2">
           <div className="flex gap-2">
             <button
-              onClick={() => setSelectedView("facts")}
+              onClick={() => {
+                setSelectedView("facts");
+                setSelectedCard(null);
+              }}
               className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
                 selectedView === "facts"
                   ? "bg-blue-600 text-white"
@@ -159,7 +174,10 @@ export default function EditorPage() {
               Facts
             </button>
             <button
-              onClick={() => setSelectedView("cards")}
+              onClick={() => {
+                setSelectedView("cards");
+                setSelectedFact(null);
+              }}
               className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
                 selectedView === "cards"
                   ? "bg-blue-600 text-white"
@@ -169,7 +187,11 @@ export default function EditorPage() {
               Cards
             </button>
             <button
-              onClick={() => setSelectedView("graph")}
+              onClick={() => {
+                setSelectedView("graph");
+                setSelectedFact(null);
+                setSelectedCard(null);
+              }}
               className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
                 selectedView === "graph"
                   ? "bg-blue-600 text-white"
@@ -262,14 +284,54 @@ export default function EditorPage() {
             {selectedView === "cards" && (
               <div className="bg-white rounded-xl shadow-lg border border-slate-200">
                 <div className="p-6 border-b border-slate-200">
-                  <h2 className="text-2xl font-bold text-slate-900">Cards</h2>
+                  <h2 className="text-2xl font-bold text-slate-900">Knowledge Cards</h2>
                   <p className="text-sm text-slate-600 mt-1">
-                    Consolidated knowledge summaries
+                    Consolidated knowledge summaries from your facts
                   </p>
                 </div>
-                <div className="p-8 text-center">
-                  <p className="text-slate-600">Card view coming soon</p>
-                </div>
+
+                {cardsLoading ? (
+                  <div className="p-8 text-center">
+                    <div className="text-slate-600">Loading cards...</div>
+                  </div>
+                ) : !cardsData?.cards || cardsData.cards.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <p className="text-lg font-medium text-slate-900 mb-2">No cards found</p>
+                    <p className="text-slate-600">Cards are created when facts are consolidated</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-200">
+                    {cardsData.cards.map((card: any) => (
+                      <div
+                        key={card.id}
+                        onClick={() => setSelectedCard(card.id)}
+                        className={`p-6 hover:bg-slate-50 transition-colors cursor-pointer ${
+                          selectedCard === card.id ? "bg-indigo-50 border-l-4 border-indigo-600" : ""
+                        }`}
+                      >
+                        <h3 className="text-lg font-semibold text-slate-900 mb-2">{card.title}</h3>
+                        <p className="text-slate-700 mb-3 leading-relaxed">{card.summary}</p>
+                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                          <span className="flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {new Date(card.updated_at).toLocaleDateString()}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            {card.fact_ids.length} fact{card.fact_ids.length !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -415,6 +477,59 @@ export default function EditorPage() {
 
                 <button
                   onClick={() => setSelectedFact(null)}
+                  className="w-full px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+
+            {selectedCard && selectedCardData?.card && (
+              <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 sticky top-24 space-y-6">
+                <h3 className="text-lg font-bold text-slate-900 mb-4">Card Details</h3>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Title</p>
+                    <p className="text-slate-900 font-semibold">{selectedCardData.card.title}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Summary</p>
+                    <p className="text-slate-900">{selectedCardData.card.summary}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Content</p>
+                    <p className="text-slate-900 whitespace-pre-wrap leading-relaxed">{selectedCardData.card.content}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Fact Count</p>
+                    <p className="text-slate-900">{selectedCardData.card.fact_ids.length} fact{selectedCardData.card.fact_ids.length !== 1 ? "s" : ""}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Created</p>
+                    <p className="text-slate-900">
+                      {new Date(selectedCardData.card.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Last Updated</p>
+                    <p className="text-slate-900">
+                      {new Date(selectedCardData.card.updated_at).toLocaleString()}
+                    </p>
+                  </div>
+                  {selectedCardData.card.metadata && Object.keys(selectedCardData.card.metadata).length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-slate-600 mb-1">Metadata</p>
+                      <div className="bg-slate-50 rounded-lg p-3">
+                        <pre className="text-xs text-slate-700 whitespace-pre-wrap">
+                          {JSON.stringify(selectedCardData.card.metadata, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => setSelectedCard(null)}
                   className="w-full px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
                 >
                   Close
