@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { init } from "@knowledgeplane/db";
 import { CardConsolidator } from "./workers/card-consolidator.js";
-import { CategoryOrganizer } from "./workers/category-organizer.js";
+import { EmbeddingsGenerator } from "./workers/embeddings-generator.js";
 
 async function main() {
   console.log("Starting KnowledgePlane Background Workers...");
@@ -14,9 +14,9 @@ async function main() {
   const cardConsolidator = new CardConsolidator();
   cardConsolidator.start();
 
-  // Start category organizer worker
-  const categoryOrganizer = new CategoryOrganizer();
-  categoryOrganizer.start();
+  // Start embeddings generator worker
+  const embeddingsGenerator = new EmbeddingsGenerator();
+  embeddingsGenerator.start();
 
   console.log("All workers started");
 
@@ -24,14 +24,14 @@ async function main() {
   process.on("SIGTERM", () => {
     console.log("SIGTERM received, shutting down gracefully...");
     cardConsolidator.stop();
-    categoryOrganizer.stop();
+    embeddingsGenerator.stop();
     process.exit(0);
   });
 
   process.on("SIGINT", () => {
     console.log("SIGINT received, shutting down gracefully...");
     cardConsolidator.stop();
-    categoryOrganizer.stop();
+    embeddingsGenerator.stop();
     process.exit(0);
   });
 }

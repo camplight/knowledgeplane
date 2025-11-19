@@ -1,6 +1,7 @@
 import { router, protectedProcedure } from "../router";
 import { Fact } from "@knowledgeplane/db/next";
 import { z } from "zod";
+import { createAIModelClient } from "@knowledgeplane/aimodel";
 
 export const factsRouter = router({
   list: protectedProcedure
@@ -26,14 +27,31 @@ export const factsRouter = router({
         k: z.number().min(1).max(100).default(10),
         offset: z.number().min(0).default(0),
         include_trashed: z.boolean().default(false),
+        use_vector_search: z.boolean().optional(), // Optional: true for vector only, false for full-text only, undefined for hybrid
       }),
     )
     .query(async ({ input }) => {
+      // Create AI client for embeddings if vector search is requested
+      let embeddingProvider;
+      if (input.use_vector_search !== false) {
+        try {
+          const client = createAIModelClient(
+            (process.env.AI_PROVIDER as any) || "openai",
+            process.env.OPENAI_API_KEY,
+          );
+          embeddingProvider = client.getProvider();
+        } catch (error) {
+          console.warn("Failed to create AI client for embeddings, using full-text search only");
+        }
+      }
+
       const results = await Fact.search({
         query: input.query,
         k: input.k,
         offset: input.offset,
         include_trashed: input.include_trashed,
+        use_vector_search: input.use_vector_search,
+        embeddingProvider,
       });
       return { results };
     }),

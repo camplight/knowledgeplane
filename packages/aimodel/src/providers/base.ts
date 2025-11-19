@@ -5,6 +5,7 @@ import type {
   FileUploadOptions,
   FileUploadResult,
   FileContentResult,
+  EmbeddingsResult,
 } from "../types";
 
 /**
@@ -49,5 +50,13 @@ export interface AIModelProvider {
    * Delete a file
    */
   deleteFile(fileId: string): Promise<void>;
+
+  /**
+   * Generate embeddings for text
+   */
+  embeddings(
+    input: string | string[],
+    model?: string,
+  ): Promise<EmbeddingsResult>;
 }
 

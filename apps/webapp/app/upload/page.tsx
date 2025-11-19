@@ -9,7 +9,6 @@ export default function UploadPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [knowledgeContext, setKnowledgeContext] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +61,6 @@ export default function UploadPage() {
             filename: selectedFile.name,
             mimeType: selectedFile.type || "application/octet-stream",
             data: base64Data,
-            knowledgeContext: knowledgeContext || undefined,
           });
         }
       };
@@ -179,23 +177,6 @@ export default function UploadPage() {
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Knowledge Context */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Knowledge Context (optional)
-            </label>
-            <input
-              type="text"
-              value={knowledgeContext}
-              onChange={(e) => setKnowledgeContext(e.target.value)}
-              placeholder="e.g., project-alpha, documentation, meeting-notes"
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Organize extracted facts under this knowledge context
-            </p>
           </div>
 
           {/* Error Message */}

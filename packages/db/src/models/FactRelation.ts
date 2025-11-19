@@ -1,6 +1,6 @@
 import { collections, knowledgeGraph } from "../db";
 
-export interface RelationInput {
+export interface FactRelationInput {
   from_fact: string; // Fact ID
   to_fact: string; // Fact ID
   type: string; // e.g., "references", "depends_on", "related_to", "part_of"
@@ -8,7 +8,7 @@ export interface RelationInput {
   created_by: string; // User ID
 }
 
-export interface RelationRecord {
+export interface FactRelationRecord {
   _key?: string;
   _id?: string;
   id: string;
@@ -20,9 +20,11 @@ export interface RelationRecord {
   metadata: Record<string, any>;
   created_by: string;
   created_at: string;
+  embedding?: number[]; // Vector embedding for semantic search (based on type + metadata)
+  embedding_model?: string; // Model used to generate embedding
 }
 
-export interface RelationQueryParams {
+export interface FactRelationQueryParams {
   from_fact?: string;
   to_fact?: string;
   type?: string;
@@ -30,8 +32,8 @@ export interface RelationQueryParams {
   offset?: number;
 }
 
-export class Relation {
-  static async create(input: RelationInput): Promise<RelationRecord> {
+export class FactRelation {
+  static async create(input: FactRelationInput): Promise<FactRelationRecord> {
     // Ensure fact IDs are in the correct format
     const fromId = this._normalizeFactId(input.from_fact);
     const toId = this._normalizeFactId(input.to_fact);
@@ -51,8 +53,8 @@ export class Relation {
     return this._normalizeRecord(result.new!);
   }
 
-  static async findById(id: string): Promise<RelationRecord | null> {
-    const key = this._extractKey(id);
+  static async findById(id: string): Promise<FactRelationRecord | null> {
+    const key = this.extractKey(id);
     try {
       const doc = await collections.relations.document(key);
       return this._normalizeRecord(doc);
@@ -64,7 +66,7 @@ export class Relation {
     }
   }
 
-  static async query(params: RelationQueryParams): Promise<RelationRecord[]> {
+  static async query(params: FactRelationQueryParams): Promise<FactRelationRecord[]> {
     const limit = params.limit || 50;
     const offset = params.offset || 0;
 
@@ -100,7 +102,7 @@ export class Relation {
   static async getRelatedFacts(
     factId: string,
     relationType?: string,
-  ): Promise<{ relation: RelationRecord; fact: any }[]> {
+  ): Promise<{ relation: FactRelationRecord; fact: any }[]> {
     const factIdNormalized = this._normalizeFactId(factId);
     let aql = `
       FOR relation, fact IN 1..1 OUTBOUND @factId relations
@@ -125,7 +127,7 @@ export class Relation {
   static async getIncomingRelations(
     factId: string,
     relationType?: string,
-  ): Promise<{ relation: RelationRecord; fact: any }[]> {
+  ): Promise<{ relation: FactRelationRecord; fact: any }[]> {
     const factIdNormalized = this._normalizeFactId(factId);
     let aql = `
       FOR relation, fact IN 1..1 INBOUND @factId relations
@@ -153,7 +155,7 @@ export class Relation {
   }
 
   // Helper methods
-  static _extractKey(id: string): string {
+  static extractKey(id: string): string {
     if (id.includes("/")) {
       return id.split("/")[1];
     }
@@ -168,9 +170,9 @@ export class Relation {
     return `facts/${factId}`;
   }
 
-  static _normalizeRecord(doc: any): RelationRecord {
+  static _normalizeRecord(doc: any): FactRelationRecord {
     return {
-      id: doc._id || `relations/${doc._key}`,
+      id: doc._id || `fact_relations/${doc._key}`,
       _key: doc._key,
       _id: doc._id,
       _from: doc._from,
@@ -181,6 +183,8 @@ export class Relation {
       metadata: doc.metadata || {},
       created_by: doc.created_by,
       created_at: doc.created_at,
+      embedding: doc.embedding,
+      embedding_model: doc.embedding_model,
     };
   }
 }

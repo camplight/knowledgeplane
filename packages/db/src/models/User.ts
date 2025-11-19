@@ -196,7 +196,7 @@ export class User {
   }
 
   static async removeApiKey(id: string): Promise<void> {
-    await this.update(id, { api_key: null });
+    await this.update(id, { api_key: undefined });
   }
 
   // Helper methods

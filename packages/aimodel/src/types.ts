@@ -29,6 +29,17 @@ export interface Tool {
 }
 
 /**
+ * MCP tool definition for OpenAI MCP connectors
+ */
+export interface McpTool {
+  type: "mcp";
+  server_label: string;
+  server_description: string;
+  server_url: string;
+  require_approval?: "always" | "never" | "auto";
+}
+
+/**
  * Chat completion options
  */
 export interface ChatCompletionOptions {
@@ -38,6 +49,7 @@ export interface ChatCompletionOptions {
   responseFormat?: "json_object" | "text";
   tools?: Tool[];
   toolChoice?: "auto" | "none" | { type: "function"; function: { name: string } };
+  mcpTools?: McpTool[];
 }
 
 /**
@@ -89,5 +101,17 @@ export interface FileUploadResult {
 export interface FileContentResult {
   content: string;
   fileId: string;
+}
+
+/**
+ * Embeddings result
+ */
+export interface EmbeddingsResult {
+  embeddings: number[][];
+  model: string;
+  usage?: {
+    promptTokens?: number;
+    totalTokens?: number;
+  };
 }
 

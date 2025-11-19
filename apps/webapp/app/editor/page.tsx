@@ -7,7 +7,7 @@ import { Navigation } from "../components/Navigation";
 
 export default function EditorPage() {
   const router = useRouter();
-  const [selectedView, setSelectedView] = useState<"facts" | "cards" | "categories" | "graph">("facts");
+  const [selectedView, setSelectedView] = useState<"facts" | "cards" | "graph">("facts");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFact, setSelectedFact] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -15,11 +15,19 @@ export default function EditorPage() {
   // Create fact form state
   const [showCreateFact, setShowCreateFact] = useState(false);
   const [factContent, setFactContent] = useState("");
-  
-  // Create category form state
-  const [showCreateCategory, setShowCreateCategory] = useState(false);
-  const [categoryName, setCategoryName] = useState("");
-  const [categoryDescription, setCategoryDescription] = useState("");
+
+  // Fact relation form state
+  const [showCreateRelation, setShowCreateRelation] = useState(false);
+  const [relationFromFact, setRelationFromFact] = useState("");
+  const [relationToFact, setRelationToFact] = useState("");
+  const [relationType, setRelationType] = useState("related_to");
+
+  // Update relationFromFact when selectedFact changes
+  useEffect(() => {
+    if (selectedFact) {
+      setRelationFromFact(selectedFact);
+    }
+  }, [selectedFact]);
 
   const { data: userData, isLoading: userLoading } = trpc.auth.me.useQuery();
   
@@ -39,8 +47,11 @@ export default function EditorPage() {
     { enabled: false }
   );
 
-  // Categories queries
-  const { data: categoriesData, isLoading: categoriesLoading, refetch: refetchCategories } = trpc.categories.list.useQuery();
+  // Fact relations queries
+  const { data: factRelationsData, refetch: refetchFactRelations } = trpc.factRelations.getForFact.useQuery(
+    { fact_id: selectedFact || "" },
+    { enabled: !!selectedFact }
+  );
 
   // Create fact mutation
   const createFactMutation = trpc.facts.create.useMutation({
@@ -51,13 +62,14 @@ export default function EditorPage() {
     },
   });
 
-  // Create category mutation
-  const createCategoryMutation = trpc.categories.create.useMutation({
+  // Create fact relation mutation
+  const createFactRelationMutation = trpc.factRelations.create.useMutation({
     onSuccess: () => {
-      setCategoryName("");
-      setCategoryDescription("");
-      setShowCreateCategory(false);
-      refetchCategories();
+      setRelationFromFact("");
+      setRelationToFact("");
+      setRelationType("related_to");
+      setShowCreateRelation(false);
+      refetchFactRelations();
     },
   });
 
@@ -80,12 +92,13 @@ export default function EditorPage() {
     }
   };
 
-  const handleCreateCategory = (e: React.FormEvent) => {
+  const handleCreateRelation = (e: React.FormEvent) => {
     e.preventDefault();
-    if (categoryName.trim()) {
-      createCategoryMutation.mutate({
-        name: categoryName.trim(),
-        description: categoryDescription.trim() || undefined,
+    if (relationFromFact && relationToFact && relationType) {
+      createFactRelationMutation.mutate({
+        from_fact: relationFromFact,
+        to_fact: relationToFact,
+        type: relationType,
       });
     }
   };
@@ -103,7 +116,6 @@ export default function EditorPage() {
   }
 
   const facts = searchQuery && searchResults ? searchResults.results : (factsData?.facts || []);
-  const categories = categoriesData?.categories || [];
   const user = userData.user;
 
   return (
@@ -155,16 +167,6 @@ export default function EditorPage() {
               }`}
             >
               Cards
-            </button>
-            <button
-              onClick={() => setSelectedView("categories")}
-              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
-                selectedView === "categories"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-700 hover:bg-slate-100"
-              }`}
-            >
-              Categories
             </button>
             <button
               onClick={() => setSelectedView("graph")}
@@ -271,92 +273,6 @@ export default function EditorPage() {
               </div>
             )}
 
-            {selectedView === "categories" && (
-              <div className="bg-white rounded-xl shadow-lg border border-slate-200">
-                <div className="p-6 border-b border-slate-200 flex justify-between items-center">
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-900">Categories</h2>
-                    <p className="text-sm text-slate-600 mt-1">
-                      Organized knowledge categories
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setShowCreateCategory(!showCreateCategory)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                  >
-                    {showCreateCategory ? "Cancel" : "+ New Category"}
-                  </button>
-                </div>
-                
-                {showCreateCategory && (
-                  <div className="p-6 border-b border-slate-200 bg-slate-50">
-                    <form onSubmit={handleCreateCategory}>
-                      <div className="mb-4">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Category Name
-                        </label>
-                        <input
-                          type="text"
-                          value={categoryName}
-                          onChange={(e) => setCategoryName(e.target.value)}
-                          placeholder="Enter category name..."
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          required
-                        />
-                      </div>
-                      <div className="mb-4">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Description (optional)
-                        </label>
-                        <textarea
-                          value={categoryDescription}
-                          onChange={(e) => setCategoryDescription(e.target.value)}
-                          placeholder="Enter category description..."
-                          rows={3}
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={createCategoryMutation.isPending}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50"
-                      >
-                        {createCategoryMutation.isPending ? "Creating..." : "Create Category"}
-                      </button>
-                    </form>
-                  </div>
-                )}
-
-                {categoriesLoading ? (
-                  <div className="p-8 text-center">
-                    <div className="text-slate-600">Loading categories...</div>
-                  </div>
-                ) : categories.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <p className="text-lg font-medium text-slate-900 mb-2">No categories found</p>
-                    <p className="text-slate-600">Create your first category to get started</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-200">
-                    {categories.map((category: any) => (
-                      <div
-                        key={category.id}
-                        className="p-6 hover:bg-slate-50 transition-colors"
-                      >
-                        <h3 className="text-lg font-semibold text-slate-900 mb-1">{category.name}</h3>
-                        {category.description && (
-                          <p className="text-slate-600 mb-2">{category.description}</p>
-                        )}
-                        <div className="text-sm text-slate-500">
-                          Created {new Date(category.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
             {selectedView === "graph" && (
               <div className="bg-white rounded-xl shadow-lg border border-slate-200">
                 <div className="p-6 border-b border-slate-200">
@@ -375,7 +291,7 @@ export default function EditorPage() {
           {/* Sidebar */}
           <div className="lg:col-span-1">
             {selectedFact && (
-              <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 sticky top-24">
+              <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 sticky top-24 space-y-6">
                 <h3 className="text-lg font-bold text-slate-900 mb-4">Fact Details</h3>
                 <div className="space-y-4">
                   <div>
@@ -388,13 +304,121 @@ export default function EditorPage() {
                       {new Date(facts.find((f: any) => f.id === selectedFact)?.created_at || "").toLocaleString()}
                     </p>
                   </div>
-                  <button
-                    onClick={() => setSelectedFact(null)}
-                    className="w-full px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-                  >
-                    Close
-                  </button>
                 </div>
+
+                {/* Relations Section */}
+                <div className="border-t border-slate-200 pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-slate-900">Relations</h4>
+                    <button
+                      onClick={() => setShowCreateRelation(!showCreateRelation)}
+                      className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                    >
+                      {showCreateRelation ? "Cancel" : "+ Add"}
+                    </button>
+                  </div>
+
+                  {showCreateRelation && (
+                    <form onSubmit={handleCreateRelation} className="mb-4 p-3 bg-slate-50 rounded-lg space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">From Fact</label>
+                        <select
+                          value={relationFromFact || selectedFact || ""}
+                          onChange={(e) => setRelationFromFact(e.target.value)}
+                          className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-white"
+                          required
+                        >
+                          <option value="">Select fact...</option>
+                          {facts.map((f: any) => (
+                            <option key={f.id} value={f.id}>
+                              {f.content.substring(0, 50)}...
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-slate-500 mt-1">Default: Currently selected fact</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">To Fact</label>
+                        <select
+                          value={relationToFact}
+                          onChange={(e) => setRelationToFact(e.target.value)}
+                          className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-white"
+                          required
+                        >
+                          <option value="">Select fact...</option>
+                          {facts.filter((f: any) => f.id !== relationFromFact).map((f: any) => (
+                            <option key={f.id} value={f.id}>{f.content.substring(0, 50)}...</option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-slate-500 mt-1">Select the fact this relates to</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
+                        <select
+                          value={relationType}
+                          onChange={(e) => setRelationType(e.target.value)}
+                          className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
+                          required
+                        >
+                          <option value="related_to">Related To</option>
+                          <option value="references">References</option>
+                          <option value="depends_on">Depends On</option>
+                          <option value="part_of">Part Of</option>
+                        </select>
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={createFactRelationMutation.isPending}
+                        className="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {createFactRelationMutation.isPending ? "Creating..." : "Create Relation"}
+                      </button>
+                    </form>
+                  )}
+
+                  {/* Display Relations */}
+                  {factRelationsData && (
+                    <div className="space-y-3">
+                      {factRelationsData.outgoing && factRelationsData.outgoing.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-slate-600 mb-2">Outgoing Relations</p>
+                          <div className="space-y-2">
+                            {factRelationsData.outgoing.map((rel: any) => (
+                              <div key={rel.relation.id} className="text-xs p-2 bg-slate-50 rounded border border-slate-200">
+                                <span className="font-medium text-blue-600">{rel.relation.type}</span>
+                                <p className="text-slate-700 mt-1">{rel.fact.content.substring(0, 60)}...</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {factRelationsData.incoming && factRelationsData.incoming.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-slate-600 mb-2">Incoming Relations</p>
+                          <div className="space-y-2">
+                            {factRelationsData.incoming.map((rel: any) => (
+                              <div key={rel.relation.id} className="text-xs p-2 bg-slate-50 rounded border border-slate-200">
+                                <span className="font-medium text-green-600">{rel.relation.type}</span>
+                                <p className="text-slate-700 mt-1">{rel.fact.content.substring(0, 60)}...</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {(!factRelationsData.outgoing || factRelationsData.outgoing.length === 0) &&
+                        (!factRelationsData.incoming || factRelationsData.incoming.length === 0) && (
+                          <p className="text-xs text-slate-500">No relations yet</p>
+                        )}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => setSelectedFact(null)}
+                  className="w-full px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  Close
+                </button>
               </div>
             )}
           </div>

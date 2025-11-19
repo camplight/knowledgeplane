@@ -1,7 +1,7 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import { init, Fact, Relation, Card, Category, Webhook, User } from "@knowledgeplane/db";
+import { init, Fact, FactRelation, KnowledgeCard, Webhook, User } from "@knowledgeplane/db";
 import { collections } from "@knowledgeplane/db";
 
 const server = Fastify({ logger: true });
@@ -21,18 +21,7 @@ server.get("/health", async () => {
 
 // Facts endpoints
 server.get("/api/facts", async (request, reply) => {
-  const { limit = 50, offset = 0, knowledge_context, include_trashed = false } = request.query as any;
-  
-  if (knowledge_context) {
-    const results = await Fact.search({
-      query: "*",
-      knowledge_context,
-      k: limit,
-      offset,
-      include_trashed: include_trashed === "true",
-    });
-    return { facts: results };
-  }
+  const { limit = 50, offset = 0, include_trashed = false } = request.query as any;
   
   const facts = await Fact.list(limit, offset, include_trashed === "true");
   return { facts };
@@ -57,7 +46,6 @@ server.post("/api/facts", async (request, reply) => {
     metadata: body.metadata,
     created_by: body.created_by || "system",
     last_updated_by: body.last_updated_by || body.created_by || "system",
-    knowledge_context: body.knowledge_context,
   });
   
   return { fact };
@@ -71,7 +59,6 @@ server.put("/api/facts/:id", async (request, reply) => {
     id,
     content: body.content,
     metadata: body.metadata,
-    knowledge_context: body.knowledge_context,
     last_updated_by: body.last_updated_by || "system",
   });
   
@@ -90,7 +77,6 @@ server.post("/api/facts/search", async (request, reply) => {
   const body = request.body as any;
   const results = await Fact.search({
     query: body.query || "*",
-    knowledge_context: body.knowledge_context,
     k: body.k || 10,
     offset: body.offset || 0,
     include_trashed: body.include_trashed || false,
@@ -103,7 +89,7 @@ server.post("/api/facts/search", async (request, reply) => {
 server.get("/api/relations", async (request, reply) => {
   const { from_fact, to_fact, type, limit = 50, offset = 0 } = request.query as any;
   
-  const relations = await Relation.query({
+  const relations = await FactRelation.query({
     from_fact,
     to_fact,
     type,
@@ -116,7 +102,7 @@ server.get("/api/relations", async (request, reply) => {
 
 server.post("/api/relations", async (request, reply) => {
   const body = request.body as any;
-  const relation = await Relation.create({
+  const relation = await FactRelation.create({
     from_fact: body.from_fact,
     to_fact: body.to_fact,
     type: body.type,
@@ -131,8 +117,8 @@ server.get("/api/facts/:id/relations", async (request, reply) => {
   const { id } = request.params as { id: string };
   const { type } = request.query as any;
   
-  const outgoing = await Relation.getRelatedFacts(id, type);
-  const incoming = await Relation.getIncomingRelations(id, type);
+  const outgoing = await FactRelation.getRelatedFacts(id, type);
+  const incoming = await FactRelation.getIncomingRelations(id, type);
   
   return {
     outgoing,
@@ -159,65 +145,26 @@ server.post("/api/query", async (request, reply) => {
   }
 });
 
-// Cards endpoints
-server.get("/api/cards", async (request, reply) => {
-  const { limit = 50, offset = 0, knowledge_context, category_id } = request.query as any;
+// Knowledge Cards endpoints
+server.get("/api/knowledge-cards", async (request, reply) => {
+  const { limit = 50, offset = 0 } = request.query as any;
   
-  const cards = await Card.list(limit, offset, knowledge_context, category_id);
+  const cards = await KnowledgeCard.list(limit, offset);
   return { cards };
 });
 
-server.get("/api/cards/:id", async (request, reply) => {
+server.get("/api/knowledge-cards/:id", async (request, reply) => {
   const { id } = request.params as { id: string };
-  const card = await Card.findById(id);
+  const card = await KnowledgeCard.findById(id);
   
   if (!card) {
     reply.code(404);
-    return { error: "Card not found" };
+    return { error: "Knowledge card not found" };
   }
   
   return { card };
 });
 
-// Categories endpoints
-server.get("/api/categories", async (request, reply) => {
-  const { knowledge_context, parent_id } = request.query as any;
-  
-  const categories = await Category.list(knowledge_context, parent_id);
-  return { categories };
-});
-
-server.get("/api/categories/tree", async (request, reply) => {
-  const { knowledge_context } = request.query as any;
-  
-  const tree = await Category.getTree(knowledge_context);
-  return { tree };
-});
-
-server.get("/api/categories/:id", async (request, reply) => {
-  const { id } = request.params as { id: string };
-  const category = await Category.findById(id);
-  
-  if (!category) {
-    reply.code(404);
-    return { error: "Category not found" };
-  }
-  
-  return { category };
-});
-
-server.post("/api/categories", async (request, reply) => {
-  const body = request.body as any;
-  const category = await Category.create({
-    name: body.name,
-    description: body.description,
-    parent_id: body.parent_id,
-    knowledge_context: body.knowledge_context,
-    created_by: body.created_by || "system",
-  });
-  
-  return { category };
-});
 
 // Webhooks endpoints
 server.get("/api/webhooks", async (request, reply) => {
@@ -263,11 +210,11 @@ server.delete("/api/webhooks/:id", async (request, reply) => {
 const port = parseInt(process.env.PORT || "8081", 10);
 const host = process.env.HOST || "0.0.0.0";
 
-server.listen({ port, host }, (err, address) => {
-  if (err) {
-    console.error(err);
-    process.exit(1);
-  }
+try {
+  const address = await server.listen({ port, host });
   console.log(`REST API server listening on ${address}`);
-});
+} catch (err) {
+  console.error("Failed to start server:", err);
+  process.exit(1);
+}
 

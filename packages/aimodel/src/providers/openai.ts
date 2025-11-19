@@ -6,7 +6,9 @@ import type {
   FileUploadOptions,
   FileUploadResult,
   FileContentResult,
+  EmbeddingsResult,
   Tool,
+  McpTool,
 } from "../types";
 import type { AIModelProvider } from "./base";
 
@@ -34,6 +36,61 @@ export class OpenAIProvider implements AIModelProvider {
     const temperature = options?.temperature ?? 0.3;
     const maxTokens = options?.maxTokens;
     const responseFormat = options?.responseFormat;
+
+    // If MCP tools are provided, try to use the responses.create() API
+    if (options?.mcpTools && options.mcpTools.length > 0) {
+      try {
+        // Try to use the responses.create() API for MCP tools
+        // This API might not be available in all OpenAI SDK versions
+        const lastUserMessage = messages
+          .filter((m) => m.role === "user")
+          .pop();
+        const input = lastUserMessage?.content || "";
+
+        // Convert MCP tools to OpenAI format
+        const mcpTools = options.mcpTools.map((tool: McpTool) => ({
+          type: "mcp" as const,
+          server_label: tool.server_label,
+          server_description: tool.server_description,
+          server_url: tool.server_url,
+          require_approval: tool.require_approval || "never",
+        }));
+
+        // Check if responses.create exists (it might be a newer API)
+        if (
+          typeof (this.client as any).responses !== "undefined" &&
+          typeof (this.client as any).responses.create === "function"
+        ) {
+          const response = await (this.client as any).responses.create({
+            model,
+            tools: mcpTools,
+            input,
+          });
+
+          return {
+            content: response.output_text || "",
+            model: response.model || model,
+            usage: {
+              promptTokens: response.usage?.prompt_tokens,
+              completionTokens: response.usage?.completion_tokens,
+              totalTokens: response.usage?.total_tokens,
+            },
+          };
+        } else {
+          // Fallback: log warning and continue with standard chat completion
+          console.warn(
+            "OpenAI responses.create() API not available. Falling back to standard chat completion. MCP tools will not be used.",
+          );
+        }
+      } catch (error: any) {
+        // If responses.create() fails, fall back to standard chat completion
+        console.warn(
+          "Failed to use OpenAI responses.create() API:",
+          error.message,
+          "Falling back to standard chat completion.",
+        );
+      }
+    }
 
     // Convert messages to OpenAI format
     const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
@@ -179,6 +236,27 @@ export class OpenAIProvider implements AIModelProvider {
 
   async deleteFile(fileId: string): Promise<void> {
     await this.client.files.del(fileId);
+  }
+
+  async embeddings(
+    input: string | string[],
+    model?: string,
+  ): Promise<EmbeddingsResult> {
+    const embeddingModel = model || process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
+    
+    const response = await this.client.embeddings.create({
+      model: embeddingModel,
+      input: Array.isArray(input) ? input : [input],
+    });
+
+    return {
+      embeddings: response.data.map((item) => item.embedding),
+      model: response.model,
+      usage: {
+        promptTokens: response.usage.prompt_tokens,
+        totalTokens: response.usage.total_tokens,
+      },
+    };
   }
 }
 

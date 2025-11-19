@@ -6,6 +6,7 @@ import type {
   FileUploadOptions,
   FileUploadResult,
   FileContentResult,
+  EmbeddingsResult,
   Tool,
 } from "../types";
 import type { AIModelProvider } from "./base";
@@ -58,7 +59,10 @@ export class AnthropicProvider implements AIModelProvider {
     const tools: Anthropic.Tool[] | undefined = options?.tools?.map((tool) => ({
       name: tool.function.name,
       description: tool.function.description || "",
-      input_schema: tool.function.parameters || {},
+      input_schema: {
+        type: "object",
+        ...(tool.function.parameters || {}),
+      },
     }));
 
     const params: Anthropic.Messages.MessageCreateParams = {
@@ -66,6 +70,7 @@ export class AnthropicProvider implements AIModelProvider {
       max_tokens: maxTokens,
       temperature,
       messages: anthropicMessages,
+      stream: false,
       ...(systemMessage && typeof systemMessage.content === "string" && {
         system: systemMessage.content,
       }),
@@ -74,12 +79,12 @@ export class AnthropicProvider implements AIModelProvider {
         tool_choice: options.toolChoice === "auto" 
           ? { type: "auto" as const }
           : options.toolChoice === "none"
-          ? { type: "none" as const }
+          ? { type: "any" as const }
           : { type: "tool" as const, name: options.toolChoice.function.name },
       }),
     };
 
-    const response = await this.client.messages.create(params);
+    const response = await this.client.messages.create(params) as Anthropic.Messages.Message;
 
     // Extract content and tool calls
     const contentParts: string[] = [];
@@ -134,6 +139,15 @@ export class AnthropicProvider implements AIModelProvider {
 
   async deleteFile(fileId: string): Promise<void> {
     throw new Error("Anthropic does not support file uploads via API.");
+  }
+
+  async embeddings(
+    input: string | string[],
+    model?: string,
+  ): Promise<EmbeddingsResult> {
+    // Anthropic doesn't have a native embeddings API
+    // We'll use OpenAI embeddings as a fallback or throw an error
+    throw new Error("Anthropic does not support embeddings. Please use OpenAI provider for embeddings.");
   }
 }
 

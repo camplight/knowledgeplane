@@ -87,12 +87,12 @@ Returns server health status.
 
 ### Facts
 
-- `GET /api/facts` - List facts (query params: `limit`, `offset`, `knowledge_context`, `include_trashed`)
+- `GET /api/facts` - List facts (query params: `limit`, `offset`, `include_trashed`)
 - `GET /api/facts/:id` - Get a specific fact
 - `POST /api/facts` - Create a new fact
 - `PUT /api/facts/:id` - Update a fact
 - `DELETE /api/facts/:id` - Trash a fact (query param: `last_updated_by`)
-- `POST /api/facts/search` - Search facts (body: `query`, `knowledge_context`, `k`, `offset`, `include_trashed`)
+- `POST /api/facts/search` - Search facts (body: `query`, `k`, `offset`, `include_trashed`)
 
 ### Relations
 
@@ -102,15 +102,8 @@ Returns server health status.
 
 ### Cards
 
-- `GET /api/cards` - List cards (query params: `limit`, `offset`, `knowledge_context`, `category_id`)
+- `GET /api/cards` - List cards (query params: `limit`, `offset`)
 - `GET /api/cards/:id` - Get a specific card
-
-### Categories
-
-- `GET /api/categories` - List categories (query params: `knowledge_context`, `parent_id`)
-- `GET /api/categories/tree` - Get category tree (query param: `knowledge_context`)
-- `GET /api/categories/:id` - Get a specific category
-- `POST /api/categories` - Create a new category
 
 ### Webhooks
 
@@ -132,7 +125,6 @@ curl -X POST http://localhost:8081/api/facts \
   -H "Content-Type: application/json" \
   -d '{
     "content": "The sky is blue",
-    "knowledge_context": "general",
     "created_by": "user123",
     "last_updated_by": "user123"
   }'

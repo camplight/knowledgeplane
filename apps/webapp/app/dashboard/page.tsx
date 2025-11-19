@@ -16,6 +16,7 @@ export default function DashboardPage() {
     offset: page * limit,
     includeTrashed: false,
   });
+  const { data: categoriesData } = trpc.categories.list.useQuery();
 
   useEffect(() => {
     if (!userLoading && !userData?.user) {
@@ -87,9 +88,9 @@ export default function DashboardPage() {
           <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600 mb-1">Knowledge Contexts</p>
+                <p className="text-sm font-medium text-slate-600 mb-1">Categories</p>
                 <p className="text-3xl font-bold text-slate-900">
-                  {new Set(facts.map(f => f.knowledge_context).filter(Boolean)).size}
+                  {categoriesData?.categories?.length || 0}
                 </p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -133,14 +134,6 @@ export default function DashboardPage() {
                       <div className="flex-1">
                         <p className="text-slate-900 mb-2 leading-relaxed">{fact.content}</p>
                         <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                          {fact.knowledge_context && (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-md">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                              </svg>
-                              {fact.knowledge_context}
-                            </span>
-                          )}
                           <span className="flex items-center gap-1">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />

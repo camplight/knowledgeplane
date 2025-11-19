@@ -26,6 +26,8 @@ export interface McpContext {
 }
 
 // Tool definitions from handlers
+import { workersTriggerTool, handleWorkersTrigger } from "./handlers/workers.trigger.js";
+
 const tools = [
   factsWriteTool,
   factsBulkWriteTool,
@@ -34,6 +36,7 @@ const tools = [
   factsTrashTool,
   usersRegisterTool,
   filesUploadTool,
+  workersTriggerTool,
 ];
 
 export function createMcpServer(
@@ -154,6 +157,9 @@ export function createMcpServer(
         }
       }
       handler = handleFilesUpload;
+    } else if (name === "workers.trigger") {
+      handlerArgs = { ...args } as any;
+      handler = handleWorkersTrigger;
     } else {
       const error = `Unknown tool: ${name}`;
       if (logger) {

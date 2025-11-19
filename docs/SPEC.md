@@ -21,15 +21,16 @@ Facts and categories – organize memory using facts and hierarchical categories
 
 Full-text search – keyword search using ArangoDB full-text indexes.
 
+Vector embeddings – automatic generation of embeddings for facts, fact relations, and knowledge cards using OpenAI embeddings. Enables semantic search capabilities with ArangoDB's native vector search using APPROX_NEAR_COSINE. Supports hybrid search combining full-text and vector search for optimal results.
+
 Graph database – ArangoDB provides native graph capabilities for modeling relationships between facts.
 
 Relations – facts can be linked together with typed relationships (references, depends_on, related_to, part_of, etc.).
 
 AQL queries – support for ArangoDB Query Language (AQL) for advanced graph queries and traversals.
 
-Card consolidation – background worker automatically consolidates related facts into summary cards using OpenAI agents.
+KnowledgeCard consolidation – background worker automatically consolidates related facts and their FactRelations into summary knowledge cards using OpenAI agents. The worker uses graph traversal to find related facts via FactRelations.
 
-Category organization – background worker organizes cards into hierarchical category trees.
 
 Webhooks – register webhooks to receive notifications on fact/card events.
 
@@ -55,7 +56,7 @@ Clients (Claude Desktop, VS Code, Cursor)
    ↓
 [MCP Server over HTTP]  [REST API]
    ↓
-Background Workers (Card Consolidation, Category Organization)
+Background Workers (Card Consolidation, Embeddings Generation)
    ↓
 ArangoDB (graph database with full-text search)
 ```
@@ -64,13 +65,14 @@ ArangoDB (graph database with full-text search)
 
 | Tool | Description |
 |------|-------------|
-| `facts.write` | Write a fact with content, metadata, user tracking, and optional knowledge context |
+| `facts.write` | Write a fact with content, metadata, and user tracking |
 | `facts.bulkwrite` | Write multiple facts to the knowledge base in a single operation |
-| `facts.search` | Search facts using full-text search with optional knowledge context filtering and pagination. Trashed facts are excluded by default |
+| `facts.search` | Search facts using full-text search with pagination. Trashed facts are excluded by default |
 | `facts.update` | Update a fact in the knowledge base. Only provided fields will be updated |
 | `facts.trash` | Mark a fact as trashed. Trashed facts are excluded from search results unless explicitly included |
 | `users.register` | Register a new user or update an existing user's email if the username already exists |
-| `files.upload` | Upload a file and automatically extract facts and relations using AI. The file content is analyzed using OpenAI to identify key information and relationships |
+| `files.upload` | Upload a file and automatically extract facts and FactRelations using AI. The file content is analyzed using OpenAI to identify key information and relationships |
+| `workers.trigger` | Trigger a background worker to run (card-consolidator) |
 
 **facts.write Parameters:**
 - `content` (required): The content of the fact
@@ -87,7 +89,6 @@ ArangoDB (graph database with full-text search)
 
 **facts.search Parameters:**
 - `query` (required): Search query for full-text search. Use '*' to search all facts
-- `knowledge_context` (optional): Filter by knowledge context
 - `k` (optional): Limit for number of results (default: 5)
 - `offset` (optional): Offset for pagination (default: 0)
 - `include_trashed` (optional): If true, includes trashed facts in search results (default: false)
@@ -97,7 +98,9 @@ ArangoDB (graph database with full-text search)
 - `content` (optional): The updated content of the fact
 - `metadata` (optional): Updated key-value pairs of metadata
 - `last_updated_by` (required): User ID of the person updating the fact
-- `knowledge_context` (optional): Updated context or namespace for organizing facts
+
+**workers.trigger Parameters:**
+- `worker` (required): The name of the worker to trigger ("card-consolidator")
 
 **facts.trash Parameters:**
 - `id` (required): The ID of the fact to trash
@@ -108,13 +111,12 @@ ArangoDB (graph database with full-text search)
 - `email` (required): Email address for the user
 
 **knowledgecontexts.list Parameters:**
-- `include_trashed` (optional): If true, includes knowledge contexts from trashed facts (default: false)
+- `include_trashed` (optional): If true, includes trashed facts in search results (default: false)
 
 **files.upload Parameters:**
 - `filename` (required): Original filename of the file being uploaded
 - `mimeType` (required): MIME type of the file (e.g., 'text/plain', 'application/json')
 - `data` (required): Base64-encoded file content
-- `knowledge_context` (optional): Knowledge context for organizing extracted facts
 - `created_by` (optional): User ID of the uploader. If not provided, inferred from authenticated session (OAuth token or API key)
 
 🔌 API Endpoints
@@ -163,12 +165,8 @@ ArangoDB (graph database with full-text search)
 | `POST /api/relations` | Create a new relation |
 | `GET /api/facts/:id/relations` | Get relations for a fact |
 | `POST /api/query` | Execute AQL query |
-| `GET /api/cards` | List cards |
-| `GET /api/cards/:id` | Get a specific card |
-| `GET /api/categories` | List categories |
-| `GET /api/categories/tree` | Get category tree |
-| `GET /api/categories/:id` | Get a specific category |
-| `POST /api/categories` | Create a new category |
+| `GET /api/knowledge-cards` | List knowledge cards |
+| `GET /api/knowledge-cards/:id` | Get a specific knowledge card |
 | `GET /api/webhooks` | List webhooks |
 | `POST /api/webhooks` | Create a new webhook |
 | `PUT /api/webhooks/:id` | Update a webhook |
@@ -203,7 +201,6 @@ KnowledgePlane supports three types of authentication:
 - Sessions are identified by `mcp-session-id` header
 - User context is automatically inferred from authenticated session (OAuth token or API key)
 - User context can also be provided via query params: `?username=user&email=user@example.com` (fallback if not authenticated)
-- Knowledge context can be provided via query param: `?knowledge_context=project-alpha`
 - Authentication via `Authorization: Bearer <token>` header (OAuth) or `knowledgeplane-key` header (API key)
 - For `facts.write`, `created_by` and `last_updated_by` are automatically set from the authenticated user's ID if not explicitly provided
 - **Server Restart Handling**: When the server restarts, in-memory session state is lost. Clients reconnecting with an existing `mcp-session-id` will have a new transport created. The MCP protocol requires clients to send an `initialize` request before any other requests. If a client sends a non-initialize request after a server restart, it will receive a 400 error and should reinitialize the session.
@@ -229,7 +226,7 @@ KnowledgePlane supports three types of authentication:
 - `last_updated_by` (string): Reference to user ID
 - `trashed` (boolean): Whether the fact has been trashed (default: false)
 
-**Relation Collection (Edges):**
+**FactRelation Collection (Edges):**
 - `_id` (ArangoDB edge ID): Primary key
 - `_key` (string): Document key
 - `_from` (string): Source fact document ID
@@ -241,30 +238,20 @@ KnowledgePlane supports three types of authentication:
 - `created_by` (string): Reference to user ID
 - `created_at` (string): Creation timestamp (ISO 8601)
 
-**Card Collection:**
+Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are nodes.
+
+**KnowledgeCard Collection:**
 - `_id` (ArangoDB document ID): Primary key
 - `_key` (string): Document key
-- `title` (string): Card title
+- `title` (string): Knowledge card title
 - `summary` (string): Brief summary
 - `content` (string): Full consolidated content
 - `fact_ids` (array): Array of fact IDs that were consolidated
 - `created_by` (string): Reference to user ID
 - `last_updated_by` (string): Reference to user ID
-- `metadata` (object): Additional metadata
+- `metadata` (object): Key-value metadata
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
-- `category_id` (string): Optional reference to category
-
-**Category Collection:**
-- `_id` (ArangoDB document ID): Primary key
-- `_key` (string): Document key
-- `name` (string): Category name
-- `description` (string): Category description
-- `parent_id` (string): Optional reference to parent category
-- `created_by` (string): Reference to user ID
-- `created_at` (string): Creation timestamp (ISO 8601)
-- `updated_at` (string): Last update timestamp (ISO 8601)
-- `path` (array): Array of category IDs representing the path from root
 
 **Webhook Collection:**
 - `_id` (ArangoDB document ID): Primary key
@@ -356,8 +343,8 @@ The web interface is built with React and Tailwind CSS, featuring:
 - Responsive login pages for OAuth authentication
 - User dashboard (`/dashboard`) with:
   - User profile information display
-  - Facts overview with statistics (total facts, active facts, knowledge contexts)
-  - Facts list with pagination, metadata display, and knowledge context tags
+  - Facts overview with statistics (total facts, active facts)
+  - Facts list with pagination and metadata display
   - Logout functionality
   - Automatic redirect to landing page for unauthenticated users
 - User profile page (`/profile`) with:
@@ -576,8 +563,7 @@ curl -X POST "http://localhost:8080/mcp" \
     "params":{
       "name":"facts.write",
       "arguments":{
-        "content":"Project Apollo uses port 9090",
-        "knowledge_context":"demo"
+        "content":"Project Apollo uses port 9090"
       }
     }
   }'
@@ -601,17 +587,14 @@ curl -X POST "http://localhost:8080/mcp" \
         "facts":[
           {
             "content":"Project Apollo uses port 9090",
-            "knowledge_context":"demo",
             "metadata":{"source":"deployment"}
           },
           {
             "content":"Project Beta uses Redis for caching",
-            "knowledge_context":"demo",
             "metadata":{"source":"architecture"}
           },
           {
-            "content":"Project Gamma uses PostgreSQL for persistence",
-            "knowledge_context":"demo"
+            "content":"Project Gamma uses PostgreSQL for persistence"
           }
         ]
       }
@@ -633,8 +616,7 @@ curl -X POST "http://localhost:8080/mcp" \
     "params":{
       "name":"facts.write",
       "arguments":{
-        "content":"Project Apollo uses port 9090",
-        "knowledge_context":"demo"
+        "content":"Project Apollo uses port 9090"
       }
     }
   }'
@@ -654,8 +636,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
     "params":{
       "name":"facts.write",
       "arguments":{
-        "content":"Project Apollo uses port 9090",
-        "knowledge_context":"demo"
+        "content":"Project Apollo uses port 9090"
       }
     }
   }'
@@ -675,8 +656,7 @@ curl -X POST http://localhost:8080/mcp \
       "arguments":{
         "content":"Project Apollo uses port 9090",
         "created_by":"<user-uuid>",
-        "last_updated_by":"<user-uuid>",
-        "knowledge_context":"demo"
+        "last_updated_by":"<user-uuid>"
       }
     }
   }'
@@ -684,7 +664,7 @@ curl -X POST http://localhost:8080/mcp \
 
 **Example: Search facts**
 ```bash
-curl -X POST http://localhost:8080/mcp?knowledge_context=demo \
+curl -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
   -H "mcp-session-id: test-session-123" \
   -d '{
@@ -695,7 +675,6 @@ curl -X POST http://localhost:8080/mcp?knowledge_context=demo \
       "name":"facts.search",
       "arguments":{
         "query":"Apollo",
-        "knowledge_context":"demo",
         "k":10
       }
     }
@@ -764,7 +743,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
 
 **Example: Search including trashed facts**
 ```bash
-curl -X POST http://localhost:8080/mcp?knowledge_context=demo \
+curl -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
   -H "mcp-session-id: test-session-123" \
   -d '{
@@ -775,7 +754,6 @@ curl -X POST http://localhost:8080/mcp?knowledge_context=demo \
       "name":"facts.search",
       "arguments":{
         "query":"*",
-        "knowledge_context":"demo",
         "include_trashed":true
       }
     }
@@ -799,8 +777,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
       "arguments":{
         "filename":"document.txt",
         "mimeType":"text/plain",
-        "data":"'$FILE_DATA'",
-        "knowledge_context":"project-docs"
+        "data":"'$FILE_DATA'"
       }
     }
   }'
@@ -877,8 +854,8 @@ KnowledgePlane supports ArangoDB Query Language (AQL) for advanced graph queries
 curl -X POST http://localhost:8081/api/query \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "FOR fact IN facts FILTER fact.knowledge_context == @context RETURN fact",
-    "bindVars": {"context": "project-alpha"}
+    "query": "FOR fact IN facts FILTER fact.trashed == false RETURN fact",
+    "bindVars": {}
   }'
 ```
 
@@ -895,18 +872,25 @@ KnowledgePlane includes background workers that automatically maintain and organ
 **Card Consolidator:**
 - Runs every 5 minutes
 - Identifies unconsolidated facts
-- Groups facts by knowledge context
 - Uses graph traversal to find related facts
 - Leverages OpenAI GPT-4 to create consolidated summary cards
 - Creates cards with title, summary, and comprehensive content
 
-**Category Organizer:**
-- Runs every 30 minutes
-- Analyzes uncategorized cards
-- Uses OpenAI GPT-4 to suggest hierarchical category structures
-- Creates and updates categories
-- Assigns cards to appropriate categories
-- Maintains category tree structure
+**Embeddings Generator:**
+- Runs every 10 minutes
+- Generates vector embeddings for facts, fact relations, and knowledge cards
+- Uses OpenAI embeddings API (text-embedding-3-small by default, dimension 1536)
+- Processes items in batches for efficiency
+- Updates embeddings when model changes or embeddings are missing
+- Stores embeddings directly in ArangoDB documents
+
+**Vector Search:**
+- Uses ArangoDB's native vector search with FAISS integration (see [ArangoDB Vector Search Guide](https://arango.ai/blog/vector-search-in-arangodb-practical-insights-and-hands-on-examples/))
+- Vector indexes created automatically with cosine similarity metric
+- Supports APPROX_NEAR_COSINE for efficient approximate nearest neighbor search
+- Hybrid search combines full-text (BM25) and vector (cosine similarity) results
+- Automatic query embedding generation when AI provider is available
+- Falls back to full-text search if embeddings are unavailable
 
 Both workers are designed to be:
 - Non-blocking and asynchronous
@@ -944,7 +928,6 @@ curl -X POST http://localhost:8081/api/webhooks \
   "data": {
     "id": "facts/123",
     "content": "...",
-    "knowledge_context": "project-alpha",
     ...
   },
   "timestamp": "2024-01-01T00:00:00Z"
@@ -967,13 +950,29 @@ KnowledgePlane includes an AI chat interface that combines OpenAI's language mod
 - Context-aware responses using relevant facts
 - Knowledge context filtering
 - Visual indication of which facts were used in responses
+- **MCP tool integration** - Direct access to MCP server tools via OpenAI's MCP connectors API
 
 **How it works:**
 1. User sends a message in the chat interface
 2. System searches the knowledge base for relevant facts using the MCP server
 3. Relevant facts are included as context in the OpenAI API call
-4. AI generates a response using both its training and the knowledge base facts
-5. Response is displayed with information about which facts were used
+4. **MCP tools are configured** - OpenAI can directly call MCP server tools (facts.search, facts.write, etc.) when needed
+5. AI generates a response using both its training and the knowledge base facts
+6. Response is displayed with information about which facts were used
+
+**MCP Integration:**
+The chat interface uses OpenAI's `responses.create()` API with MCP tools connector support. This allows the AI to:
+- Directly search facts using `facts.search` tool
+- Write new facts using `facts.write` tool
+- Update existing facts using `facts.update` tool
+- Upload files using `files.upload` tool
+- Create topics using `topics.create` tool
+- Trigger background workers using `workers.trigger` tool
+
+**Configuration:**
+Set the following environment variables to enable MCP integration:
+- `MCP_SERVER_URL` - Full URL to MCP server (e.g., `http://localhost:8080/mcp`)
+- Or use `MCP_SERVER_HOST`, `MCP_SERVER_PORT`, and `MCP_SERVER_PROTOCOL` to construct the URL
 
 **Access:**
 Navigate to `/chat` in the web application (requires authentication).
@@ -982,12 +981,15 @@ Navigate to `/chat` in the web application (requires authentication).
 - Ask questions about stored facts: "What do we know about project Apollo?"
 - Request summaries: "Summarize all facts about deployment processes"
 - Get insights: "What are the relationships between our different projects?"
+- Direct tool usage: "Search for facts about deployment" (AI will use facts.search tool)
+- Write facts: "Remember that we use Docker for containerization" (AI can use facts.write tool)
 
 The chat interface automatically:
 - Maintains conversation context
 - Filters facts by knowledge context when specified
 - Shows which facts were referenced in each response
 - Handles errors gracefully
+- Falls back to standard chat completion if MCP tools are not available
 
 📁 File Upload and AI Extraction
 
@@ -1060,13 +1062,17 @@ Navigate to `/upload` in the web application (requires authentication).
 - ✅ ArangoDB graph database with relations support
 - ✅ AQL query support
 - ✅ Card consolidation via background worker
-- ✅ Category organization via background worker
+- ✅ Embeddings generation via background worker
+- ✅ Vector embeddings stored in facts, fact relations, and knowledge cards
+- ✅ ArangoDB vector indexes for efficient similarity search
+- ✅ Full hybrid search (combining full-text and vector search with cosine similarity)
+- ✅ Vector search using ArangoDB's APPROX_NEAR_COSINE function
+- ✅ Automatic query embedding generation for semantic search
 - ✅ Webhook support
 - ✅ REST API endpoints
 - ✅ Knowledge base editor page
 
 **Planned Features:**
-- 🔲 Semantic search with vector embeddings
 - 🔲 Advanced graph visualization in editor
 - 🔲 Audit logs
 - 🔲 Retention policies

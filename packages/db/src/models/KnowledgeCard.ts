@@ -1,7 +1,7 @@
 import { collections } from "../db";
 import { triggerWebhook } from "../lib/webhook-trigger";
 
-export interface CardInput {
+export interface KnowledgeCardInput {
   title: string;
   summary: string;
   content: string; // Full consolidated content
@@ -11,7 +11,7 @@ export interface CardInput {
   metadata?: Record<string, any>;
 }
 
-export interface CardRecord {
+export interface KnowledgeCardRecord {
   _key?: string;
   _id?: string;
   id: string;
@@ -24,10 +24,11 @@ export interface CardRecord {
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
-  category_id?: string; // Reference to category
+  embedding?: number[]; // Vector embedding for semantic search (based on title + summary + content)
+  embedding_model?: string; // Model used to generate embedding
 }
 
-export interface CardUpdateInput {
+export interface KnowledgeCardUpdateInput {
   id: string;
   title?: string;
   summary?: string;
@@ -35,11 +36,10 @@ export interface CardUpdateInput {
   fact_ids?: string[];
   last_updated_by: string;
   metadata?: Record<string, any>;
-  category_id?: string;
 }
 
-export class Card {
-  static async create(input: CardInput): Promise<CardRecord> {
+export class KnowledgeCard {
+  static async create(input: KnowledgeCardInput): Promise<KnowledgeCardRecord> {
     const now = new Date().toISOString();
     const doc = {
       title: input.title,
@@ -53,18 +53,18 @@ export class Card {
       updated_at: now,
     };
 
-    const result = await collections.cards.save(doc, { returnNew: true });
+    const result = await collections.knowledge_cards.save(doc, { returnNew: true });
     const record = this._normalizeRecord(result.new!);
     
     // Trigger webhook
-    triggerWebhook("card.created", record).catch((error) => {
-      console.error("Failed to trigger card.created webhook:", error);
+    triggerWebhook("knowledge_card.created", record).catch((error) => {
+      console.error("Failed to trigger knowledge_card.created webhook:", error);
     });
     
     return record;
   }
 
-  static async update(input: CardUpdateInput): Promise<CardRecord> {
+  static async update(input: KnowledgeCardUpdateInput): Promise<KnowledgeCardRecord> {
     const updates: any = {
       last_updated_by: input.last_updated_by,
       updated_at: new Date().toISOString(),
@@ -75,31 +75,30 @@ export class Card {
     if (input.content !== undefined) updates.content = input.content;
     if (input.fact_ids !== undefined) updates.fact_ids = input.fact_ids;
     if (input.metadata !== undefined) updates.metadata = input.metadata;
-    if (input.category_id !== undefined) updates.category_id = input.category_id;
 
-    const key = this._extractKey(input.id);
-    const result = await collections.cards.update(key, updates, {
+    const key = this.extractKey(input.id);
+    const result = await collections.knowledge_cards.update(key, updates, {
       returnNew: true,
     });
 
     if (!result) {
-      throw new Error(`Card with id ${input.id} not found`);
+      throw new Error(`KnowledgeCard with id ${input.id} not found`);
     }
 
     const record = this._normalizeRecord(result.new!);
     
     // Trigger webhook
-    triggerWebhook("card.updated", record).catch((error) => {
-      console.error("Failed to trigger card.updated webhook:", error);
+    triggerWebhook("knowledge_card.updated", record).catch((error) => {
+      console.error("Failed to trigger knowledge_card.updated webhook:", error);
     });
     
     return record;
   }
 
-  static async findById(id: string): Promise<CardRecord | null> {
-    const key = this._extractKey(id);
+  static async findById(id: string): Promise<KnowledgeCardRecord | null> {
+    const key = this.extractKey(id);
     try {
-      const doc = await collections.cards.document(key);
+      const doc = await collections.knowledge_cards.document(key);
       return this._normalizeRecord(doc);
     } catch (error: any) {
       if (error.errorNum === 1202) {
@@ -112,45 +111,37 @@ export class Card {
   static async list(
     limit: number = 50,
     offset: number = 0,
-    category_id?: string,
-  ): Promise<CardRecord[]> {
-    let aql = `FOR card IN cards`;
+  ): Promise<KnowledgeCardRecord[]> {
+    const aql = `
+      FOR card IN knowledge_cards
+        SORT card.updated_at DESC
+        LIMIT @offset, @limit
+        RETURN card
+    `;
     const bindVars: any = { limit, offset };
-    const filters: string[] = [];
 
-    if (category_id) {
-      filters.push(`card.category_id == @categoryId`);
-      bindVars.categoryId = category_id;
-    }
-
-    if (filters.length > 0) {
-      aql += ` FILTER ${filters.join(" && ")}`;
-    }
-
-    aql += ` SORT card.updated_at DESC LIMIT @offset, @limit RETURN card`;
-
-    const cursor = await collections.cards.database.query(aql, bindVars);
+    const cursor = await collections.knowledge_cards.database.query(aql, bindVars);
     const results = await cursor.all();
 
     return results.map((r: any) => this._normalizeRecord(r));
   }
 
   static async queryAQL(aql: string, bindVars?: any): Promise<any[]> {
-    const cursor = await collections.cards.database.query(aql, bindVars || {});
+    const cursor = await collections.knowledge_cards.database.query(aql, bindVars || {});
     return await cursor.all();
   }
 
   // Helper methods
-  static _extractKey(id: string): string {
+  static extractKey(id: string): string {
     if (id.includes("/")) {
       return id.split("/")[1];
     }
     return id;
   }
 
-  static _normalizeRecord(doc: any): CardRecord {
+  static _normalizeRecord(doc: any): KnowledgeCardRecord {
     return {
-      id: doc._id || `cards/${doc._key}`,
+      id: doc._id || `knowledge_cards/${doc._key}`,
       _key: doc._key,
       _id: doc._id,
       title: doc.title,
@@ -162,7 +153,8 @@ export class Card {
       metadata: doc.metadata || {},
       created_at: doc.created_at,
       updated_at: doc.updated_at,
-      category_id: doc.category_id,
+      embedding: doc.embedding,
+      embedding_model: doc.embedding_model,
     };
   }
 }

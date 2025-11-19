@@ -1,6 +1,7 @@
 import { Database } from "arangojs";
 import "dotenv/config";
 import { fetch as undiciFetch } from "undici";
+import type { BodyInit, RequestInfo, RequestInit, Response } from "undici";
 
 const dbUrl = process.env.ARANGO_URL || "http://localhost:8529";
 const dbName = process.env.ARANGO_DB_NAME || "knowledgeplane";
@@ -76,7 +77,7 @@ async function normalizeBody(body: BodyInit | null): Promise<Buffer | string | n
 // undici.fetch may not handle Request objects the same way as standard fetch,
 // so we extract the URL and options from Request objects before passing them to undici.fetch
 // We also normalize the body to ensure Content-Length headers are sent instead of chunked encoding
-const createUndiciFetchWrapper = (): typeof fetch => {
+const createUndiciFetchWrapper = () => {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     // If input is a Request object, extract URL and options
     if (input instanceof Request) {
@@ -140,6 +141,7 @@ if (isServer) {
   // 2. undici.fetch is the standard Node.js fetch implementation
   // 3. The wrapper handles Request objects properly for arangojs compatibility
   // 4. This ensures arangojs uses the correct fetch that ArangoDB requires
+  // @ts-ignore - Type incompatibility between undici types and global fetch types
   globalThis.fetch = createUndiciFetchWrapper();
 }
 
@@ -163,9 +165,8 @@ export const collections = {
   users: db.collection("users"),
   facts: db.collection("facts"),
   relations: db.collection("relations"),
-  cards: db.collection("cards"),
+  knowledge_cards: db.collection("knowledge_cards"),
   webhooks: db.collection("webhooks"),
-  categories: db.collection("categories"),
   files: db.collection("files"),
   invitations: db.collection("invitations"),
   oauth_authorization_requests: db.collection("oauth_authorization_requests"),
@@ -204,9 +205,8 @@ export async function init() {
   const documentCollectionNames = [
     "users",
     "facts",
-    "cards",
+    "knowledge_cards",
     "webhooks",
-    "categories",
     "files",
     "invitations",
     "oauth_authorization_requests",
@@ -278,6 +278,25 @@ export async function init() {
       fields: ["content"],
       name: "idx_fact_content_fulltext",
     } as any);
+    // Vector index for facts embeddings (dimension 1536 for text-embedding-3-small)
+    try {
+      await collections.facts.ensureIndex({
+        type: "vector",
+        fields: ["embedding"],
+        name: "idx_fact_embedding_vector",
+        params: {
+          metric: "cosine",
+          dimension: 1536, // OpenAI text-embedding-3-small dimension
+          nLists: 100,
+        },
+      } as any);
+      console.log("Vector index for facts created");
+    } catch (error: any) {
+      if (error.errorNum !== 1710) {
+        // 1710 = index already exists
+        console.warn("Vector index creation warning for facts:", error.message);
+      }
+    }
     await collections.users.ensureIndex({
       type: "persistent",
       fields: ["username"],
@@ -325,6 +344,24 @@ export async function init() {
       fields: ["type"],
       name: "idx_relation_type",
     });
+    // Vector index for relations embeddings
+    try {
+      await collections.relations.ensureIndex({
+        type: "vector",
+        fields: ["embedding"],
+        name: "idx_relation_embedding_vector",
+        params: {
+          metric: "cosine",
+          dimension: 1536,
+          nLists: 100,
+        },
+      } as any);
+      console.log("Vector index for relations created");
+    } catch (error: any) {
+      if (error.errorNum !== 1710) {
+        console.warn("Vector index creation warning for relations:", error.message);
+      }
+    }
     await collections.worker_logs.ensureIndex({
       type: "persistent",
       fields: ["worker_name"],
@@ -340,6 +377,24 @@ export async function init() {
       fields: ["created_at"],
       name: "idx_worker_log_created_at",
     });
+    // Vector index for knowledge_cards embeddings
+    try {
+      await collections.knowledge_cards.ensureIndex({
+        type: "vector",
+        fields: ["embedding"],
+        name: "idx_knowledge_card_embedding_vector",
+        params: {
+          metric: "cosine",
+          dimension: 1536,
+          nLists: 100,
+        },
+      } as any);
+      console.log("Vector index for knowledge_cards created");
+    } catch (error: any) {
+      if (error.errorNum !== 1710) {
+        console.warn("Vector index creation warning for knowledge_cards:", error.message);
+      }
+    }
   } catch (error: any) {
     console.warn("Index creation warning:", error.message);
   }

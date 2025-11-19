@@ -1,7 +1,5 @@
-import {
-  extractFactsAndRelationsFromFile,
-} from "./extract-facts";
-import { File, Fact, Relation } from "@knowledgeplane/db";
+import { extractFactsAndRelationsFromFile } from "./extract-facts";
+import { File, Fact, FactRelation } from "@knowledgeplane/db";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { randomUUID } from "crypto";
@@ -115,13 +113,11 @@ export async function processFileUpload(
     const fromFact = createdFacts.find(
       (f) => f.content === relation.from_content,
     );
-    const toFact = createdFacts.find(
-      (f) => f.content === relation.to_content,
-    );
+    const toFact = createdFacts.find((f) => f.content === relation.to_content);
 
     if (fromFact && toFact) {
       try {
-        const rel = await Relation.create({
+        const rel = await FactRelation.create({
           from_fact: fromFact.id,
           to_fact: toFact.id,
           type: relation.type,
@@ -177,4 +173,3 @@ export async function processFileUpload(
     })),
   };
 }
-

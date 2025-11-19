@@ -1,4 +1,4 @@
-import { Fact, Card, Relation, WorkerLog } from "@knowledgeplane/db";
+import { Fact, KnowledgeCard, FactRelation, WorkerLog } from "@knowledgeplane/db";
 import {
   createAIModelClient,
   type ChatMessage,
@@ -57,47 +57,47 @@ export class CardConsolidator {
     let error: string | undefined;
 
     try {
-      // Get facts that haven't been consolidated into cards
-      const facts = await this.getUnconsolidatedFacts();
+    // Get facts that haven't been consolidated into knowledge cards
+    const facts = await this.getUnconsolidatedFacts();
 
-      if (facts.length === 0) {
-        await WorkerLog.create({
-          worker_name: "card-consolidator",
-          task_type: "consolidation",
-          status: "success",
-          message: "No unconsolidated facts found",
-          execution_time_ms: Date.now() - startTime,
-          items_processed: 0,
-          items_created: 0,
-        });
-        return;
-      }
-
-      factsProcessed = facts.length;
-      console.log(`Processing ${facts.length} unconsolidated facts`);
-
-      // Group facts by related clusters
-      const factClusters = await this.groupRelatedFacts(facts);
-
-      for (const cluster of factClusters) {
-        const card = await this.consolidateCluster(cluster);
-        if (card) {
-          cardsCreated++;
-        }
-      }
-
-      const executionTime = Date.now() - startTime;
+    if (facts.length === 0) {
       await WorkerLog.create({
         worker_name: "card-consolidator",
         task_type: "consolidation",
         status: "success",
-        message: `Consolidated ${factsProcessed} facts into ${cardsCreated} cards`,
-        execution_time_ms: executionTime,
-        items_processed: factsProcessed,
-        items_created: cardsCreated,
+        message: "No unconsolidated facts found",
+        execution_time_ms: Date.now() - startTime,
+        items_processed: 0,
+        items_created: 0,
       });
+      return;
+    }
 
-      console.log(`Created ${cardsCreated} cards from ${factsProcessed} facts`);
+    factsProcessed = facts.length;
+    console.log(`Processing ${facts.length} unconsolidated facts`);
+
+    // Group facts by related clusters using graph traversal
+    const factClusters = await this.groupRelatedFacts(facts);
+
+    for (const cluster of factClusters) {
+      const knowledgeCard = await this.consolidateCluster(cluster);
+      if (knowledgeCard) {
+        cardsCreated++;
+      }
+    }
+
+    const executionTime = Date.now() - startTime;
+    await WorkerLog.create({
+      worker_name: "card-consolidator",
+      task_type: "consolidation",
+      status: "success",
+      message: `Consolidated ${factsProcessed} facts into ${cardsCreated} knowledge cards`,
+      execution_time_ms: executionTime,
+      items_processed: factsProcessed,
+      items_created: cardsCreated,
+    });
+
+    console.log(`Created ${cardsCreated} knowledge cards from ${factsProcessed} facts`);
     } catch (err: any) {
       error = err.message || String(err);
       const executionTime = Date.now() - startTime;
@@ -118,12 +118,12 @@ export class CardConsolidator {
   }
 
   private async getUnconsolidatedFacts(): Promise<any[]> {
-    // Get facts that are not in any card's fact_ids
+    // Get facts that are not in any knowledge card's fact_ids
     const aql = `
       FOR fact IN facts
         FILTER fact.trashed == false
         LET inCard = (
-          FOR card IN cards
+          FOR card IN knowledge_cards
             FILTER fact._id IN card.fact_ids
             LIMIT 1
             RETURN true
@@ -174,8 +174,8 @@ export class CardConsolidator {
       facts,
     );
 
-    // Create card
-    const card = await Card.create({
+    // Create knowledge card
+    const knowledgeCard = await KnowledgeCard.create({
       title: consolidation.title,
       summary: consolidation.summary,
       content: consolidation.content,
@@ -184,19 +184,19 @@ export class CardConsolidator {
       last_updated_by: "system",
     });
 
-    console.log(`Created card: ${card.id}`);
-    return card;
+    console.log(`Created knowledge card: ${knowledgeCard.id}`);
+    return knowledgeCard;
   }
 
   private async getRelatedFacts(seedFacts: any[]): Promise<any[]> {
-    // Use graph traversal to find related facts
+    // Use graph traversal to find related facts via FactRelations
     const factIds = seedFacts.map((f) => f._id || f.id);
     const allRelated: Set<string> = new Set(factIds);
 
     for (const fact of seedFacts) {
       const factId = fact._id || fact.id;
-      const outgoing = await Relation.getRelatedFacts(factId);
-      const incoming = await Relation.getIncomingRelations(factId);
+      const outgoing = await FactRelation.getRelatedFacts(factId);
+      const incoming = await FactRelation.getIncomingRelations(factId);
 
       for (const rel of outgoing) {
         allRelated.add(rel.fact._id || rel.fact.id);
@@ -222,26 +222,27 @@ export class CardConsolidator {
     factContents: string,
     facts: any[],
   ): Promise<{ title: string; summary: string; content: string }> {
-    const systemPrompt = `You are a knowledge consolidation agent. Your task is to analyze a collection of related facts and create a comprehensive, well-organized summary card.
+    const systemPrompt = `You are a knowledge consolidation agent. Your task is to analyze a collection of related facts and their relationships (from a knowledge graph) and create a comprehensive, well-organized knowledge card.
 
-Create a card with:
+Create a knowledge card with:
 1. A clear, descriptive title (max 100 characters)
 2. A concise summary (2-3 sentences, max 200 characters)
 3. A comprehensive content section that organizes and synthesizes the information
 
 The content should:
 - Group related information logically
-- Highlight key relationships and connections
+- Highlight key relationships and connections between facts
 - Remove redundancy while preserving important details
-- Be well-structured and easy to read`;
+- Be well-structured and easy to read
+- Reflect the graph structure and relationships between facts`;
 
-    const userPrompt = `Please consolidate the following facts into a card:
+    const userPrompt = `Please consolidate the following facts (and their relationships) into a knowledge card:
 
 ${factContents}
 
-Provide your response as JSON with the following structure:
+Consider the relationships between these facts when consolidating. Provide your response as JSON with the following structure:
 {
-  "title": "Card title",
+  "title": "Knowledge card title",
   "summary": "Brief summary",
   "content": "Full consolidated content"
 }`;

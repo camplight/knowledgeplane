@@ -15,5 +15,4 @@ export interface Fact {
   updated_at: string;
   created_by: UserID;
   last_updated_by: UserID;
-  knowledge_context: string;
 }

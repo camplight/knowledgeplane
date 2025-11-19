@@ -1,5 +1,7 @@
 import { collections } from "../db";
 import { triggerWebhook } from "../lib/webhook-trigger";
+import { generateQueryEmbedding } from "../lib/vector-search";
+import type { AIModelProvider } from "@knowledgeplane/aimodel";
 
 export interface FactInput {
   content: string;
@@ -19,6 +21,8 @@ export interface FactRecord {
   created_by: string;
   last_updated_by: string;
   trashed: boolean;
+  embedding?: number[]; // Vector embedding for semantic search
+  embedding_model?: string; // Model used to generate embedding
 }
 
 export interface FactSearchResult extends FactRecord {
@@ -30,6 +34,8 @@ export interface FactSearchParams {
   k?: number;
   offset?: number;
   include_trashed?: boolean;
+  use_vector_search?: boolean; // If true, use vector search; if false, use full-text; if undefined, use hybrid
+  embeddingProvider?: AIModelProvider; // Optional provider for generating query embeddings
 }
 
 export interface FactUpdateInput {
@@ -107,7 +113,7 @@ export class Fact {
       updates.metadata = input.metadata;
     }
 
-    const key = this._extractKey(input.id);
+    const key = this.extractKey(input.id);
     const result = await collections.facts.update(key, updates, {
       returnNew: true,
     });
@@ -127,7 +133,7 @@ export class Fact {
   }
 
   static async trash(id: string, last_updated_by: string): Promise<FactRecord> {
-    const key = this._extractKey(id);
+    const key = this.extractKey(id);
     const result = await collections.facts.update(
       key,
       {
@@ -156,7 +162,28 @@ export class Fact {
     const limit = params.k || 5;
     const offset = params.offset || 0;
     const includeTrashed = params.include_trashed || false;
+    const useVectorSearch = params.use_vector_search;
 
+    const isWildcard = params.query === "*";
+
+    // If vector search is explicitly disabled or query is wildcard, use full-text only
+    if (useVectorSearch === false || isWildcard) {
+      return this._fullTextSearch(params);
+    }
+
+    // If vector search is explicitly enabled, use vector search only
+    if (useVectorSearch === true) {
+      return this._vectorSearch(params);
+    }
+
+    // Otherwise, use hybrid search (default)
+    return this._hybridSearch(params);
+  }
+
+  private static async _fullTextSearch(params: FactSearchParams): Promise<FactSearchResult[]> {
+    const limit = params.k || 5;
+    const offset = params.offset || 0;
+    const includeTrashed = params.include_trashed || false;
     const isWildcard = params.query === "*";
 
     let aql: string;
@@ -192,6 +219,115 @@ export class Fact {
       ...this._normalizeRecord(r.fact),
       score: r.score || 1.0,
     }));
+  }
+
+  private static async _vectorSearch(params: FactSearchParams): Promise<FactSearchResult[]> {
+    const limit = params.k || 5;
+    const offset = params.offset || 0;
+    const includeTrashed = params.include_trashed || false;
+    const provider = params.embeddingProvider;
+
+    if (!provider) {
+      console.warn("Vector search requires embedding provider. Falling back to full-text search.");
+      return this._fullTextSearch(params);
+    }
+
+    try {
+      // Generate embedding for the query
+      const queryEmbedding = await generateQueryEmbedding(params.query, provider);
+      
+      // Use ArangoDB's APPROX_NEAR_COSINE for vector search
+      const aql = `
+        FOR fact IN facts
+          FILTER fact.embedding != null
+          FILTER (fact.trashed == false || @includeTrashed == true)
+          LET score = APPROX_NEAR_COSINE(fact.embedding, @queryEmbedding)
+          SORT score DESC
+          LIMIT @offset, @limit
+          RETURN { fact: fact, score: score }
+      `;
+
+      const bindVars: any = {
+        queryEmbedding,
+        limit,
+        offset,
+        includeTrashed,
+      };
+
+      const cursor = await collections.facts.database.query(aql, bindVars);
+      const results = await cursor.all();
+
+      return results.map((r: any) => ({
+        ...this._normalizeRecord(r.fact),
+        score: r.score || 0,
+      }));
+    } catch (error: any) {
+      console.error("Vector search error:", error.message);
+      // Fall back to full-text search on error
+      return this._fullTextSearch(params);
+    }
+  }
+
+  private static async _hybridSearch(params: FactSearchParams): Promise<FactSearchResult[]> {
+    const limit = params.k || 5;
+    const provider = params.embeddingProvider;
+
+    // If no provider, use full-text only
+    if (!provider) {
+      return this._fullTextSearch(params);
+    }
+
+    try {
+      // Get results from both full-text and vector search
+      const [fullTextResults, vectorResults] = await Promise.all([
+        this._fullTextSearch({ ...params, k: limit * 2 }), // Get more results to merge
+        this._vectorSearch({ ...params, k: limit * 2 }),
+      ]);
+
+      // Create a map to deduplicate and combine scores
+      const resultMap = new Map<string, { fact: FactRecord; scores: number[] }>();
+
+      // Add full-text results (normalize score to 0-1 range)
+      for (const result of fullTextResults) {
+        const normalizedScore = Math.min(result.score / 10, 1); // Normalize BM25 score
+        resultMap.set(result.id, {
+          fact: result,
+          scores: [normalizedScore],
+        });
+      }
+
+      // Add vector results (already normalized 0-1)
+      for (const result of vectorResults) {
+        const existing = resultMap.get(result.id);
+        if (existing) {
+          existing.scores.push(result.score);
+        } else {
+          resultMap.set(result.id, {
+            fact: result,
+            scores: [result.score],
+          });
+        }
+      }
+
+      // Combine scores: average of both scores, weighted equally
+      const combinedResults: FactSearchResult[] = Array.from(resultMap.values()).map((item) => {
+        const avgScore = item.scores.reduce((sum, s) => sum + s, 0) / item.scores.length;
+        return {
+          ...item.fact,
+          score: avgScore,
+        };
+      });
+
+      // Sort by combined score and limit
+      combinedResults.sort((a, b) => b.score - a.score);
+      
+      const offset = params.offset || 0;
+      return combinedResults.slice(offset, offset + limit);
+    } catch (error: any) {
+      console.error("Hybrid search error:", error.message);
+      // Fall back to full-text search on error
+      return this._fullTextSearch(params);
+    }
   }
 
   static async list(
@@ -237,7 +373,7 @@ export class Fact {
 
 
   static async findById(id: string): Promise<FactRecord | null> {
-    const key = this._extractKey(id);
+    const key = this.extractKey(id);
     try {
       const doc = await collections.facts.document(key);
       return this._normalizeRecord(doc);
@@ -256,7 +392,7 @@ export class Fact {
   }
 
   // Helper methods
-  static _extractKey(id: string): string {
+  static extractKey(id: string): string {
     // Handle both _key format and _id format
     if (id.includes("/")) {
       return id.split("/")[1];
@@ -276,6 +412,8 @@ export class Fact {
       created_by: doc.created_by,
       last_updated_by: doc.last_updated_by,
       trashed: doc.trashed || false,
+      embedding: doc.embedding,
+      embedding_model: doc.embedding_model,
     };
   }
 }
