@@ -29,7 +29,7 @@ Relations – facts can be linked together with typed relationships (references,
 
 AQL queries – support for ArangoDB Query Language (AQL) for advanced graph queries and traversals.
 
-KnowledgeCard consolidation – background worker automatically consolidates related facts and their FactRelations into summary knowledge cards using OpenAI agents. The worker uses graph traversal to find related facts via FactRelations.
+KnowledgeCard consolidation – background worker automatically creates FactRelations between unconsolidated facts using AI analysis, then consolidates related facts and their FactRelations into summary knowledge cards using OpenAI agents. The worker uses graph traversal to find related facts via FactRelations.
 
 
 Webhooks – register webhooks to receive notifications on fact/card events.
@@ -100,7 +100,7 @@ ArangoDB (graph database with full-text search)
 - `last_updated_by` (required): User ID of the person updating the fact
 
 **workers.trigger Parameters:**
-- `worker` (required): The name of the worker to trigger ("card-consolidator")
+- `worker` (required): The name of the worker to trigger ("card-consolidator" or "embeddings-generator")
 
 **facts.trash Parameters:**
 - `id` (required): The ID of the fact to trash
@@ -289,6 +289,14 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `accepted_at` (string): Acceptance timestamp (ISO 8601, only set when status is "accepted")
 - `created_at` (string): Creation timestamp (ISO 8601)
 
+**WorkerTrigger Collection:**
+- `_id` (ArangoDB document ID): Primary key
+- `_key` (string): Document key
+- `worker_name` (string): Name of the worker to trigger ("card-consolidator" or "embeddings-generator")
+- `triggered_at` (string): Timestamp when the trigger was requested (ISO 8601)
+- `status` (string): Trigger status - "pending", "processing", or "completed"
+- `created_at` (string): Creation timestamp (ISO 8601)
+
 🔐 OAuth Authentication
 
 KnowledgePlane supports OAuth2 authentication with Google (Gmail) and GitHub, and implements OAuth 2.1 compliant authorization server for MCP clients.
@@ -343,8 +351,9 @@ The web interface is built with React and Tailwind CSS, featuring:
 - Responsive login pages for OAuth authentication
 - User dashboard (`/dashboard`) with:
   - User profile information display
-  - Facts overview with statistics (total facts, active facts)
+  - Statistics overview (total facts, knowledge cards, active facts, categories)
   - Facts list with pagination and metadata display
+  - Knowledge cards list with pagination, showing title, summary, fact count, and last updated date
   - Logout functionality
   - Automatic redirect to landing page for unauthenticated users
 - User profile page (`/profile`) with:
@@ -353,6 +362,13 @@ The web interface is built with React and Tailwind CSS, featuring:
   - API key management (view, generate, regenerate, and remove API keys)
   - Secure API key display with show/hide functionality
   - Copy-to-clipboard functionality for API keys
+- Knowledge base editor page (`/editor`) with:
+  - Tabbed interface for switching between Facts, Cards, and Knowledge Graph views
+  - Facts view with list display, fact creation, and fact relation management
+  - Cards view with knowledge cards list display and detailed card information sidebar
+  - Card details sidebar showing title, summary, full content, fact count, timestamps, and metadata
+  - Fact details sidebar with relations management (create and view outgoing/incoming relations)
+  - Search functionality for facts
 - Facts browsing page (`/facts`) with pagination, filtering, and detailed fact display
 - Users and invitations management page (`/users`) with:
   - User listing with invitation status (pending, accepted, none)
@@ -872,9 +888,11 @@ KnowledgePlane includes background workers that automatically maintain and organ
 **Card Consolidator:**
 - Runs every 5 minutes
 - Identifies unconsolidated facts
-- Uses graph traversal to find related facts
+- Creates FactRelations between related facts using AI analysis (processes facts in batches of 20)
+- Uses graph traversal to find related facts via the created FactRelations
 - Leverages OpenAI GPT-4 to create consolidated summary cards
 - Creates cards with title, summary, and comprehensive content
+- Can be manually triggered via the worker logs page or tRPC API
 
 **Embeddings Generator:**
 - Runs every 10 minutes
@@ -883,6 +901,20 @@ KnowledgePlane includes background workers that automatically maintain and organ
 - Processes items in batches for efficiency
 - Updates embeddings when model changes or embeddings are missing
 - Stores embeddings directly in ArangoDB documents
+- Can be manually triggered via the worker logs page or tRPC API
+
+**Manual Worker Triggering:**
+Workers can be manually triggered through:
+- **Web UI**: Navigate to `/worker-logs` page and click the "Trigger Card Consolidator" or "Trigger Embeddings Generator" buttons
+- **tRPC API**: Call `workerLogs.trigger` mutation with `worker` parameter ("card-consolidator" or "embeddings-generator")
+- **Trigger Mechanism**: 
+  - Creates a trigger record in the `worker_triggers` collection with status "pending"
+  - Workers check for pending triggers every 30 seconds
+  - When a trigger is found, the worker immediately processes it (if not already running)
+  - Trigger status is updated to "processing" → "completed" (or "failed" on error)
+  - Workers skip triggers if already running, but will process them on the next check after completion
+- **Logging**: Manual triggers create a log entry with status "running" to track the trigger request
+- **Response Time**: Triggers are typically processed within 30 seconds (next trigger check interval)
 
 **Vector Search:**
 - Uses ArangoDB's native vector search with FAISS integration (see [ArangoDB Vector Search Guide](https://arango.ai/blog/vector-search-in-arangodb-practical-insights-and-hands-on-examples/))
@@ -1057,6 +1089,8 @@ Navigate to `/upload` in the web application (requires authentication).
 - ✅ Users and invitations management page for viewing all users and managing invitations
 - ✅ tRPC routes for listing facts and users
 - ✅ tRPC routes for user profile management (update profile, generate/remove API keys)
+- ✅ tRPC routes for listing knowledge cards
+- ✅ Dashboard display of knowledge cards with pagination
 - ✅ AI Chat interface with OpenAI integration and MCP server connection
 - ✅ File upload with AI-powered fact and relation extraction
 - ✅ ArangoDB graph database with relations support
@@ -1070,7 +1104,10 @@ Navigate to `/upload` in the web application (requires authentication).
 - ✅ Automatic query embedding generation for semantic search
 - ✅ Webhook support
 - ✅ REST API endpoints
-- ✅ Knowledge base editor page
+- ✅ Knowledge base editor page with facts, cards, and graph views
+- ✅ Card viewing and details in editor
+- ✅ Worker logs page with manual worker triggering functionality
+- ✅ tRPC route for triggering workers (`workerLogs.trigger`)
 
 **Planned Features:**
 - 🔲 Advanced graph visualization in editor

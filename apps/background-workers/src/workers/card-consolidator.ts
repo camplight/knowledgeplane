@@ -1,4 +1,10 @@
-import { Fact, KnowledgeCard, FactRelation, WorkerLog } from "@knowledgeplane/db";
+import {
+  Fact,
+  KnowledgeCard,
+  FactRelation,
+  WorkerLog,
+  collections,
+} from "@knowledgeplane/db";
 import {
   createAIModelClient,
   type ChatMessage,
@@ -8,6 +14,7 @@ import {
 export class CardConsolidator {
   private aiClient: ReturnType<typeof createAIModelClient>;
   private interval: NodeJS.Timeout | null = null;
+  private triggerCheckInterval: NodeJS.Timeout | null = null;
   private running = false;
 
   constructor() {
@@ -24,15 +31,30 @@ export class CardConsolidator {
   start() {
     console.log("Card consolidator started");
     // Run every 5 minutes
-    this.interval = setInterval(() => {
-      this.process().catch((error) => {
-        console.error("Error in card consolidation:", error);
+    this.interval = setInterval(
+      () => {
+        this.process().catch((error) => {
+          console.error("Error in card consolidation:", error);
+        });
+      },
+      5 * 60 * 1000,
+    );
+
+    // Check for manual triggers every 30 seconds
+    this.triggerCheckInterval = setInterval(() => {
+      this.checkAndProcessTrigger().catch((error) => {
+        console.error("Error checking for triggers:", error);
       });
-    }, 5 * 60 * 1000);
+    }, 30 * 1000);
 
     // Run immediately on start
     this.process().catch((error) => {
       console.error("Error in initial card consolidation:", error);
+    });
+
+    // Check for triggers immediately on start
+    this.checkAndProcessTrigger().catch((error) => {
+      console.error("Error checking for initial triggers:", error);
     });
   }
 
@@ -41,8 +63,89 @@ export class CardConsolidator {
       clearInterval(this.interval);
       this.interval = null;
     }
+    if (this.triggerCheckInterval) {
+      clearInterval(this.triggerCheckInterval);
+      this.triggerCheckInterval = null;
+    }
     this.running = false;
     console.log("Card consolidator stopped");
+  }
+
+  private async checkAndProcessTrigger() {
+    // Skip if worker is already running - will check again on next interval
+    if (this.running) {
+      return;
+    }
+
+    try {
+      // Check for pending triggers for this worker
+      const aql = `
+        FOR trigger IN worker_triggers
+          FILTER trigger.worker_name == "card-consolidator"
+          FILTER trigger.status == "pending"
+          SORT trigger.created_at ASC
+          LIMIT 1
+          RETURN trigger
+      `;
+
+      const cursor = await collections.worker_triggers.database.query(aql);
+      const triggers = await cursor.all();
+
+      if (triggers.length === 0) {
+        return; // No pending triggers
+      }
+
+      const trigger = triggers[0];
+      const triggerId = trigger._id || `worker_triggers/${trigger._key}`;
+      const triggerKey = trigger._key;
+
+      console.log(
+        `Manual trigger detected for card-consolidator (trigger ID: ${triggerId})`,
+      );
+
+      // Mark trigger as processing
+      await collections.worker_triggers.update(triggerKey, {
+        status: "processing",
+        updated_at: new Date().toISOString(),
+      });
+
+      // Process the worker
+      await this.process();
+
+      // Mark trigger as completed
+      await collections.worker_triggers.update(triggerKey, {
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      console.log(`Trigger ${triggerId} completed successfully`);
+    } catch (error: any) {
+      console.error("Error processing trigger:", error);
+      // Try to mark trigger as failed if we can find it
+      try {
+        const aql = `
+          FOR trigger IN worker_triggers
+            FILTER trigger.worker_name == "card-consolidator"
+            FILTER trigger.status == "processing"
+            SORT trigger.created_at DESC
+            LIMIT 1
+            RETURN trigger
+        `;
+        const cursor = await collections.worker_triggers.database.query(aql);
+        const triggers = await cursor.all();
+        if (triggers.length > 0) {
+          const trigger = triggers[0];
+          await collections.worker_triggers.update(trigger._key, {
+            status: "failed",
+            error: error.message || String(error),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      } catch (updateError) {
+        console.error("Failed to update trigger status:", updateError);
+      }
+    }
   }
 
   private async process() {
@@ -54,50 +157,58 @@ export class CardConsolidator {
     this.running = true;
     let cardsCreated = 0;
     let factsProcessed = 0;
+    let relationsCreated = 0;
     let error: string | undefined;
 
     try {
-    // Get facts that haven't been consolidated into knowledge cards
-    const facts = await this.getUnconsolidatedFacts();
+      // Get facts that haven't been consolidated into knowledge cards
+      const facts = await this.getUnconsolidatedFacts();
 
-    if (facts.length === 0) {
+      if (facts.length === 0) {
+        await WorkerLog.create({
+          worker_name: "card-consolidator",
+          task_type: "consolidation",
+          status: "success",
+          message: "No unconsolidated facts found",
+          execution_time_ms: Date.now() - startTime,
+          items_processed: 0,
+          items_created: 0,
+        });
+        return;
+      }
+
+      factsProcessed = facts.length;
+      console.log(`Processing ${facts.length} unconsolidated facts`);
+
+      // Create fact relations before grouping
+      console.log("Creating fact relations...");
+      relationsCreated = await this.createFactRelations(facts);
+      console.log(`Created ${relationsCreated} fact relations`);
+
+      // Group facts by related clusters using graph traversal
+      const factClusters = await this.groupRelatedFacts(facts);
+
+      for (const cluster of factClusters) {
+        const knowledgeCard = await this.consolidateCluster(cluster);
+        if (knowledgeCard) {
+          cardsCreated++;
+        }
+      }
+
+      const executionTime = Date.now() - startTime;
       await WorkerLog.create({
         worker_name: "card-consolidator",
         task_type: "consolidation",
         status: "success",
-        message: "No unconsolidated facts found",
-        execution_time_ms: Date.now() - startTime,
-        items_processed: 0,
-        items_created: 0,
+        message: `Created ${relationsCreated} relations and consolidated ${factsProcessed} facts into ${cardsCreated} knowledge cards`,
+        execution_time_ms: executionTime,
+        items_processed: factsProcessed,
+        items_created: cardsCreated,
       });
-      return;
-    }
 
-    factsProcessed = facts.length;
-    console.log(`Processing ${facts.length} unconsolidated facts`);
-
-    // Group facts by related clusters using graph traversal
-    const factClusters = await this.groupRelatedFacts(facts);
-
-    for (const cluster of factClusters) {
-      const knowledgeCard = await this.consolidateCluster(cluster);
-      if (knowledgeCard) {
-        cardsCreated++;
-      }
-    }
-
-    const executionTime = Date.now() - startTime;
-    await WorkerLog.create({
-      worker_name: "card-consolidator",
-      task_type: "consolidation",
-      status: "success",
-      message: `Consolidated ${factsProcessed} facts into ${cardsCreated} knowledge cards`,
-      execution_time_ms: executionTime,
-      items_processed: factsProcessed,
-      items_created: cardsCreated,
-    });
-
-    console.log(`Created ${cardsCreated} knowledge cards from ${factsProcessed} facts`);
+      console.log(
+        `Created ${relationsCreated} relations and ${cardsCreated} knowledge cards from ${factsProcessed} facts`,
+      );
     } catch (err: any) {
       error = err.message || String(err);
       const executionTime = Date.now() - startTime;
@@ -136,6 +247,138 @@ export class CardConsolidator {
     return await Fact.queryAQL(aql);
   }
 
+  private async createFactRelations(facts: any[]): Promise<number> {
+    if (facts.length < 2) {
+      return 0; // Need at least 2 facts to create relations
+    }
+
+    let relationsCreated = 0;
+    const batchSize = 20; // Process facts in batches to avoid overwhelming the AI
+
+    // Process facts in batches
+    for (let i = 0; i < facts.length; i += batchSize) {
+      const batch = facts.slice(i, Math.min(i + batchSize, facts.length));
+
+      try {
+        const relations = await this.identifyRelationsWithAI(batch);
+
+        // Create relations that don't already exist
+        for (const relation of relations) {
+          const fromFact = batch.find(
+            (f) => f.content === relation.from_content,
+          );
+          const toFact = batch.find((f) => f.content === relation.to_content);
+
+          if (!fromFact || !toFact) {
+            continue; // Skip if facts not found in batch
+          }
+
+          const fromFactId = fromFact._id || fromFact.id;
+          const toFactId = toFact._id || toFact.id;
+
+          // Check if relation already exists
+          const existingRelations = await FactRelation.query({
+            from_fact: fromFactId,
+            to_fact: toFactId,
+            type: relation.type,
+          });
+
+          if (existingRelations.length === 0) {
+            try {
+              await FactRelation.create({
+                from_fact: fromFactId,
+                to_fact: toFactId,
+                type: relation.type,
+                metadata: {
+                  ...relation.metadata,
+                  source: "card-consolidator",
+                  created_at: new Date().toISOString(),
+                },
+                created_by: "system",
+              });
+              relationsCreated++;
+            } catch (error: any) {
+              // Relation might already exist or there's a constraint issue, skip
+              console.warn(
+                `Failed to create relation between ${fromFactId} and ${toFactId}:`,
+                error.message,
+              );
+            }
+          }
+        }
+      } catch (error: any) {
+        console.error(
+          `Error creating relations for batch ${i}-${Math.min(i + batchSize, facts.length)}:`,
+          error.message,
+        );
+        // Continue with next batch
+      }
+    }
+
+    return relationsCreated;
+  }
+
+  private async identifyRelationsWithAI(facts: any[]): Promise<
+    Array<{
+      from_content: string;
+      to_content: string;
+      type: string;
+      metadata?: Record<string, any>;
+    }>
+  > {
+    const systemPrompt = `You are a knowledge graph relation identification agent. Your task is to analyze a collection of facts and identify meaningful relationships between them.
+
+For each pair of facts that are related, identify:
+- The type of relationship (e.g., "references", "depends_on", "related_to", "part_of", "causes", "enables", "contradicts", "supports", etc.)
+- Any relevant metadata about the relationship
+
+Only identify relationships that are meaningful and useful. Don't create relations for every possible pair - focus on significant connections.
+
+Return your response as JSON with the following structure:
+{
+  "relations": [
+    {
+      "from_content": "Source fact content",
+      "to_content": "Target fact content",
+      "type": "relationship_type",
+      "metadata": {}
+    }
+  ]
+}`;
+
+    const factContents = facts
+      .map((f, idx) => `${idx + 1}. ${f.content}`)
+      .join("\n");
+
+    const userPrompt = `Analyze the following facts and identify meaningful relationships between them:
+
+${factContents}
+
+Identify relationships that would be useful for organizing and understanding these facts. Provide your response as JSON.`;
+
+    const provider = this.aiClient.getProvider();
+    const messages: ChatMessage[] = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ];
+
+    const chatOptions: ChatCompletionOptions = {
+      model:
+        process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || "gpt-4o",
+      temperature: 0.5,
+      responseFormat: "json_object",
+    };
+
+    const response = await provider.chatCompletion(messages, chatOptions);
+
+    if (!response.content) {
+      throw new Error("No response from AI model");
+    }
+
+    const parsed = JSON.parse(response.content);
+    return parsed.relations || [];
+  }
+
   private async groupRelatedFacts(facts: any[]): Promise<any[][]> {
     // Group facts by their relationships
     const clusters: any[][] = [];
@@ -164,15 +407,10 @@ export class CardConsolidator {
     console.log(`Consolidating ${facts.length} related facts`);
 
     // Prepare content for AI
-    const factContents = facts
-      .map((f) => `- ${f.content}`)
-      .join("\n");
+    const factContents = facts.map((f) => `- ${f.content}`).join("\n");
 
     // Use AI agent to consolidate
-    const consolidation = await this.consolidateWithAI(
-      factContents,
-      facts,
-    );
+    const consolidation = await this.consolidateWithAI(factContents, facts);
 
     // Create knowledge card
     const knowledgeCard = await KnowledgeCard.create({
@@ -254,7 +492,8 @@ Consider the relationships between these facts when consolidating. Provide your 
     ];
 
     const chatOptions: ChatCompletionOptions = {
-      model: process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || "gpt-4o",
+      model:
+        process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || "gpt-4o",
       temperature: 0.7,
       responseFormat: "json_object",
     };
