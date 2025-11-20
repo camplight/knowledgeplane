@@ -401,11 +401,14 @@ export class Fact {
   }
 
   static _normalizeRecord(doc: any): FactRecord {
+    if (!doc) {
+      throw new Error('Cannot normalize null or undefined fact document');
+    }
     return {
       id: doc._id || `facts/${doc._key}`,
       _key: doc._key,
       _id: doc._id,
-      content: doc.content,
+      content: doc.content || '', // Ensure content is never undefined
       metadata: doc.metadata || {},
       created_at: doc.created_at,
       updated_at: doc.updated_at,

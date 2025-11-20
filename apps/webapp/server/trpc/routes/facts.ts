@@ -74,5 +74,38 @@ export const factsRouter = router({
       });
       return { fact };
     }),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+        content: z.string().min(1).optional(),
+        metadata: z.record(z.string()).optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      if (!ctx.user) {
+        throw new Error("User not authenticated");
+      }
+      const fact = await Fact.update({
+        id: input.id,
+        content: input.content,
+        metadata: input.metadata,
+        last_updated_by: ctx.user.userId,
+      });
+      return { fact };
+    }),
+  getById: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+      }),
+    )
+    .query(async ({ input }) => {
+      const fact = await Fact.findById(input.id);
+      if (!fact) {
+        throw new Error("Fact not found");
+      }
+      return { fact };
+    }),
 });
 

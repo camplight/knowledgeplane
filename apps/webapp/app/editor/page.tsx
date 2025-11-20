@@ -4,6 +4,8 @@ import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Navigation } from "../components/Navigation";
+import { FactEditForm } from "./components/FactEditForm";
+import { RelationItem } from "./components/RelationItem";
 
 export default function EditorPage() {
   const router = useRouter();
@@ -16,11 +18,18 @@ export default function EditorPage() {
   const [showCreateFact, setShowCreateFact] = useState(false);
   const [factContent, setFactContent] = useState("");
 
+  // Edit fact form state
+  const [editingFactId, setEditingFactId] = useState<string | null>(null);
+
   // Fact relation form state
   const [showCreateRelation, setShowCreateRelation] = useState(false);
   const [relationFromFact, setRelationFromFact] = useState("");
   const [relationToFact, setRelationToFact] = useState("");
   const [relationType, setRelationType] = useState("related_to");
+
+  // Edit relation state - use a map to track editing state per relation
+  // Format: { relationId: { type: string, factId: string } }
+  const [editingRelations, setEditingRelations] = useState<Record<string, { type: string; factId: string }>>({});
 
   // Update relationFromFact when selectedFact changes
   useEffect(() => {
@@ -28,6 +37,17 @@ export default function EditorPage() {
       setRelationFromFact(selectedFact);
     }
   }, [selectedFact]);
+
+  // Cancel editing when selected fact changes
+  useEffect(() => {
+    if (selectedFact && editingFactId && editingFactId !== selectedFact) {
+      setEditingFactId(null);
+    }
+    if (!selectedFact) {
+      setEditingFactId(null);
+      setEditingRelations({});
+    }
+  }, [selectedFact, editingFactId]);
 
   const { data: userData, isLoading: userLoading } = trpc.auth.me.useQuery();
   
@@ -77,11 +97,62 @@ export default function EditorPage() {
   // Create fact relation mutation
   const createFactRelationMutation = trpc.factRelations.create.useMutation({
     onSuccess: () => {
-      setRelationFromFact("");
+      setRelationFromFact(selectedFact || "");
       setRelationToFact("");
       setRelationType("related_to");
       setShowCreateRelation(false);
+      // Clear any editing states
+      setEditingRelations({});
       refetchFactRelations();
+      refetchFacts(); // Refresh facts list in case new facts were created
+    },
+    onError: (error) => {
+      console.error("Failed to create relation:", error);
+      alert(`Failed to create relation: ${error.message}`);
+    },
+  });
+
+  // Update fact mutation
+  const updateFactMutation = trpc.facts.update.useMutation({
+    onSuccess: () => {
+      setEditingFactId(null);
+      refetchFacts();
+      refetchFactRelations();
+    },
+  });
+
+  // Update relation mutation
+  const updateRelationMutation = trpc.factRelations.update.useMutation({
+    onSuccess: () => {
+      setEditingRelations({});
+      refetchFactRelations();
+    },
+    onError: (error) => {
+      console.error("Failed to update relation:", error);
+      alert(`Failed to update relation: ${error.message}`);
+    },
+  });
+
+  // Delete relation mutation
+  const deleteRelationMutation = trpc.factRelations.delete.useMutation({
+    onSuccess: () => {
+      refetchFactRelations();
+    },
+    onError: (error) => {
+      console.error("Failed to delete relation:", error);
+      alert(`Failed to delete relation: ${error.message}`);
+    },
+  });
+
+  // Delete card mutation
+  const deleteCardMutation = trpc.cards.delete.useMutation({
+    onSuccess: () => {
+      setSelectedCard(null);
+      refetchCards();
+    },
+    onError: (error) => {
+      console.error("Failed to delete card:", error);
+      alert(`Failed to delete card: ${error.message}`);
     },
   });
 
@@ -112,6 +183,163 @@ export default function EditorPage() {
         to_fact: relationToFact,
         type: relationType,
       });
+    }
+  };
+
+  const handleEditFact = (factId: string) => {
+    setEditingFactId(factId);
+  };
+
+  const handleUpdateFact = (factId: string, content: string) => {
+    updateFactMutation.mutate({
+      id: factId,
+      content,
+    });
+  };
+
+  const handleCancelEditFact = () => {
+    setEditingFactId(null);
+  };
+
+  const handleEditRelation = (relationKey: string, currentType: string, currentFactId: string) => {
+    if (!relationKey) {
+      console.error("handleEditRelation: missing relation key", { currentType, currentFactId });
+      alert("Unable to edit this relation because its ID is missing.");
+      return;
+    }
+
+    // Only allow one relation to be edited at a time - clear all others
+    setEditingRelations({
+      [relationKey]: { type: currentType, factId: currentFactId },
+    });
+  };
+
+  const handleUpdateRelation = (relationId: string, type: string, newFactId: string, currentRelation: any, variant: "outgoing" | "incoming") => {
+    // Normalize fact IDs for comparison
+    const normalizeFactId = (id: string) => {
+      if (!id) return "";
+      // Remove any prefixes and get just the key part
+      return id.includes("/") ? id.substring(id.lastIndexOf("/") + 1) : id;
+    };
+    
+    const currentFactId = currentRelation.fact?.id || currentRelation.fact?._id || "";
+    const normalizedCurrentFactId = normalizeFactId(currentFactId);
+    const normalizedNewFactId = normalizeFactId(newFactId);
+    
+    console.log("handleUpdateRelation called:", { 
+      relationId, 
+      type, 
+      newFactId, 
+      normalizedNewFactId,
+      currentFactId,
+      normalizedCurrentFactId,
+      variant 
+    });
+    
+    // Validate relation ID - should not be a fact ID
+    if (!relationId || relationId.trim() === "") {
+      console.error("Missing relation ID");
+      alert("Missing relation ID");
+      return;
+    }
+    
+    // Check if ID looks like a fact ID (facts/...) instead of relation ID
+    if (relationId.startsWith("facts/") && !relationId.startsWith("fact_relations/")) {
+      console.error("Invalid relation ID format - looks like a fact ID:", relationId);
+      alert(`Invalid relation ID format: ${relationId}. This appears to be a fact ID, not a relation ID.`);
+      return;
+    }
+    
+    // If the fact ID changed, we need to delete and recreate the relation
+    // Compare normalized IDs to handle different formats
+    const factIdChanged = normalizedNewFactId !== normalizedCurrentFactId && newFactId !== currentFactId;
+    
+    if (factIdChanged) {
+      console.log("Fact ID changed, deleting and recreating relation");
+      // Delete old relation and create new one
+      deleteRelationMutation.mutate(
+        { id: relationId },
+        {
+          onSuccess: () => {
+            // Determine which fact is the "from" and which is the "to"
+            // For outgoing: selectedFact is "from", newFactId is "to"
+            // For incoming: newFactId is "from", selectedFact is "to"
+            const fromFact = variant === "outgoing" ? selectedFact : newFactId;
+            const toFact = variant === "outgoing" ? newFactId : selectedFact;
+            
+            if (fromFact && toFact && selectedFact) {
+              createFactRelationMutation.mutate({
+                from_fact: fromFact,
+                to_fact: toFact,
+                type,
+              });
+            } else {
+              console.error("Missing fact IDs for relation update", { fromFact, toFact, selectedFact });
+              alert("Missing fact IDs for relation update");
+            }
+          },
+          onError: (error) => {
+            console.error("Failed to delete relation:", error);
+            alert(`Failed to update relation: ${error.message}`);
+          },
+        }
+      );
+    } else {
+      // Just update the type
+      console.log("Updating relation type only", { relationId, type });
+      if (!type || type.trim() === "") {
+        console.error("Cannot update relation: type is empty");
+        alert("Relation type cannot be empty");
+        return;
+      }
+      updateRelationMutation.mutate({
+        id: relationId,
+        type: type.trim(),
+      });
+    }
+  };
+
+  const handleCancelEditRelation = (relationKey: string) => {
+    if (!relationKey) {
+      return;
+    }
+
+    setEditingRelations((prev) => {
+      const next = { ...prev };
+      delete next[relationKey];
+      return next;
+    });
+  };
+
+  const handleDeleteRelation = (relationId: string) => {
+    // Validate relation ID - should not be a fact ID
+    if (!relationId || relationId.trim() === "") {
+      console.error("Missing relation ID");
+      alert("Missing relation ID");
+      return;
+    }
+    
+    // Check if ID looks like a fact ID (facts/...) instead of relation ID
+    if (relationId.startsWith("facts/") && !relationId.startsWith("fact_relations/")) {
+      console.error("Invalid relation ID format - looks like a fact ID:", relationId);
+      alert(`Invalid relation ID format: ${relationId}. This appears to be a fact ID, not a relation ID.`);
+      return;
+    }
+    
+    if (confirm("Are you sure you want to delete this relation?")) {
+      deleteRelationMutation.mutate({ id: relationId });
+    }
+  };
+
+  const handleDeleteCard = (cardId: string) => {
+    if (!cardId || cardId.trim() === "") {
+      console.error("Missing card ID");
+      alert("Missing card ID");
+      return;
+    }
+    
+    if (confirm("Are you sure you want to delete this knowledge card? This action cannot be undone.")) {
+      deleteCardMutation.mutate({ id: cardId });
     }
   };
 
@@ -262,20 +490,28 @@ export default function EditorPage() {
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-200">
-                    {facts.map((fact: any) => (
-                      <div
-                        key={fact.id}
-                        onClick={() => setSelectedFact(fact.id)}
-                        className={`p-6 hover:bg-slate-50 transition-colors cursor-pointer ${
-                          selectedFact === fact.id ? "bg-blue-50 border-l-4 border-blue-600" : ""
-                        }`}
-                      >
-                        <p className="text-slate-900 mb-2 leading-relaxed">{fact.content}</p>
-                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                          <span>{new Date(fact.created_at).toLocaleDateString()}</span>
+                    {facts.map((fact: any) => {
+                      const factIdDisplay = fact.id?.includes("/") 
+                        ? fact.id.substring(fact.id.lastIndexOf("/") + 1)
+                        : fact.id?.substring(0, 8) || "unknown";
+                      return (
+                        <div
+                          key={fact.id}
+                          onClick={() => setSelectedFact(fact.id)}
+                          className={`p-6 hover:bg-slate-50 transition-colors cursor-pointer ${
+                            selectedFact === fact.id ? "bg-blue-50 border-l-4 border-blue-600" : ""
+                          }`}
+                        >
+                          <p className="text-slate-900 mb-2 leading-relaxed">{fact.content}</p>
+                          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                            <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">
+                              ID: {factIdDisplay}
+                            </span>
+                            <span>{new Date(fact.created_at).toLocaleDateString()}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -354,18 +590,40 @@ export default function EditorPage() {
           <div className="lg:col-span-1">
             {selectedFact && (
               <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 sticky top-24 space-y-6">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Fact Details</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-slate-900">Fact Details</h3>
+                      {editingFactId !== selectedFact && (
+                    <button
+                      onClick={() => handleEditFact(selectedFact)}
+                      className="text-xs px-2 py-1 bg-slate-600 text-white rounded hover:bg-slate-700 transition-colors"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Content</p>
-                    <p className="text-slate-900">{facts.find((f: any) => f.id === selectedFact)?.content}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Created</p>
-                    <p className="text-slate-900">
-                      {new Date(facts.find((f: any) => f.id === selectedFact)?.created_at || "").toLocaleString()}
-                    </p>
-                  </div>
+                  {editingFactId === selectedFact ? (
+                    <FactEditForm
+                      factId={selectedFact}
+                      content={facts.find((f: any) => f.id === selectedFact)?.content || ""}
+                      isPending={updateFactMutation.isPending}
+                      onSave={(content) => handleUpdateFact(selectedFact, content)}
+                      onCancel={handleCancelEditFact}
+                    />
+                  ) : (
+                    <>
+                      <div>
+                        <p className="text-sm font-medium text-slate-600 mb-1">Content</p>
+                        <p className="text-slate-900">{facts.find((f: any) => f.id === selectedFact)?.content}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-600 mb-1">Created</p>
+                        <p className="text-slate-900">
+                          {new Date(facts.find((f: any) => f.id === selectedFact)?.created_at || "").toLocaleString()}
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Relations Section */}
@@ -393,7 +651,7 @@ export default function EditorPage() {
                           <option value="">Select fact...</option>
                           {facts.map((f: any) => (
                             <option key={f.id} value={f.id}>
-                              {f.content.substring(0, 50)}...
+                              {f.content ? `${f.content.substring(0, 50)}...` : 'No content'}
                             </option>
                           ))}
                         </select>
@@ -409,7 +667,7 @@ export default function EditorPage() {
                         >
                           <option value="">Select fact...</option>
                           {facts.filter((f: any) => f.id !== relationFromFact).map((f: any) => (
-                            <option key={f.id} value={f.id}>{f.content.substring(0, 50)}...</option>
+                            <option key={f.id} value={f.id}>{f.content ? `${f.content.substring(0, 50)}...` : 'No content'}</option>
                           ))}
                         </select>
                         <p className="text-xs text-slate-500 mt-1">Select the fact this relates to</p>
@@ -445,12 +703,89 @@ export default function EditorPage() {
                         <div>
                           <p className="text-xs font-medium text-slate-600 mb-2">Outgoing Relations</p>
                           <div className="space-y-2">
-                            {factRelationsData.outgoing.map((rel: any) => (
-                              <div key={rel.relation.id} className="text-xs p-2 bg-slate-50 rounded border border-slate-200">
-                                <span className="font-medium text-blue-600">{rel.relation.type}</span>
-                                <p className="text-slate-700 mt-1">{rel.fact.content.substring(0, 60)}...</p>
-                              </div>
-                            ))}
+                            {factRelationsData.outgoing
+                              .filter((rel: any) => {
+                                // Validate that we have a fact and it's a valid fact ID (not a relation ID)
+                                const factId = rel.fact?.id || rel.fact?._id || "";
+                                const isValidFactId = factId && (
+                                  factId.startsWith("facts/") || 
+                                  (!factId.includes("/") && factId.length > 0) ||
+                                  (rel.fact?._id && rel.fact._id.startsWith("facts/"))
+                                );
+                                if (!isValidFactId) {
+                                  console.warn("Invalid fact ID in outgoing relation, skipping:", {
+                                    factId,
+                                    relationId: rel.relation?.id,
+                                    fact: rel.fact
+                                  });
+                                  return false;
+                                }
+                                return rel.fact && factId;
+                              })
+                              .map((rel: any, index: number) => {
+                                const relationDocId =
+                                  rel.relation.id ||
+                                  rel.relation._id ||
+                                  (rel.relation._key ? `fact_relations/${rel.relation._key}` : "");
+                                const relationStateKey = rel.relation._key || relationDocId || `outgoing-${index}`;
+                                const relationRenderKey = `${relationStateKey || "outgoing"}-outgoing-${rel.fact?.id || rel.fact?._id || index}`;
+                                const editingState = relationStateKey ? editingRelations[relationStateKey] : undefined;
+                                const isEditing = editingState !== undefined;
+
+                                if (!relationDocId) {
+                                  console.warn("Relation missing ID (outgoing)", rel.relation);
+                                }
+
+                                // Extract fact ID - ensure it's a valid fact ID
+                                let relatedFactId = rel.fact?.id || rel.fact?._id || "";
+                                // If it's not in the correct format, try to normalize it
+                                if (relatedFactId && !relatedFactId.startsWith("facts/") && rel.fact?._id) {
+                                  relatedFactId = rel.fact._id.startsWith("facts/") ? rel.fact._id : `facts/${rel.fact._key || relatedFactId}`;
+                                }
+
+                                const availableFactsList = facts
+                                  .filter((f: any) => {
+                                    const factId = f.id || f._id;
+                                    return factId !== selectedFact;
+                                  })
+                                  .map((f: any) => ({
+                                    id: f.id || f._id,
+                                    content: f.content || "",
+                                  }));
+
+                                const relatedFactAlreadyPresent = availableFactsList.some(
+                                  (f: any) => (f.id || "").toString() === relatedFactId.toString()
+                                );
+
+                                if (!relatedFactAlreadyPresent && rel.fact && relatedFactId) {
+                                  availableFactsList.push({
+                                    id: relatedFactId,
+                                    content: rel.fact.content || "",
+                                  });
+                                }
+
+                                return (
+                                  <RelationItem
+                                    key={relationRenderKey}
+                                    relation={rel}
+                                    isEditing={isEditing}
+                                    editingType={editingState?.type || rel.relation.type}
+                                    editingFactId={editingState?.factId || relatedFactId}
+                                    isUpdating={updateRelationMutation.isPending || deleteRelationMutation.isPending || createFactRelationMutation.isPending}
+                                    isDeleting={deleteRelationMutation.isPending}
+                                    variant="outgoing"
+                                    onEdit={() => handleEditRelation(relationStateKey, rel.relation.type, relatedFactId)}
+                                    onCancelEdit={() => handleCancelEditRelation(relationStateKey)}
+                                    onSave={(type, factId) => handleUpdateRelation(relationDocId, type, factId, rel, "outgoing")}
+                                    onDelete={() => handleDeleteRelation(relationDocId)}
+                                    onSelectFact={(factId) => {
+                                      setSelectedFact(factId);
+                                      setSelectedView("facts");
+                                    }}
+                                    availableFacts={availableFactsList}
+                                  />
+                                );
+                              })}
                           </div>
                         </div>
                       )}
@@ -458,12 +793,89 @@ export default function EditorPage() {
                         <div>
                           <p className="text-xs font-medium text-slate-600 mb-2">Incoming Relations</p>
                           <div className="space-y-2">
-                            {factRelationsData.incoming.map((rel: any) => (
-                              <div key={rel.relation.id} className="text-xs p-2 bg-slate-50 rounded border border-slate-200">
-                                <span className="font-medium text-green-600">{rel.relation.type}</span>
-                                <p className="text-slate-700 mt-1">{rel.fact.content.substring(0, 60)}...</p>
-                              </div>
-                            ))}
+                            {factRelationsData.incoming
+                              .filter((rel: any) => {
+                                // Validate that we have a fact and it's a valid fact ID (not a relation ID)
+                                const factId = rel.fact?.id || rel.fact?._id || "";
+                                const isValidFactId = factId && (
+                                  factId.startsWith("facts/") || 
+                                  (!factId.includes("/") && factId.length > 0) ||
+                                  (rel.fact?._id && rel.fact._id.startsWith("facts/"))
+                                );
+                                if (!isValidFactId) {
+                                  console.warn("Invalid fact ID in incoming relation, skipping:", {
+                                    factId,
+                                    relationId: rel.relation?.id,
+                                    fact: rel.fact
+                                  });
+                                  return false;
+                                }
+                                return rel.fact && factId;
+                              })
+                              .map((rel: any, index: number) => {
+                                const relationDocId =
+                                  rel.relation.id ||
+                                  rel.relation._id ||
+                                  (rel.relation._key ? `fact_relations/${rel.relation._key}` : "");
+                                const relationStateKey = rel.relation._key || relationDocId || `incoming-${index}`;
+                                const relationRenderKey = `${relationStateKey || "incoming"}-incoming-${rel.fact?.id || rel.fact?._id || index}`;
+                                const editingState = relationStateKey ? editingRelations[relationStateKey] : undefined;
+                                const isEditing = editingState !== undefined;
+
+                                if (!relationDocId) {
+                                  console.warn("Relation missing ID (incoming)", rel.relation);
+                                }
+
+                                // Extract fact ID - ensure it's a valid fact ID
+                                let relatedFactId = rel.fact?.id || rel.fact?._id || "";
+                                // If it's not in the correct format, try to normalize it
+                                if (relatedFactId && !relatedFactId.startsWith("facts/") && rel.fact?._id) {
+                                  relatedFactId = rel.fact._id.startsWith("facts/") ? rel.fact._id : `facts/${rel.fact._key || relatedFactId}`;
+                                }
+
+                                const availableFactsList = facts
+                                  .filter((f: any) => {
+                                    const factId = f.id || f._id;
+                                    return factId !== selectedFact;
+                                  })
+                                  .map((f: any) => ({
+                                    id: f.id || f._id,
+                                    content: f.content || "",
+                                  }));
+
+                                const relatedFactAlreadyPresent = availableFactsList.some(
+                                  (f: any) => (f.id || "").toString() === relatedFactId.toString()
+                                );
+
+                                if (!relatedFactAlreadyPresent && rel.fact && relatedFactId) {
+                                  availableFactsList.push({
+                                    id: relatedFactId,
+                                    content: rel.fact.content || "",
+                                  });
+                                }
+                              
+                                return (
+                                  <RelationItem
+                                    key={relationRenderKey}
+                                    relation={rel}
+                                    isEditing={isEditing}
+                                    editingType={editingState?.type || rel.relation.type}
+                                    editingFactId={editingState?.factId || relatedFactId}
+                                    isUpdating={updateRelationMutation.isPending || deleteRelationMutation.isPending || createFactRelationMutation.isPending}
+                                    isDeleting={deleteRelationMutation.isPending}
+                                    variant="incoming"
+                                    onEdit={() => handleEditRelation(relationStateKey, rel.relation.type, relatedFactId)}
+                                    onCancelEdit={() => handleCancelEditRelation(relationStateKey)}
+                                    onSave={(type, factId) => handleUpdateRelation(relationDocId, type, factId, rel, "incoming")}
+                                    onDelete={() => handleDeleteRelation(relationDocId)}
+                                    onSelectFact={(factId) => {
+                                      setSelectedFact(factId);
+                                      setSelectedView("facts");
+                                    }}
+                                    availableFacts={availableFactsList}
+                                  />
+                                );
+                              })}
                           </div>
                         </div>
                       )}
@@ -486,7 +898,9 @@ export default function EditorPage() {
 
             {selectedCard && selectedCardData?.card && (
               <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 sticky top-24 space-y-6">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Card Details</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-slate-900">Card Details</h3>
+                </div>
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm font-medium text-slate-600 mb-1">Title</p>
@@ -528,12 +942,21 @@ export default function EditorPage() {
                   )}
                 </div>
 
-                <button
-                  onClick={() => setSelectedCard(null)}
-                  className="w-full px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-                >
-                  Close
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedCard(null)}
+                    className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={() => handleDeleteCard(selectedCard)}
+                    disabled={deleteCardMutation.isPending}
+                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deleteCardMutation.isPending ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
               </div>
             )}
           </div>

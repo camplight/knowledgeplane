@@ -167,6 +167,7 @@ ArangoDB (graph database with full-text search)
 | `POST /api/query` | Execute AQL query |
 | `GET /api/knowledge-cards` | List knowledge cards |
 | `GET /api/knowledge-cards/:id` | Get a specific knowledge card |
+| `DELETE /api/knowledge-cards/:id` | Delete a knowledge card |
 | `GET /api/webhooks` | List webhooks |
 | `POST /api/webhooks` | Create a new webhook |
 | `PUT /api/webhooks/:id` | Update a webhook |
@@ -367,6 +368,7 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Facts view with list display, fact creation, and fact relation management
   - Cards view with knowledge cards list display and detailed card information sidebar
   - Card details sidebar showing title, summary, full content, fact count, timestamps, and metadata
+  - Card deletion functionality with confirmation dialog
   - Fact details sidebar with relations management (create and view outgoing/incoming relations)
   - Search functionality for facts
 - Facts browsing page (`/facts`) with pagination, filtering, and detailed fact display
@@ -939,6 +941,7 @@ KnowledgePlane supports webhooks for event notifications:
 - `fact.trashed` - Triggered when a fact is trashed
 - `card.created` - Triggered when a card is created
 - `card.updated` - Triggered when a card is updated
+- `card.deleted` - Triggered when a card is deleted
 
 **Creating a Webhook:**
 ```bash

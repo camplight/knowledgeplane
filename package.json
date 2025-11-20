@@ -19,6 +19,8 @@
     "dev:background-workers": "node scripts/wait-for-db.js && npm run dev --workspace=apps/background-workers",
     "dev:stop": "docker compose -f infra/docker-compose.dev.yml down",
     "migrate": "node scripts/migrate.js",
+    "generate-seed": "tsx scripts/generate-seed.ts",
+    "seed": "tsx scripts/seed.ts",
     "lint": "npm run lint --workspaces --if-present",
     "build": "npm run typecheck --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",

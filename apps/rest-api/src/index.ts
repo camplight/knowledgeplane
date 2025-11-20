@@ -165,6 +165,17 @@ server.get("/api/knowledge-cards/:id", async (request, reply) => {
   return { card };
 });
 
+server.delete("/api/knowledge-cards/:id", async (request, reply) => {
+  const { id } = request.params as { id: string };
+  
+  try {
+    await KnowledgeCard.delete(id);
+    return { success: true };
+  } catch (error: any) {
+    reply.code(404);
+    return { error: error.message };
+  }
+});
 
 // Webhooks endpoints
 server.get("/api/webhooks", async (request, reply) => {

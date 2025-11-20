@@ -102,8 +102,9 @@ Returns server health status.
 
 ### Cards
 
-- `GET /api/cards` - List cards (query params: `limit`, `offset`)
-- `GET /api/cards/:id` - Get a specific card
+- `GET /api/knowledge-cards` - List cards (query params: `limit`, `offset`)
+- `GET /api/knowledge-cards/:id` - Get a specific card
+- `DELETE /api/knowledge-cards/:id` - Delete a knowledge card
 
 ### Webhooks
 

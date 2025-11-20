@@ -95,6 +95,33 @@ export class KnowledgeCard {
     return record;
   }
 
+  static async delete(id: string): Promise<void> {
+    if (!id || id.trim() === "") {
+      throw new Error("KnowledgeCard ID is required");
+    }
+
+    const key = this.extractKey(id);
+    try {
+      // Get the card before deletion to trigger webhook
+      const card = await this.findById(id);
+      if (!card) {
+        throw new Error(`KnowledgeCard with id ${id} not found`);
+      }
+
+      await collections.knowledge_cards.remove(key);
+      
+      // Trigger webhook
+      triggerWebhook("knowledge_card.deleted", card).catch((error) => {
+        console.error("Failed to trigger knowledge_card.deleted webhook:", error);
+      });
+    } catch (error: any) {
+      if (error.errorNum === 1202) {
+        throw new Error(`KnowledgeCard with id ${id} (key: ${key}) not found`);
+      }
+      throw error;
+    }
+  }
+
   static async findById(id: string): Promise<KnowledgeCardRecord | null> {
     const key = this.extractKey(id);
     try {

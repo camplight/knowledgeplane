@@ -32,4 +32,14 @@ export const cardsRouter = router({
       }
       return { card };
     }),
+  delete: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      await KnowledgeCard.delete(input.id);
+      return { success: true };
+    }),
 });

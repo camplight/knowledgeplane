@@ -45,6 +45,19 @@ export const factRelationsRouter = router({
       });
       return { relation };
     }),
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+        type: z.string().min(1).optional(),
+        metadata: z.record(z.string()).optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const { id, ...updates } = input;
+      const relation = await FactRelation.update(id, updates);
+      return { relation };
+    }),
   delete: protectedProcedure
     .input(
       z.object({
@@ -52,10 +65,8 @@ export const factRelationsRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      // Note: FactRelation doesn't have a delete method yet
-      // For now, we'll need to implement it or use AQL
-      // This is a placeholder
-      throw new Error("Delete not yet implemented for FactRelation");
+      await FactRelation.delete(input.id);
+      return { success: true };
     }),
   getForFact: protectedProcedure
     .input(

@@ -1,4 +1,5 @@
 import { collections, knowledgeGraph } from "../db";
+import { Fact } from "./Fact";
 
 export interface FactRelationInput {
   from_fact: string; // Fact ID
@@ -66,7 +67,74 @@ export class FactRelation {
     }
   }
 
-  static async query(params: FactRelationQueryParams): Promise<FactRelationRecord[]> {
+  static async update(
+    id: string,
+    updates: { type?: string; metadata?: Record<string, any> },
+  ): Promise<FactRelationRecord> {
+    // Validate ID format - should be fact_relations/_key or just _key
+    if (!id || id.trim() === "") {
+      throw new Error("Relation ID is required");
+    }
+
+    // Check if ID looks like a fact ID (facts/...) instead of relation ID
+    if (id.startsWith("facts/")) {
+      throw new Error(
+        `Invalid relation ID format: ${id}. Expected fact_relations/_key format, but got a fact ID.`,
+      );
+    }
+
+    const key = this.extractKey(id);
+    const updateDoc: any = {};
+    if (updates.type !== undefined) {
+      updateDoc.type = updates.type;
+    }
+    if (updates.metadata !== undefined) {
+      updateDoc.metadata = updates.metadata;
+    }
+
+    try {
+      const result = await collections.relations.update(key, updateDoc, {
+        returnNew: true,
+      });
+      if (!result) {
+        throw new Error(`FactRelation with id ${id} (key: ${key}) not found`);
+      }
+      return this._normalizeRecord(result.new!);
+    } catch (error: any) {
+      if (error.errorNum === 1202) {
+        throw new Error(`FactRelation with id ${id} (key: ${key}) not found`);
+      }
+      throw error;
+    }
+  }
+
+  static async delete(id: string): Promise<void> {
+    // Validate ID format - should be fact_relations/_key or just _key
+    if (!id || id.trim() === "") {
+      throw new Error("Relation ID is required");
+    }
+
+    // Check if ID looks like a fact ID (facts/...) instead of relation ID
+    if (id.startsWith("facts/")) {
+      throw new Error(
+        `Invalid relation ID format: ${id}. Expected fact_relations/_key format, but got a fact ID.`,
+      );
+    }
+
+    const key = this.extractKey(id);
+    try {
+      await collections.relations.remove(key);
+    } catch (error: any) {
+      if (error.errorNum === 1202) {
+        throw new Error(`FactRelation with id ${id} (key: ${key}) not found`);
+      }
+      throw error;
+    }
+  }
+
+  static async query(
+    params: FactRelationQueryParams,
+  ): Promise<FactRelationRecord[]> {
     const limit = params.limit || 50;
     const offset = params.offset || 0;
 
@@ -104,9 +172,13 @@ export class FactRelation {
     relationType?: string,
   ): Promise<{ relation: FactRelationRecord; fact: any }[]> {
     const factIdNormalized = this._normalizeFactId(factId);
+    // Traverse using edge collection and explicitly fetch the fact document
     let aql = `
-      FOR relation, fact IN 1..1 OUTBOUND @factId relations
+      FOR relation IN relations
+        FILTER relation._from == @factId
         ${relationType ? "FILTER relation.type == @type" : ""}
+        LET fact = DOCUMENT(relation._to)
+        FILTER fact != null AND fact.content != null
         RETURN { relation: relation, fact: fact }
     `;
 
@@ -118,10 +190,90 @@ export class FactRelation {
     const cursor = await collections.relations.database.query(aql, bindVars);
     const results = await cursor.all();
 
-    return results.map((r: any) => ({
-      relation: this._normalizeRecord(r.relation),
-      fact: r.fact,
-    }));
+    // Debug: log raw results to see what we're getting
+    if (results.length > 0) {
+      console.log("getRelatedFacts raw results:", results.length, results[0]);
+    }
+
+    const validResults = results
+      .filter((r: any) => {
+        // Validate that we have both relation and fact
+        if (!r.fact || !r.relation) {
+          console.warn("Missing fact or relation in getRelatedFacts:", {
+            fact: !!r.fact,
+            relation: !!r.relation,
+          });
+          return false;
+        }
+
+        // Check if fact is actually a relation document (has _from/_to but no content)
+        const factId = r.fact._id || "";
+        const hasContent = r.fact.content !== undefined;
+        const hasFromTo =
+          r.fact._from !== undefined || r.fact._to !== undefined;
+        const hasType = r.fact.type !== undefined;
+
+        // If it looks like a relation document (has _from/_to but no content), filter it out
+        if (hasFromTo && !hasContent && hasType) {
+          console.warn(
+            "Filtering out relation document masquerading as fact in getRelatedFacts:",
+            {
+              factId,
+              fact: r.fact,
+              relationId: r.relation._id || r.relation._key,
+            },
+          );
+          return false;
+        }
+
+        // Check for invalid relation IDs
+        if (
+          factId.startsWith("relations/") ||
+          factId.startsWith("fact_relations/")
+        ) {
+          console.warn(
+            "Filtering out document with relation ID format in getRelatedFacts:",
+            {
+              factId,
+              fact: r.fact,
+              relationId: r.relation._id || r.relation._key,
+            },
+          );
+          return false;
+        }
+
+        // Allow all other documents (they should be facts from the graph traversal)
+        return true;
+      })
+      .map((r: any) => {
+        try {
+          // Ensure fact has content before normalizing
+          if (!r.fact.content && r.fact.content !== "") {
+            console.warn("Fact missing content in getRelatedFacts:", {
+              factId: r.fact._id || r.fact._key,
+              fact: r.fact,
+            });
+          }
+          const normalizedFact = Fact._normalizeRecord(r.fact);
+          return {
+            relation: this._normalizeRecord(r.relation),
+            fact: normalizedFact,
+          };
+        } catch (error) {
+          console.error(
+            "Error normalizing fact in getRelatedFacts:",
+            error,
+            r.fact,
+          );
+          return null;
+        }
+      })
+      .filter(
+        (item): item is { relation: FactRelationRecord; fact: any } =>
+          item !== null,
+      );
+
+    return validResults;
   }
 
   static async getIncomingRelations(
@@ -129,9 +281,13 @@ export class FactRelation {
     relationType?: string,
   ): Promise<{ relation: FactRelationRecord; fact: any }[]> {
     const factIdNormalized = this._normalizeFactId(factId);
+    // Traverse using edge collection and explicitly fetch the fact document
     let aql = `
-      FOR relation, fact IN 1..1 INBOUND @factId relations
+      FOR relation IN relations
+        FILTER relation._to == @factId
         ${relationType ? "FILTER relation.type == @type" : ""}
+        LET fact = DOCUMENT(relation._from)
+        FILTER fact != null AND fact.content != null
         RETURN { relation: relation, fact: fact }
     `;
 
@@ -143,14 +299,101 @@ export class FactRelation {
     const cursor = await collections.relations.database.query(aql, bindVars);
     const results = await cursor.all();
 
-    return results.map((r: any) => ({
-      relation: this._normalizeRecord(r.relation),
-      fact: r.fact,
-    }));
+    // Debug: log raw results to see what we're getting
+    if (results.length > 0) {
+      console.log(
+        "getIncomingRelations raw results:",
+        results.length,
+        results[0],
+      );
+    }
+
+    const validResults = results
+      .filter((r: any) => {
+        // Validate that we have both relation and fact
+        if (!r.fact || !r.relation) {
+          console.warn("Missing fact or relation in getIncomingRelations:", {
+            fact: !!r.fact,
+            relation: !!r.relation,
+          });
+          return false;
+        }
+
+        // Check if fact is actually a relation document (has _from/_to but no content)
+        const factId = r.fact._id || "";
+        const hasContent = r.fact.content !== undefined;
+        const hasFromTo =
+          r.fact._from !== undefined || r.fact._to !== undefined;
+        const hasType = r.fact.type !== undefined;
+
+        // If it looks like a relation document (has _from/_to but no content), filter it out
+        if (hasFromTo && !hasContent && hasType) {
+          console.warn(
+            "Filtering out relation document masquerading as fact in getIncomingRelations:",
+            {
+              factId,
+              fact: r.fact,
+              relationId: r.relation._id || r.relation._key,
+            },
+          );
+          return false;
+        }
+
+        // Check for invalid relation IDs
+        if (
+          factId.startsWith("relations/") ||
+          factId.startsWith("fact_relations/")
+        ) {
+          console.warn(
+            "Filtering out document with relation ID format in getIncomingRelations:",
+            {
+              factId,
+              fact: r.fact,
+              relationId: r.relation._id || r.relation._key,
+            },
+          );
+          return false;
+        }
+
+        // Allow all other documents (they should be facts from the graph traversal)
+        return true;
+      })
+      .map((r: any) => {
+        try {
+          // Ensure fact has content before normalizing
+          if (!r.fact.content && r.fact.content !== "") {
+            console.warn("Fact missing content in getIncomingRelations:", {
+              factId: r.fact._id || r.fact._key,
+              fact: r.fact,
+            });
+          }
+          const normalizedFact = Fact._normalizeRecord(r.fact);
+          return {
+            relation: this._normalizeRecord(r.relation),
+            fact: normalizedFact,
+          };
+        } catch (error) {
+          console.error(
+            "Error normalizing fact in getIncomingRelations:",
+            error,
+            r.fact,
+          );
+          return null;
+        }
+      })
+      .filter(
+        (item): item is { relation: FactRelationRecord; fact: any } =>
+          item !== null,
+      );
+
+    return validResults;
   }
 
   static async queryAQL(aql: string, bindVars?: any): Promise<any[]> {
-    const cursor = await collections.relations.database.query(aql, bindVars || {});
+    const cursor = await collections.relations.database.query(
+      aql,
+      bindVars || {},
+    );
     return await cursor.all();
   }
 
@@ -188,4 +431,3 @@ export class FactRelation {
     };
   }
 }
-
