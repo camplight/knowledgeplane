@@ -21,6 +21,10 @@ export default function DashboardPage() {
     limit,
     offset: cardsPage * limit,
   });
+  const { data: relationsData, isLoading: relationsLoading } = trpc.factRelations.list.useQuery({
+    limit: 1,
+    offset: 0,
+  });
 
   useEffect(() => {
     if (!userLoading && !userData?.user) {
@@ -47,6 +51,7 @@ export default function DashboardPage() {
   const cards = cardsData?.cards || [];
   const totalCards = cardsData?.total || 0;
   const cardsTotalPages = Math.ceil(totalCards / limit);
+  const totalRelations = relationsData?.total || 0;
 
   return (
     <div className="min-h-screen bg-white">
@@ -95,12 +100,12 @@ export default function DashboardPage() {
           <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-600 mb-1">Active Facts</p>
-                <p className="text-3xl font-bold text-slate-900">{facts.length}</p>
+                <p className="text-sm font-medium text-slate-600 mb-1">Relations</p>
+                <p className="text-3xl font-bold text-slate-900">{totalRelations}</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                 <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
               </div>
             </div>

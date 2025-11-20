@@ -11,6 +11,7 @@ export default function EditorPage() {
   const router = useRouter();
   const [selectedView, setSelectedView] = useState<"facts" | "cards" | "graph">("facts");
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const [selectedFact, setSelectedFact] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   
@@ -70,13 +71,13 @@ export default function EditorPage() {
     { enabled: !!selectedCard }
   );
 
-  // Search facts
-  const { data: searchResults, refetch: refetchSearch } = trpc.facts.search.useQuery(
+  // Search facts - only enabled when there's an active search query
+  const { data: searchResults, isLoading: searchLoading, refetch: refetchSearch } = trpc.facts.search.useQuery(
     {
-      query: searchQuery || "*",
+      query: activeSearchQuery || "*",
       k: 20,
     },
-    { enabled: false }
+    { enabled: !!activeSearchQuery && activeSearchQuery.trim().length > 0 }
   );
 
   // Fact relations queries
@@ -163,9 +164,17 @@ export default function EditorPage() {
   }, [userLoading, userData, router]);
 
   const handleSearch = () => {
-    if (searchQuery) {
-      refetchSearch();
+    if (searchQuery && searchQuery.trim().length > 0) {
+      setActiveSearchQuery(searchQuery.trim());
+    } else {
+      // Clear search when query is empty
+      setActiveSearchQuery("");
     }
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery("");
+    setActiveSearchQuery("");
   };
 
   const handleCreateFact = (e: React.FormEvent) => {
@@ -355,7 +364,13 @@ export default function EditorPage() {
     return null;
   }
 
-  const facts = searchQuery && searchResults ? searchResults.results : (factsData?.facts || []);
+  // Determine which facts to display based on search state
+  const facts = activeSearchQuery && activeSearchQuery.trim().length > 0 && searchResults 
+    ? searchResults.results 
+    : (factsData?.facts || []);
+  const isLoadingFacts = activeSearchQuery && activeSearchQuery.trim().length > 0 
+    ? searchLoading 
+    : factsLoading;
   const user = userData.user;
 
   return (
@@ -366,7 +381,7 @@ export default function EditorPage() {
         {/* Search Bar */}
         <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-6">
           <div className="flex gap-4">
-            <div className="flex-1">
+            <div className="flex-1 relative">
               <input
                 type="text"
                 placeholder="Search facts, cards, or browse knowledge graph..."
@@ -375,6 +390,15 @@ export default function EditorPage() {
                 onKeyPress={(e) => e.key === "Enter" && handleSearch()}
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
+              {activeSearchQuery && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 px-2"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
             </div>
             <button
               onClick={handleSearch}
@@ -383,6 +407,11 @@ export default function EditorPage() {
               Search
             </button>
           </div>
+          {activeSearchQuery && (
+            <div className="mt-2 text-sm text-slate-600">
+              Showing results for: <span className="font-medium">"{activeSearchQuery}"</span>
+            </div>
+          )}
         </div>
 
         {/* View Tabs */}
@@ -479,14 +508,18 @@ export default function EditorPage() {
                   </div>
                 )}
 
-                {factsLoading ? (
+                {isLoadingFacts ? (
                   <div className="p-8 text-center">
                     <div className="text-slate-600">Loading facts...</div>
                   </div>
                 ) : facts.length === 0 ? (
                   <div className="p-8 text-center">
                     <p className="text-lg font-medium text-slate-900 mb-2">No facts found</p>
-                    <p className="text-slate-600">Try adjusting your search or add new facts</p>
+                    <p className="text-slate-600">
+                      {activeSearchQuery && activeSearchQuery.trim().length > 0 
+                        ? "Try adjusting your search or add new facts" 
+                        : "Add new facts to get started"}
+                    </p>
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-200">

@@ -389,6 +389,20 @@ export class FactRelation {
     return validResults;
   }
 
+  static async count(): Promise<number> {
+    const aql = `
+      LET count = LENGTH(
+        FOR relation IN relations
+          RETURN relation
+      )
+      RETURN count
+    `;
+
+    const cursor = await collections.relations.database.query(aql);
+    const result = await cursor.next();
+    return result || 0;
+  }
+
   static async queryAQL(aql: string, bindVars?: any): Promise<any[]> {
     const cursor = await collections.relations.database.query(
       aql,

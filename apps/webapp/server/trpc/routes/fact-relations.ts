@@ -21,7 +21,8 @@ export const factRelationsRouter = router({
         limit: input?.limit || 50,
         offset: input?.offset || 0,
       });
-      return { relations };
+      const total = await FactRelation.count();
+      return { relations, total };
     }),
   create: protectedProcedure
     .input(
