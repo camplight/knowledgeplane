@@ -40,6 +40,22 @@ export class OpenAIProvider implements AIModelProvider {
     // If MCP tools are provided, try to use the responses.create() API
     if (options?.mcpTools && options.mcpTools.length > 0) {
       try {
+        // Validate MCP server URLs before attempting to use them
+        for (const tool of options.mcpTools) {
+          try {
+            // Use WHATWG URL API instead of deprecated url.parse()
+            new URL(tool.server_url);
+          } catch (urlError) {
+            console.warn(
+              `Invalid MCP server URL: ${tool.server_url}. Error: ${urlError instanceof Error ? urlError.message : String(urlError)}`,
+            );
+            // Skip MCP tools with invalid URLs and continue with standard chat completion
+            throw new Error(
+              `Invalid MCP server URL for tool "${tool.server_label}": ${tool.server_url}`,
+            );
+          }
+        }
+
         // Try to use the responses.create() API for MCP tools
         // This API might not be available in all OpenAI SDK versions
         const lastUserMessage = messages
@@ -84,11 +100,31 @@ export class OpenAIProvider implements AIModelProvider {
         }
       } catch (error: any) {
         // If responses.create() fails, fall back to standard chat completion
-        console.warn(
-          "Failed to use OpenAI responses.create() API:",
-          error.message,
-          "Falling back to standard chat completion.",
-        );
+        // Extract more detailed error information if available
+        const errorMessage = error.message || String(error);
+        const errorStatus = error.status || error.statusCode;
+        const errorDetails = error.response?.data || error.body;
+
+        // Log detailed error information for debugging
+        if (errorStatus === 424) {
+          console.warn(
+            `Failed to use OpenAI responses.create() API: MCP server connection failed (HTTP ${errorStatus}).`,
+            `Server URL: ${options.mcpTools?.[0]?.server_url || "unknown"}`,
+            `Error: ${errorMessage}`,
+            "Falling back to standard chat completion.",
+          );
+        } else {
+          console.warn(
+            `Failed to use OpenAI responses.create() API: ${errorMessage}`,
+            errorStatus ? `(HTTP ${errorStatus})` : "",
+            "Falling back to standard chat completion.",
+          );
+        }
+
+        // Log additional error details if available (but don't expose sensitive info)
+        if (errorDetails && typeof errorDetails === "object") {
+          console.debug("MCP tool error details:", JSON.stringify(errorDetails));
+        }
       }
     }
 

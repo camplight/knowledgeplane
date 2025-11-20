@@ -178,6 +178,10 @@ export const collections = {
 // Graph for relations
 export const knowledgeGraph = db.graph("knowledge_graph");
 
+// Lazy initialization flag
+let initialized = false;
+let initPromise: Promise<void> | null = null;
+
 export async function init() {
   // Ensure database exists
   const sysDbConfig: any = {
@@ -275,11 +279,39 @@ export async function init() {
       fields: ["trashed"],
       name: "idx_fact_trashed",
     });
-    await collections.facts.ensureIndex({
-      type: "inverted",
-      fields: ["content"],
-      name: "idx_fact_content_fulltext",
-    } as any);
+    // Ensure fulltext index exists (drop old inverted index if it exists)
+    try {
+      // Try to get existing index
+      const indexes = await collections.facts.indexes();
+      const existingIndex = indexes.find((idx: any) => idx.name === "idx_fact_content_fulltext");
+      
+      if (existingIndex) {
+        // If index exists but is wrong type, drop it
+        if (existingIndex.type !== "fulltext") {
+          console.log("Dropping old index idx_fact_content_fulltext (wrong type)");
+          await collections.facts.dropIndex("idx_fact_content_fulltext");
+        }
+      }
+    } catch (error: any) {
+      // Index doesn't exist or error checking, continue to create
+      console.log("Checking existing index:", error.message);
+    }
+    
+    // Create fulltext index
+    try {
+      await collections.facts.ensureIndex({
+        type: "fulltext",
+        fields: ["content"],
+        name: "idx_fact_content_fulltext",
+        minLength: 3,
+      } as any);
+      console.log("Fulltext index for facts created");
+    } catch (error: any) {
+      if (error.errorNum !== 1710) {
+        // 1710 = index already exists
+        console.warn("Fulltext index creation warning for facts:", error.message);
+      }
+    }
     // Vector index for facts embeddings (dimension 1536 for text-embedding-3-small)
     try {
       await collections.facts.ensureIndex({
@@ -417,4 +449,21 @@ export async function init() {
       throw error;
     }
   }
+  
+  initialized = true;
+}
+
+// Ensure database is initialized (lazy initialization)
+export async function ensureInitialized() {
+  if (initialized) {
+    return;
+  }
+  
+  if (initPromise) {
+    return initPromise;
+  }
+  
+  initPromise = init();
+  await initPromise;
+  initPromise = null;
 }

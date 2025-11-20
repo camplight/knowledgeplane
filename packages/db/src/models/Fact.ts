@@ -1,6 +1,6 @@
-import { collections } from "../db";
+import { collections, ensureInitialized } from "../db";
 import { triggerWebhook } from "../lib/webhook-trigger";
-import { generateQueryEmbedding } from "../lib/vector-search";
+import { generateQueryEmbedding, cosineSimilarity } from "../lib/vector-search";
 import type { AIModelProvider } from "@knowledgeplane/aimodel";
 
 export interface FactInput {
@@ -60,12 +60,12 @@ export class Fact {
 
     const result = await collections.facts.save(doc, { returnNew: true });
     const record = this._normalizeRecord(result.new!);
-    
+
     // Trigger webhook
     triggerWebhook("fact.created", record).catch((error) => {
       console.error("Failed to trigger fact.created webhook:", error);
     });
-    
+
     return record;
   }
 
@@ -88,15 +88,18 @@ export class Fact {
     const result = await collections.facts.saveAll(docs, {
       returnNew: true,
     });
-    const records = (result as any).saved?.map((doc: any) => this._normalizeRecord(doc.new)) || [];
-    
+    const records =
+      (result as any).saved?.map((doc: any) =>
+        this._normalizeRecord(doc.new),
+      ) || [];
+
     // Trigger webhooks for each fact
     for (const record of records) {
       triggerWebhook("fact.created", record).catch((error) => {
         console.error("Failed to trigger fact.created webhook:", error);
       });
     }
-    
+
     return records;
   }
 
@@ -123,12 +126,12 @@ export class Fact {
     }
 
     const record = this._normalizeRecord(result.new!);
-    
+
     // Trigger webhook
     triggerWebhook("fact.updated", record).catch((error) => {
       console.error("Failed to trigger fact.updated webhook:", error);
     });
-    
+
     return record;
   }
 
@@ -149,16 +152,19 @@ export class Fact {
     }
 
     const record = this._normalizeRecord(result.new!);
-    
+
     // Trigger webhook
     triggerWebhook("fact.trashed", record).catch((error) => {
       console.error("Failed to trigger fact.trashed webhook:", error);
     });
-    
+
     return record;
   }
 
   static async search(params: FactSearchParams): Promise<FactSearchResult[]> {
+    // Ensure database is initialized
+    await ensureInitialized();
+
     const limit = params.k || 5;
     const offset = params.offset || 0;
     const includeTrashed = params.include_trashed || false;
@@ -180,7 +186,9 @@ export class Fact {
     return this._hybridSearch(params);
   }
 
-  private static async _fullTextSearch(params: FactSearchParams): Promise<FactSearchResult[]> {
+  private static async _fullTextSearch(
+    params: FactSearchParams,
+  ): Promise<FactSearchResult[]> {
     const limit = params.k || 5;
     const offset = params.offset || 0;
     const includeTrashed = params.include_trashed || false;
@@ -202,6 +210,7 @@ export class Fact {
           RETURN { fact: fact, score: 1.0 }
       `;
     } else {
+      // Try to use FULLTEXT index first
       aql = `
         FOR fact IN FULLTEXT(facts, "content", @query)
           FILTER (fact.trashed == false || @includeTrashed == true)
@@ -212,53 +221,111 @@ export class Fact {
       bindVars.query = params.query;
     }
 
-    const cursor = await collections.facts.database.query(aql, bindVars);
-    const results = await cursor.all();
+    try {
+      const cursor = await collections.facts.database.query(aql, bindVars);
+      const results = await cursor.all();
 
-    return results.map((r: any) => ({
-      ...this._normalizeRecord(r.fact),
-      score: r.score || 1.0,
-    }));
+      return results.map((r: any) => ({
+        ...this._normalizeRecord(r.fact),
+        score: r.score || 1.0,
+      }));
+    } catch (error: any) {
+      // If fulltext index doesn't exist, fall back to LIKE search
+      if (
+        error.errorNum === 1571 ||
+        error.message?.includes("fulltext index")
+      ) {
+        console.warn("Fulltext index not found, falling back to LIKE search");
+
+        // Fallback to LIKE search (case-insensitive)
+        const fallbackAql = `
+          FOR fact IN facts
+            FILTER (fact.trashed == false || @includeTrashed == true)
+            FILTER LOWER(fact.content) LIKE LOWER(CONCAT("%", @query, "%"))
+            SORT fact.updated_at DESC, fact.created_at DESC
+            LIMIT @offset, @limit
+            RETURN { fact: fact, score: 1.0 }
+        `;
+
+        const fallbackCursor = await collections.facts.database.query(
+          fallbackAql,
+          bindVars,
+        );
+        const fallbackResults = await fallbackCursor.all();
+
+        return fallbackResults.map((r: any) => ({
+          ...this._normalizeRecord(r.fact),
+          score: r.score || 1.0,
+        }));
+      }
+
+      // Re-throw other errors
+      throw error;
+    }
   }
 
-  private static async _vectorSearch(params: FactSearchParams): Promise<FactSearchResult[]> {
+  private static async _vectorSearch(
+    params: FactSearchParams,
+  ): Promise<FactSearchResult[]> {
     const limit = params.k || 5;
     const offset = params.offset || 0;
     const includeTrashed = params.include_trashed || false;
     const provider = params.embeddingProvider;
 
     if (!provider) {
-      console.warn("Vector search requires embedding provider. Falling back to full-text search.");
+      console.warn(
+        "Vector search requires embedding provider. Falling back to full-text search.",
+      );
       return this._fullTextSearch(params);
     }
 
     try {
       // Generate embedding for the query
-      const queryEmbedding = await generateQueryEmbedding(params.query, provider);
-      
-      // Use ArangoDB's APPROX_NEAR_COSINE for vector search
+      const queryEmbedding = await generateQueryEmbedding(
+        params.query,
+        provider,
+      );
+
+      // Get all facts with embeddings and calculate cosine similarity manually
+      // This approach works with any ArangoDB version and doesn't require APPROX_NEAR_COSINE
       const aql = `
         FOR fact IN facts
           FILTER fact.embedding != null
           FILTER (fact.trashed == false || @includeTrashed == true)
-          LET score = APPROX_NEAR_COSINE(fact.embedding, @queryEmbedding)
-          SORT score DESC
-          LIMIT @offset, @limit
-          RETURN { fact: fact, score: score }
+          RETURN fact
       `;
 
       const bindVars: any = {
-        queryEmbedding,
-        limit,
-        offset,
         includeTrashed,
       };
 
       const cursor = await collections.facts.database.query(aql, bindVars);
-      const results = await cursor.all();
+      const allFacts = await cursor.all();
 
-      return results.map((r: any) => ({
-        ...this._normalizeRecord(r.fact),
+      // Calculate cosine similarity for each fact and sort by score
+      const resultsWithScores = allFacts
+        .map((fact: any) => {
+          try {
+            const score = cosineSimilarity(fact.embedding, queryEmbedding);
+            return {
+              fact: this._normalizeRecord(fact),
+              score,
+            };
+          } catch (error: any) {
+            // Skip facts with invalid embeddings
+            console.warn(
+              `Skipping fact ${fact._id} due to embedding error:`,
+              error.message,
+            );
+            return null;
+          }
+        })
+        .filter((r: any) => r !== null)
+        .sort((a: any, b: any) => b.score - a.score)
+        .slice(offset, offset + limit);
+
+      return resultsWithScores.map((r: any) => ({
+        ...r.fact,
         score: r.score || 0,
       }));
     } catch (error: any) {
@@ -268,7 +335,9 @@ export class Fact {
     }
   }
 
-  private static async _hybridSearch(params: FactSearchParams): Promise<FactSearchResult[]> {
+  private static async _hybridSearch(
+    params: FactSearchParams,
+  ): Promise<FactSearchResult[]> {
     const limit = params.k || 5;
     const provider = params.embeddingProvider;
 
@@ -285,7 +354,10 @@ export class Fact {
       ]);
 
       // Create a map to deduplicate and combine scores
-      const resultMap = new Map<string, { fact: FactRecord; scores: number[] }>();
+      const resultMap = new Map<
+        string,
+        { fact: FactRecord; scores: number[] }
+      >();
 
       // Add full-text results (normalize score to 0-1 range)
       for (const result of fullTextResults) {
@@ -310,8 +382,11 @@ export class Fact {
       }
 
       // Combine scores: average of both scores, weighted equally
-      const combinedResults: FactSearchResult[] = Array.from(resultMap.values()).map((item) => {
-        const avgScore = item.scores.reduce((sum, s) => sum + s, 0) / item.scores.length;
+      const combinedResults: FactSearchResult[] = Array.from(
+        resultMap.values(),
+      ).map((item) => {
+        const avgScore =
+          item.scores.reduce((sum, s) => sum + s, 0) / item.scores.length;
         return {
           ...item.fact,
           score: avgScore,
@@ -320,7 +395,7 @@ export class Fact {
 
       // Sort by combined score and limit
       combinedResults.sort((a, b) => b.score - a.score);
-      
+
       const offset = params.offset || 0;
       return combinedResults.slice(offset, offset + limit);
     } catch (error: any) {
@@ -371,7 +446,6 @@ export class Fact {
     return result || 0;
   }
 
-
   static async findById(id: string): Promise<FactRecord | null> {
     const key = this.extractKey(id);
     try {
@@ -402,13 +476,13 @@ export class Fact {
 
   static _normalizeRecord(doc: any): FactRecord {
     if (!doc) {
-      throw new Error('Cannot normalize null or undefined fact document');
+      throw new Error("Cannot normalize null or undefined fact document");
     }
     return {
       id: doc._id || `facts/${doc._key}`,
       _key: doc._key,
       _id: doc._id,
-      content: doc.content || '', // Ensure content is never undefined
+      content: doc.content || "", // Ensure content is never undefined
       metadata: doc.metadata || {},
       created_at: doc.created_at,
       updated_at: doc.updated_at,

@@ -21,7 +21,7 @@ Facts and categories – organize memory using facts and hierarchical categories
 
 Full-text search – keyword search using ArangoDB full-text indexes.
 
-Vector embeddings – automatic generation of embeddings for facts, fact relations, and knowledge cards using OpenAI embeddings. Enables semantic search capabilities with ArangoDB's native vector search using APPROX_NEAR_COSINE. Supports hybrid search combining full-text and vector search for optimal results.
+Vector embeddings – automatic generation of embeddings for facts, fact relations, and knowledge cards using OpenAI embeddings. Enables semantic search capabilities with manual cosine similarity calculation. Supports hybrid search combining full-text and vector search for optimal results.
 
 Graph database – ArangoDB provides native graph capabilities for modeling relationships between facts.
 
@@ -191,6 +191,7 @@ KnowledgePlane supports three types of authentication:
 
 3. **API Key Authentication** (for server-to-server and automated access):
    - Uses `knowledgeplane-key` header for authentication (also supports `knowledgeplane_key`)
+   - Also supports API key via query parameter (`?api_key=...`) for internal use when headers cannot be set (e.g., OpenAI MCP connector)
    - If `API_KEYS` environment variable is configured, validates against it (comma-separated list)
    - If `API_KEYS` is not configured, any API key is accepted and automatically creates/finds a user with that key stored in their profile
    - The same API key always maps to the same user for consistency
@@ -202,7 +203,7 @@ KnowledgePlane supports three types of authentication:
 - Sessions are identified by `mcp-session-id` header
 - User context is automatically inferred from authenticated session (OAuth token or API key)
 - User context can also be provided via query params: `?username=user&email=user@example.com` (fallback if not authenticated)
-- Authentication via `Authorization: Bearer <token>` header (OAuth) or `knowledgeplane-key` header (API key)
+- Authentication via `Authorization: Bearer <token>` header (OAuth), `knowledgeplane-key` header (API key), or `api_key` query parameter (for internal use)
 - For `facts.write`, `created_by` and `last_updated_by` are automatically set from the authenticated user's ID if not explicitly provided
 - **Server Restart Handling**: When the server restarts, in-memory session state is lost. Clients reconnecting with an existing `mcp-session-id` will have a new transport created. The MCP protocol requires clients to send an `initialize` request before any other requests. If a client sends a non-initialize request after a server restart, it will receive a 400 error and should reinitialize the session.
 
@@ -370,7 +371,8 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Card details sidebar showing title, summary, full content, fact count, timestamps, and metadata
   - Card deletion functionality with confirmation dialog
   - Fact details sidebar with relations management (create and view outgoing/incoming relations)
-  - Search functionality for facts
+  - Search functionality for facts with server-side semantic search
+  - Real-time client-side filtering that filters visible facts and cards as you type, searching through content, title, and summary fields
 - Facts browsing page (`/facts`) with pagination, filtering, and detailed fact display
 - Users and invitations management page (`/users`) with:
   - User listing with invitation status (pending, accepted, none)
@@ -441,6 +443,26 @@ API key behavior:
 - `OPENAI_API_KEY` - OpenAI API key (required if using OpenAI provider)
 - `ANTHROPIC_API_KEY` - Anthropic API key (required if using Anthropic provider)
 
+**Webapp:**
+- `ARANGO_URL` - ArangoDB connection URL
+- `ARANGO_DB_NAME` - ArangoDB database name
+- `ARANGO_USER` - ArangoDB username
+- `ARANGO_PASSWORD` - ArangoDB password
+- `NEXTAUTH_URL` - Base URL for NextAuth (e.g., `http://localhost:3000`)
+- `GOOGLE_CLIENT_ID` - Google OAuth client ID
+- `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
+- `GITHUB_CLIENT_ID` - GitHub OAuth client ID
+- `GITHUB_CLIENT_SECRET` - GitHub OAuth client secret
+- `MCP_SERVER_URL` - Full URL to MCP server (e.g., `http://localhost:8080/mcp`)
+- `MCP_SERVER_HOST` - MCP server hostname (default: `localhost`)
+- `MCP_SERVER_PORT` - MCP server port (default: `8080`)
+- `MCP_SERVER_PROTOCOL` - MCP server protocol (default: `http`)
+- `MCP_SERVER_API_KEY` - API key for internal MCP server authentication (automatically added to URL as query parameter)
+- `AI_PROVIDER` - AI provider to use: `openai` or `anthropic` (default: `openai`)
+- `OPENAI_API_KEY` - OpenAI API key (required if using OpenAI provider)
+- `OPENAI_MODEL` - OpenAI model to use (default: `gpt-4o`)
+- `ANTHROPIC_API_KEY` - Anthropic API key (required if using Anthropic provider)
+
 **REST API:**
 - `ARANGO_URL` - ArangoDB connection URL
 - `ARANGO_DB_NAME` - ArangoDB database name
@@ -481,6 +503,7 @@ curl -X POST http://localhost:8080/mcp \
 - **React** + **Next.js** frontend with **TypeScript**
 - **tRPC** for type-safe API communication between frontend and backend
 - **ArangoDB** graph database with full-text search and AQL query support
+  - Vector index feature enabled via `--experimental-vector-index` flag in docker-compose configuration
 - **MCP SDK** (`@modelcontextprotocol/sdk`) for protocol implementation
 - **Docker Compose** infrastructure
 - **OAuth2** authentication (`@fastify/oauth2`) - Google and GitHub support
@@ -919,9 +942,9 @@ Workers can be manually triggered through:
 - **Response Time**: Triggers are typically processed within 30 seconds (next trigger check interval)
 
 **Vector Search:**
-- Uses ArangoDB's native vector search with FAISS integration (see [ArangoDB Vector Search Guide](https://arango.ai/blog/vector-search-in-arangodb-practical-insights-and-hands-on-examples/))
-- Vector indexes created automatically with cosine similarity metric
-- Supports APPROX_NEAR_COSINE for efficient approximate nearest neighbor search
+- Uses ArangoDB's vector indexes with cosine similarity metric
+- **Requires ArangoDB to be started with `--experimental-vector-index` flag** (configured in docker-compose files)
+- Manual cosine similarity calculation for vector search (compatible with all ArangoDB versions)
 - Hybrid search combines full-text (BM25) and vector (cosine similarity) results
 - Automatic query embedding generation when AI provider is available
 - Falls back to full-text search if embeddings are unavailable
@@ -1008,6 +1031,15 @@ The chat interface uses OpenAI's `responses.create()` API with MCP tools connect
 Set the following environment variables to enable MCP integration:
 - `MCP_SERVER_URL` - Full URL to MCP server (e.g., `http://localhost:8080/mcp`)
 - Or use `MCP_SERVER_HOST`, `MCP_SERVER_PORT`, and `MCP_SERVER_PROTOCOL` to construct the URL
+- `MCP_SERVER_API_KEY` - API key for internal authentication (automatically added to URL as query parameter for OpenAI MCP connector)
+
+**Note on MCP Tool Integration:**
+OpenAI's `responses.create()` API with MCP tools may sometimes fail to retrieve the tool list from the MCP server (HTTP 424 error). This can happen if:
+- The MCP server requires session initialization before tool list requests
+- There are network connectivity issues between OpenAI's infrastructure and your MCP server
+- The MCP server URL is not accessible from OpenAI's infrastructure
+
+When this occurs, the chat interface automatically falls back to standard chat completion, which still provides access to the knowledge base through context injection. The system logs detailed error messages to help diagnose connection issues.
 
 **Access:**
 Navigate to `/chat` in the web application (requires authentication).
@@ -1025,6 +1057,9 @@ The chat interface automatically:
 - Shows which facts were referenced in each response
 - Handles errors gracefully
 - Falls back to standard chat completion if MCP tools are not available
+- Validates MCP server URLs using WHATWG URL API (not deprecated url.parse())
+- Provides detailed error messages for MCP server connection issues (including HTTP 424 errors)
+- Logs connection failures with server URL and error details for debugging
 
 📁 File Upload and AI Extraction
 
@@ -1103,7 +1138,7 @@ Navigate to `/upload` in the web application (requires authentication).
 - ✅ Vector embeddings stored in facts, fact relations, and knowledge cards
 - ✅ ArangoDB vector indexes for efficient similarity search
 - ✅ Full hybrid search (combining full-text and vector search with cosine similarity)
-- ✅ Vector search using ArangoDB's APPROX_NEAR_COSINE function
+- ✅ Vector search using manual cosine similarity calculation
 - ✅ Automatic query embedding generation for semantic search
 - ✅ Webhook support
 - ✅ REST API endpoints

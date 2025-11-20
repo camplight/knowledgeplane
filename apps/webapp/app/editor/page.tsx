@@ -177,6 +177,27 @@ export default function EditorPage() {
     setActiveSearchQuery("");
   };
 
+  // Client-side filter function
+  const filterItems = <T extends { content?: string; title?: string; summary?: string }>(
+    items: T[],
+    query: string
+  ): T[] => {
+    if (!query || query.trim().length === 0) {
+      return items;
+    }
+    
+    const lowerQuery = query.toLowerCase().trim();
+    return items.filter((item) => {
+      const content = item.content?.toLowerCase() || "";
+      const title = item.title?.toLowerCase() || "";
+      const summary = item.summary?.toLowerCase() || "";
+      
+      return content.includes(lowerQuery) || 
+             title.includes(lowerQuery) || 
+             summary.includes(lowerQuery);
+    });
+  };
+
   const handleCreateFact = (e: React.FormEvent) => {
     e.preventDefault();
     if (factContent.trim()) {
@@ -365,13 +386,21 @@ export default function EditorPage() {
   }
 
   // Determine which facts to display based on search state
-  const facts = activeSearchQuery && activeSearchQuery.trim().length > 0 && searchResults 
+  const allFacts = activeSearchQuery && activeSearchQuery.trim().length > 0 && searchResults 
     ? searchResults.results 
     : (factsData?.facts || []);
+  
+  // Apply client-side filter to facts
+  const facts = filterItems(allFacts, searchQuery);
+  
   const isLoadingFacts = activeSearchQuery && activeSearchQuery.trim().length > 0 
     ? searchLoading 
     : factsLoading;
   const user = userData.user;
+  
+  // Apply client-side filter to cards
+  const allCards = cardsData?.cards || [];
+  const filteredCards = filterItems(allCards, searchQuery);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -386,11 +415,17 @@ export default function EditorPage() {
                 type="text"
                 placeholder="Search facts, cards, or browse knowledge graph..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  // Clear active search query when user types (client-side filtering takes over)
+                  if (activeSearchQuery && e.target.value.trim().length === 0) {
+                    setActiveSearchQuery("");
+                  }
+                }}
                 onKeyPress={(e) => e.key === "Enter" && handleSearch()}
                 className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              {activeSearchQuery && (
+              {(searchQuery || activeSearchQuery) && (
                 <button
                   onClick={handleClearSearch}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 px-2"
@@ -407,9 +442,13 @@ export default function EditorPage() {
               Search
             </button>
           </div>
-          {activeSearchQuery && (
+          {(activeSearchQuery || (searchQuery && searchQuery.trim().length > 0)) && (
             <div className="mt-2 text-sm text-slate-600">
-              Showing results for: <span className="font-medium">"{activeSearchQuery}"</span>
+              {activeSearchQuery ? (
+                <>Showing server search results for: <span className="font-medium">"{activeSearchQuery}"</span></>
+              ) : (
+                <>Filtering {selectedView === "facts" ? facts.length : filteredCards.length} {selectedView === "facts" ? "fact" : "card"}{selectedView === "facts" ? (facts.length !== 1 ? "s" : "") : (filteredCards.length !== 1 ? "s" : "")} matching: <span className="font-medium">"{searchQuery}"</span></>
+              )}
             </div>
           )}
         </div>
@@ -516,7 +555,9 @@ export default function EditorPage() {
                   <div className="p-8 text-center">
                     <p className="text-lg font-medium text-slate-900 mb-2">No facts found</p>
                     <p className="text-slate-600">
-                      {activeSearchQuery && activeSearchQuery.trim().length > 0 
+                      {searchQuery && searchQuery.trim().length > 0
+                        ? "No facts match your search. Try adjusting your search query or add new facts"
+                        : activeSearchQuery && activeSearchQuery.trim().length > 0 
                         ? "Try adjusting your search or add new facts" 
                         : "Add new facts to get started"}
                     </p>
@@ -571,9 +612,14 @@ export default function EditorPage() {
                     <p className="text-lg font-medium text-slate-900 mb-2">No cards found</p>
                     <p className="text-slate-600">Cards are created when facts are consolidated</p>
                   </div>
+                ) : filteredCards.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <p className="text-lg font-medium text-slate-900 mb-2">No cards match your search</p>
+                    <p className="text-slate-600">Try adjusting your search query</p>
+                  </div>
                 ) : (
                   <div className="divide-y divide-slate-200">
-                    {cardsData.cards.map((card: any) => (
+                    {filteredCards.map((card: any) => (
                       <div
                         key={card.id}
                         onClick={() => setSelectedCard(card.id)}

@@ -50,14 +50,29 @@ export default async function mcpRoutes(app: FastifyInstance) {
       "MCP: Incoming request",
     );
 
+    // Extract query params first (needed for API key from query and user creation)
+    const query = request.query as Record<string, string>;
+
     let authContext: AuthContext | undefined;
     try {
-      // Check for API key header (case-insensitive - Fastify normalizes to lowercase)
-      // Support both hyphen and underscore variants, and original case
-      const apiKey = (request.headers["knowledgeplane-key"] ||
+      // Check for API key in multiple places (priority order):
+      // 1. Header (knowledgeplane-key or knowledgeplane_key)
+      // 2. Query parameter (api_key) - for internal use when headers can't be set
+      const apiKeyFromHeader = (request.headers["knowledgeplane-key"] ||
         request.headers["knowledgeplane_key"]) as string | undefined;
+      const apiKeyFromQuery = query.api_key as string | undefined;
+      const apiKey = apiKeyFromHeader || apiKeyFromQuery;
+
       authContext = await requireAuth(request.headers.authorization, apiKey);
     } catch (error: any) {
+      app.log.warn(
+        {
+          error: error.message,
+          hasApiKey: !!query.api_key,
+          hasAuthHeader: !!request.headers.authorization,
+        },
+        "MCP: Authentication failed",
+      );
       return reply.code(401).send({ error: error.message || "unauthorized" });
     }
 
@@ -65,7 +80,6 @@ export default async function mcpRoutes(app: FastifyInstance) {
       (request.headers["mcp-session-id"] as string) || undefined;
 
     // Extract and handle user creation from queryParams
-    const query = request.query as Record<string, string>;
     let userId: string | undefined;
 
     // Prioritize userId from auth context (e.g., from API key or OAuth token)
@@ -203,6 +217,19 @@ export default async function mcpRoutes(app: FastifyInstance) {
           "MCP: Reply already sent, skipping handleRequest",
         );
         return;
+      }
+
+      // Log request details for debugging
+      const requestBody = request.body as any;
+      if (requestBody && typeof requestBody === "object") {
+        app.log.debug(
+          {
+            method: requestBody.method,
+            sessionId: effectiveSessionId,
+            hasContext: !!contextToStore,
+          },
+          "MCP: Handling request",
+        );
       }
 
       if (contextToStore) {
