@@ -20,6 +20,38 @@ import {
   filesUploadTool,
   handleFilesUpload,
 } from "./handlers/files.upload.js";
+import {
+  knowledgeCardsCreateTool,
+  handleKnowledgeCardsCreate,
+} from "./handlers/knowledge_cards.create.js";
+import {
+  knowledgeCardsUpdateTool,
+  handleKnowledgeCardsUpdate,
+} from "./handlers/knowledge_cards.update.js";
+import {
+  knowledgeCardsDeleteTool,
+  handleKnowledgeCardsDelete,
+} from "./handlers/knowledge_cards.delete.js";
+import {
+  knowledgeCardsSearchTool,
+  handleKnowledgeCardsSearch,
+} from "./handlers/knowledge_cards.search.js";
+import {
+  knowledgeCardsListTool,
+  handleKnowledgeCardsList,
+} from "./handlers/knowledge_cards.list.js";
+import {
+  knowledgeCardsSplitTool,
+  handleKnowledgeCardsSplit,
+} from "./handlers/knowledge_cards.split.js";
+import {
+  knowledgeCardsCombineTool,
+  handleKnowledgeCardsCombine,
+} from "./handlers/knowledge_cards.combine.js";
+import {
+  factsConsolidateTool,
+  handleFactsConsolidate,
+} from "./handlers/facts.consolidate.js";
 
 export interface McpContext {
   userId?: string;
@@ -34,9 +66,17 @@ const tools = [
   factsSearchTool,
   factsUpdateTool,
   factsTrashTool,
+  factsConsolidateTool,
   usersRegisterTool,
   filesUploadTool,
   workersTriggerTool,
+  knowledgeCardsCreateTool,
+  knowledgeCardsUpdateTool,
+  knowledgeCardsDeleteTool,
+  knowledgeCardsSearchTool,
+  knowledgeCardsListTool,
+  knowledgeCardsSplitTool,
+  knowledgeCardsCombineTool,
 ];
 
 export function createMcpServer(
@@ -160,6 +200,59 @@ export function createMcpServer(
     } else if (name === "workers.trigger") {
       handlerArgs = { ...args } as any;
       handler = handleWorkersTrigger;
+    } else if (name === "facts.consolidate") {
+      // Merge context into args for facts.consolidate
+      handlerArgs = { ...args } as any;
+      if (context?.userId) {
+        handlerArgs.created_by = handlerArgs.created_by || context.userId;
+        handlerArgs.last_updated_by =
+          handlerArgs.last_updated_by || context.userId;
+      }
+      handler = handleFactsConsolidate;
+    } else if (name === "knowledge_cards.create") {
+      // Merge context into args for knowledge_cards.create
+      handlerArgs = { ...args } as any;
+      if (context?.userId) {
+        handlerArgs.created_by = handlerArgs.created_by || context.userId;
+        handlerArgs.last_updated_by =
+          handlerArgs.last_updated_by || context.userId;
+      }
+      handler = handleKnowledgeCardsCreate;
+    } else if (name === "knowledge_cards.update") {
+      // Merge context into args for knowledge_cards.update
+      handlerArgs = { ...args } as any;
+      if (context?.userId) {
+        handlerArgs.last_updated_by =
+          handlerArgs.last_updated_by || context.userId;
+      }
+      handler = handleKnowledgeCardsUpdate;
+    } else if (name === "knowledge_cards.delete") {
+      handlerArgs = { ...args } as any;
+      handler = handleKnowledgeCardsDelete;
+    } else if (name === "knowledge_cards.search") {
+      handlerArgs = { ...args } as any;
+      handler = handleKnowledgeCardsSearch;
+    } else if (name === "knowledge_cards.list") {
+      handlerArgs = { ...args } as any;
+      handler = handleKnowledgeCardsList;
+    } else if (name === "knowledge_cards.split") {
+      // Merge context into args for knowledge_cards.split
+      handlerArgs = { ...args } as any;
+      if (context?.userId) {
+        handlerArgs.created_by = handlerArgs.created_by || context.userId;
+        handlerArgs.last_updated_by =
+          handlerArgs.last_updated_by || context.userId;
+      }
+      handler = handleKnowledgeCardsSplit;
+    } else if (name === "knowledge_cards.combine") {
+      // Merge context into args for knowledge_cards.combine
+      handlerArgs = { ...args } as any;
+      if (context?.userId) {
+        handlerArgs.created_by = handlerArgs.created_by || context.userId;
+        handlerArgs.last_updated_by =
+          handlerArgs.last_updated_by || context.userId;
+      }
+      handler = handleKnowledgeCardsCombine;
     } else {
       const error = `Unknown tool: ${name}`;
       if (logger) {

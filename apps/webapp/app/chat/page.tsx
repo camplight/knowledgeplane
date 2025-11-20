@@ -75,7 +75,8 @@ export default function ChatPage() {
     setIsLoading(true);
 
     // Build conversation history (last 10 messages for context)
-    const conversationHistory = messages
+    // Include the new user message in the history
+    const conversationHistory = [...messages, userMessage]
       .slice(-10)
       .map((m) => ({
         role: m.role,

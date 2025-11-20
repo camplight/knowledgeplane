@@ -67,12 +67,20 @@ ArangoDB (graph database with full-text search)
 |------|-------------|
 | `facts.write` | Write a fact with content, metadata, and user tracking |
 | `facts.bulkwrite` | Write multiple facts to the knowledge base in a single operation |
-| `facts.search` | Search facts using full-text search with pagination. Trashed facts are excluded by default |
+| `facts.search` | Search facts using hybrid search (combines full-text and vector search) with pagination. Trashed facts are excluded by default |
 | `facts.update` | Update a fact in the knowledge base. Only provided fields will be updated |
 | `facts.trash` | Mark a fact as trashed. Trashed facts are excluded from search results unless explicitly included |
+| `facts.consolidate` | Consolidate a set of facts into a knowledge card using AI. Optionally includes related facts via graph traversal |
+| `knowledge_cards.create` | Create a new knowledge card with title, summary, content, and associated fact IDs |
+| `knowledge_cards.update` | Update a knowledge card. Only provided fields will be updated |
+| `knowledge_cards.delete` | Delete a knowledge card by ID |
+| `knowledge_cards.search` | Search knowledge cards using hybrid search (combines full-text and vector search) with pagination |
+| `knowledge_cards.list` | List knowledge cards with pagination |
+| `knowledge_cards.split` | Split a knowledge card into multiple cards using AI |
+| `knowledge_cards.combine` | Combine multiple knowledge cards into a single card using AI |
 | `users.register` | Register a new user or update an existing user's email if the username already exists |
 | `files.upload` | Upload a file and automatically extract facts and FactRelations using AI. The file content is analyzed using OpenAI to identify key information and relationships |
-| `workers.trigger` | Trigger a background worker to run (card-consolidator) |
+| `workers.trigger` | Trigger a background worker to run (card-consolidator or embeddings-generator) |
 
 **facts.write Parameters:**
 - `content` (required): The content of the fact
@@ -88,10 +96,11 @@ ArangoDB (graph database with full-text search)
   - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 
 **facts.search Parameters:**
-- `query` (required): Search query for full-text search. Use '*' to search all facts
+- `query` (required): Search query for hybrid search (combines full-text and vector search). Use '*' to search all facts
 - `k` (optional): Limit for number of results (default: 5)
 - `offset` (optional): Offset for pagination (default: 0)
 - `include_trashed` (optional): If true, includes trashed facts in search results (default: false)
+- `use_vector_search` (optional): If true, use vector search only; if false, use full-text only; if undefined, use hybrid
 
 **facts.update Parameters:**
 - `id` (required): The ID of the fact to update
@@ -105,6 +114,54 @@ ArangoDB (graph database with full-text search)
 **facts.trash Parameters:**
 - `id` (required): The ID of the fact to trash
 - `last_updated_by` (required): User ID of the person trashing the fact
+
+**facts.consolidate Parameters:**
+- `fact_ids` (required): Array of fact IDs to consolidate
+- `include_related` (optional): If true, includes related facts via graph traversal (default: false)
+- `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
+- `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
+
+**knowledge_cards.create Parameters:**
+- `title` (required): Title of the knowledge card
+- `summary` (required): Brief summary of the knowledge card
+- `content` (required): Full content of the knowledge card
+- `fact_ids` (required): Array of fact IDs that are consolidated into this card
+- `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
+- `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
+- `metadata` (optional): Key-value pairs of metadata
+
+**knowledge_cards.update Parameters:**
+- `id` (required): The ID of the knowledge card to update
+- `title` (optional): Updated title of the knowledge card
+- `summary` (optional): Updated summary of the knowledge card
+- `content` (optional): Updated content of the knowledge card
+- `fact_ids` (optional): Updated array of fact IDs
+- `metadata` (optional): Updated key-value pairs of metadata
+- `last_updated_by` (optional): User ID of the person updating the card. If not provided, inferred from authenticated session (OAuth token or API key)
+
+**knowledge_cards.delete Parameters:**
+- `id` (required): The ID of the knowledge card to delete
+
+**knowledge_cards.search Parameters:**
+- `query` (required): Search query for hybrid search. Use '*' to search all cards
+- `k` (optional): Limit for number of results (default: 5)
+- `offset` (optional): Offset for pagination (default: 0)
+- `use_vector_search` (optional): If true, use vector search only; if false, use full-text only; if undefined, use hybrid
+
+**knowledge_cards.list Parameters:**
+- `limit` (optional): Maximum number of cards to return (default: 50)
+- `offset` (optional): Offset for pagination (default: 0)
+
+**knowledge_cards.split Parameters:**
+- `id` (required): The ID of the knowledge card to split
+- `num_cards` (optional): Number of cards to split into (default: 2)
+- `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
+- `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
+
+**knowledge_cards.combine Parameters:**
+- `card_ids` (required): Array of knowledge card IDs to combine (at least 2 cards required)
+- `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
+- `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 
 **users.register Parameters:**
 - `username` (required): Unique username for the user
@@ -829,6 +886,159 @@ The response will include:
 - Number of facts created
 - Number of relations created
 - List of extracted facts with their IDs and content
+
+**Example: Consolidate facts into a knowledge card**
+```bash
+curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":9,
+    "method":"tools/call",
+    "params":{
+      "name":"facts.consolidate",
+      "arguments":{
+        "fact_ids":["facts/123", "facts/456", "facts/789"],
+        "include_related":true
+      }
+    }
+  }'
+```
+
+**Example: Create a knowledge card**
+```bash
+curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":10,
+    "method":"tools/call",
+    "params":{
+      "name":"knowledge_cards.create",
+      "arguments":{
+        "title":"Project Architecture Overview",
+        "summary":"Overview of the project architecture and key components",
+        "content":"Detailed content about the project architecture...",
+        "fact_ids":["facts/123", "facts/456"]
+      }
+    }
+  }'
+```
+
+**Example: Search knowledge cards**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":11,
+    "method":"tools/call",
+    "params":{
+      "name":"knowledge_cards.search",
+      "arguments":{
+        "query":"architecture",
+        "k":10
+      }
+    }
+  }'
+```
+
+**Example: List knowledge cards**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":12,
+    "method":"tools/call",
+    "params":{
+      "name":"knowledge_cards.list",
+      "arguments":{
+        "limit":20,
+        "offset":0
+      }
+    }
+  }'
+```
+
+**Example: Update a knowledge card**
+```bash
+curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":13,
+    "method":"tools/call",
+    "params":{
+      "name":"knowledge_cards.update",
+      "arguments":{
+        "id":"knowledge_cards/123",
+        "title":"Updated Project Architecture Overview",
+        "summary":"Updated summary"
+      }
+    }
+  }'
+```
+
+**Example: Split a knowledge card**
+```bash
+curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":14,
+    "method":"tools/call",
+    "params":{
+      "name":"knowledge_cards.split",
+      "arguments":{
+        "id":"knowledge_cards/123",
+        "num_cards":3
+      }
+    }
+  }'
+```
+
+**Example: Combine knowledge cards**
+```bash
+curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":15,
+    "method":"tools/call",
+    "params":{
+      "name":"knowledge_cards.combine",
+      "arguments":{
+        "card_ids":["knowledge_cards/123", "knowledge_cards/456", "knowledge_cards/789"]
+      }
+    }
+  }'
+```
+
+**Example: Delete a knowledge card**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":16,
+    "method":"tools/call",
+    "params":{
+      "name":"knowledge_cards.delete",
+      "arguments":{
+        "id":"knowledge_cards/123"
+      }
+    }
+  }'
+```
 
 🔗 Integrate (Claude Desktop)
 
