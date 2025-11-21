@@ -173,6 +173,8 @@ export const collections = {
   oauth_authorization_codes: db.collection("oauth_authorization_codes"),
   worker_logs: db.collection("worker_logs"),
   worker_triggers: db.collection("worker_triggers"),
+  chat_threads: db.collection("chat_threads"),
+  chat_messages: db.collection("chat_messages"),
 };
 
 // Graph for relations
@@ -218,6 +220,8 @@ export async function init() {
     "oauth_authorization_codes",
     "worker_logs",
     "worker_triggers",
+    "chat_threads",
+    "chat_messages",
   ];
 
   for (const name of documentCollectionNames) {
@@ -410,6 +414,31 @@ export async function init() {
       type: "persistent",
       fields: ["created_at"],
       name: "idx_worker_log_created_at",
+    });
+    await collections.chat_threads.ensureIndex({
+      type: "persistent",
+      fields: ["user_id"],
+      name: "idx_chat_thread_user_id",
+    });
+    await collections.chat_threads.ensureIndex({
+      type: "persistent",
+      fields: ["updated_at"],
+      name: "idx_chat_thread_updated_at",
+    });
+    await collections.chat_messages.ensureIndex({
+      type: "persistent",
+      fields: ["thread_id"],
+      name: "idx_chat_message_thread_id",
+    });
+    await collections.chat_messages.ensureIndex({
+      type: "persistent",
+      fields: ["thread_id", "sequence"],
+      name: "idx_chat_message_thread_sequence",
+    });
+    await collections.chat_messages.ensureIndex({
+      type: "persistent",
+      fields: ["tool_call_id"],
+      name: "idx_chat_message_tool_call_id",
     });
     // Vector index for knowledge_cards embeddings
     try {

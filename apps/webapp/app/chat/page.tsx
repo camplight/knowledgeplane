@@ -74,19 +74,11 @@ export default function ChatPage() {
     setInput("");
     setIsLoading(true);
 
-    // Build conversation history (last 10 messages for context)
-    // Include the new user message in the history
-    const conversationHistory = [...messages, userMessage]
-      .slice(-10)
-      .map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-
+    // Thread management is handled on the backend
+    // No need to send conversation history - backend retrieves it from the thread
     try {
       await sendMessageMutation.mutateAsync({
         message: userMessage.content,
-        conversationHistory,
       });
     } catch (error) {
       // Error handled in onError

@@ -1,11 +1,15 @@
 import { router, protectedProcedure } from "../router";
-import { Fact } from "@knowledgeplane/db/next";
+// Import db module early to ensure fetch patch is applied before any database operations
+// This side-effect import ensures the db.ts module is loaded and fetch is patched
+import "@knowledgeplane/db/next";
+import { Fact, ChatThread, ensureInitialized } from "@knowledgeplane/db/next";
 import { z } from "zod";
 import {
   createAIModelClient,
   type ChatMessage,
   type ChatCompletionOptions,
-  type McpTool,
+  mcpSessionManager,
+  McpClient,
 } from "@knowledgeplane/aimodel";
 
 // MCP client helper to call facts.search with hybrid search
@@ -27,6 +31,54 @@ async function searchFacts(
   } catch (error) {
     console.error("Error searching facts:", error);
     return [];
+  }
+}
+
+// Get MCP client for a thread, maintaining persistent sessions
+async function getMcpClient(
+  threadId: string,
+  userId: string,
+): Promise<McpClient | null> {
+  const mcpServerUrl = getMcpServerUrl();
+  if (!mcpServerUrl) {
+    return null;
+  }
+
+  // Extract API key from URL if present, but keep it in the URL for the client
+  const url = new URL(mcpServerUrl);
+  const apiKey =
+    url.searchParams.get("api_key") || process.env.MCP_SERVER_API_KEY;
+  // Keep the full URL with API key for the client
+  const fullServerUrl = mcpServerUrl;
+
+  // Get thread to check for existing session ID
+  const thread = await ChatThread.getOrCreate(userId);
+
+  // Create session key from thread ID
+  const sessionKey = `thread:${thread.id}`;
+
+  // Get or create MCP client with persistent session
+  const client = mcpSessionManager.getOrCreateClient(sessionKey, {
+    serverUrl: fullServerUrl,
+    apiKey: apiKey || undefined,
+    userId,
+    sessionId: thread.mcp_session_id,
+  });
+
+  // Initialize the client (will reuse session if available)
+  try {
+    await client.initialize();
+
+    // Store session ID if we got a new one
+    const sessionId = client.getSessionId();
+    if (sessionId && sessionId !== thread.mcp_session_id) {
+      await ChatThread.updateMcpSessionId(thread.id, sessionId);
+    }
+
+    return client;
+  } catch (error) {
+    console.error("Failed to initialize MCP client:", error);
+    return null;
   }
 }
 
@@ -88,18 +140,24 @@ export const chatRouter = router({
     .input(
       z.object({
         message: z.string().min(1),
-        conversationHistory: z
-          .array(
-            z.object({
-              role: z.enum(["user", "assistant", "system"]),
-              content: z.string(),
-            }),
-          )
-          .optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      const { message, conversationHistory = [] } = input;
+      // Ensure database is initialized (applies fetch patch)
+      await ensureInitialized();
+
+      const { message } = input;
+      const userId = ctx.user.userId;
+
+      // Get or create thread for user
+      const thread = await ChatThread.getOrCreate(userId);
+
+      // Store user message
+      await ChatThread.addMessage({
+        thread_id: thread.id,
+        role: "user",
+        content: message,
+      });
 
       // Create AI model client (needed for embeddings)
       const client = createAIModelClient(
@@ -119,64 +177,175 @@ export const chatRouter = router({
           : "";
 
       // Build system prompt
-      const systemPrompt = `You are an AI assistant with access to a knowledge base. You can help users by:
-- Answering questions using information from the knowledge base and the relevant knowledge passed in the system prompt.
-- Providing insights based on stored facts
-- Helping users understand relationships between different pieces of information
-- Suggesting new facts to add to the knowledge base when appropriate
+      const systemPrompt = `${factsContext}`;
 
-When you reference information from the knowledge base, be clear about it. If the knowledge base doesn't have relevant information, say so honestly.
+      // Get thread messages (with truncation - preserves tool calls within window)
+      const threadMessages = await ChatThread.getMessages(thread.id, 20);
 
-${factsContext}`;
+      // Convert to ChatMessage format for AI model
+      const chatMessages = ChatThread.messagesToChatMessages(threadMessages);
 
-      const provider = client.getProvider();
-
-      // Prepare messages for AI model
+      // Prepare messages for AI model (add system prompt and new user message)
       const messages: ChatMessage[] = [
         {
           role: "system",
           content: systemPrompt,
         },
-        ...conversationHistory.map((msg) => ({
-          role: msg.role as "system" | "user" | "assistant",
-          content: msg.content,
-        })),
-        {
-          role: "user",
-          content: message,
-        },
+        ...chatMessages,
       ];
 
+      console.log(messages);
+
+      const provider = client.getProvider();
+
       try {
-        // Configure MCP tools if MCP server URL is available
-        const mcpServerUrl = getMcpServerUrl();
-        const mcpTools: McpTool[] | undefined = mcpServerUrl
-          ? [
-              {
-                type: "mcp",
-                server_label: "knowledgeplane",
-                server_description:
-                  "A knowledge base MCP server for storing, searching, and managing facts, topics, and files. Provides tools for fact management, search, file uploads, and knowledge organization.",
-                server_url: mcpServerUrl,
-                require_approval: "never",
-              },
-            ]
-          : undefined;
+        // Get MCP client with persistent session
+        const mcpClient = await getMcpClient(thread.id, userId);
+
+        // Convert MCP tools to OpenAI function tools if MCP client is available
+        let tools = undefined;
+        if (mcpClient) {
+          try {
+            tools = await mcpClient.getOpenAITools();
+          } catch (error) {
+            console.error("Failed to get MCP tools:", error);
+            // Continue without tools if we can't get them
+          }
+        }
 
         const chatOptions: ChatCompletionOptions = {
           model: process.env.OPENAI_MODEL || "gpt-4o",
           temperature: 0.7,
           maxTokens: 1000,
-          mcpTools: mcpTools,
+          tools: tools && tools.length > 0 ? tools : undefined,
         };
 
-        const completion = await provider.chatCompletion(messages, chatOptions);
-
-        const response =
+        let completion = await provider.chatCompletion(messages, chatOptions);
+        let response =
           completion.content || "I'm sorry, I couldn't generate a response.";
 
-        // Optionally, write the user's question and the AI's response as facts
-        // This could be configurable or done selectively
+        // Handle tool calls if any
+        if (
+          completion.toolCalls &&
+          completion.toolCalls.length > 0 &&
+          mcpClient
+        ) {
+          // Store assistant message with tool calls
+          await ChatThread.addMessage({
+            thread_id: thread.id,
+            role: "assistant",
+            content: response,
+            tool_calls: completion.toolCalls,
+          });
+
+          // Execute each tool call through the MCP client
+          const toolResponses: Array<{ tool_call_id: string; response: any }> =
+            [];
+
+          for (const toolCall of completion.toolCalls) {
+            try {
+              const args = JSON.parse(toolCall.function.arguments || "{}");
+              const toolResult = await mcpClient.callTool(
+                toolCall.function.name,
+                args,
+              );
+
+              // Store tool response
+              await ChatThread.addMessage({
+                thread_id: thread.id,
+                role: "assistant",
+                content: "",
+                tool_call_id: toolCall.id,
+                tool_response: JSON.stringify(toolResult),
+              });
+
+              toolResponses.push({
+                tool_call_id: toolCall.id,
+                response: toolResult,
+              });
+            } catch (error: any) {
+              console.error(
+                `Error calling tool ${toolCall.function.name}:`,
+                error,
+              );
+              const errorResponse = {
+                error: error.message || String(error),
+              };
+
+              await ChatThread.addMessage({
+                thread_id: thread.id,
+                role: "assistant",
+                content: "",
+                tool_call_id: toolCall.id,
+                tool_response: JSON.stringify(errorResponse),
+              });
+
+              toolResponses.push({
+                tool_call_id: toolCall.id,
+                response: errorResponse,
+              });
+            }
+          }
+
+          // Get updated messages including tool responses for final completion
+          // We need to manually construct messages with tool responses
+          const finalMessages: any[] = [
+            {
+              role: "system",
+              content: systemPrompt,
+            },
+          ];
+
+          // Add all previous messages
+          for (const msg of chatMessages) {
+            finalMessages.push({
+              role: msg.role,
+              content: msg.content,
+            });
+          }
+
+          // Add the assistant message with tool calls
+          finalMessages.push({
+            role: "assistant",
+            content: response,
+            tool_calls: completion.toolCalls?.map((tc) => ({
+              id: tc.id,
+              type: "function",
+              function: {
+                name: tc.function.name,
+                arguments: tc.function.arguments,
+              },
+            })),
+          });
+
+          // Add tool response messages (OpenAI expects role "tool")
+          for (const tr of toolResponses) {
+            finalMessages.push({
+              role: "tool",
+              content: JSON.stringify(tr.response),
+              tool_call_id: tr.tool_call_id,
+            });
+          }
+
+          // Get final response from AI with tool results
+          const finalCompletion = await provider.chatCompletion(
+            finalMessages as ChatMessage[],
+            {
+              ...chatOptions,
+              tools: tools, // Keep tools available for potential follow-up calls
+            },
+          );
+
+          response = finalCompletion.content || response;
+        }
+
+        // Store final assistant response
+        await ChatThread.addMessage({
+          thread_id: thread.id,
+          role: "assistant",
+          content: response,
+          tool_calls: completion.toolCalls,
+        });
 
         return {
           response,

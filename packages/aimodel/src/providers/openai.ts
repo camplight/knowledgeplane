@@ -58,10 +58,22 @@ export class OpenAIProvider implements AIModelProvider {
 
         // Try to use the responses.create() API for MCP tools
         // This API might not be available in all OpenAI SDK versions
-        const lastUserMessage = messages
-          .filter((m) => m.role === "user")
-          .pop();
-        const input = lastUserMessage?.content || "";
+        // Convert messages to array format for responses.create() input parameter
+        // The API uses 'input' parameter (as array) instead of 'messages'
+        const conversationInput = messages.map((msg) => {
+          if (typeof msg.content === "string") {
+            return {
+              role: msg.role,
+              content: msg.content,
+            };
+          } else {
+            // Handle multimodal content
+            return {
+              role: msg.role,
+              content: msg.content,
+            } as any;
+          }
+        });
 
         // Convert MCP tools to OpenAI format
         const mcpTools = options.mcpTools.map((tool: McpTool) => ({
@@ -77,10 +89,12 @@ export class OpenAIProvider implements AIModelProvider {
           typeof (this.client as any).responses !== "undefined" &&
           typeof (this.client as any).responses.create === "function"
         ) {
+          // Pass full conversation history via input parameter (as array)
+          // This ensures the model has access to previous chat messages
           const response = await (this.client as any).responses.create({
             model,
             tools: mcpTools,
-            input,
+            input: conversationInput,
           });
 
           return {
@@ -123,14 +137,42 @@ export class OpenAIProvider implements AIModelProvider {
 
         // Log additional error details if available (but don't expose sensitive info)
         if (errorDetails && typeof errorDetails === "object") {
-          console.debug("MCP tool error details:", JSON.stringify(errorDetails));
+          console.debug(
+            "MCP tool error details:",
+            JSON.stringify(errorDetails),
+          );
         }
       }
     }
 
     // Convert messages to OpenAI format
+    // Handle tool role messages (not in ChatMessage type but needed for function calling)
     const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
-      messages.map((msg) => {
+      messages.map((msg: any) => {
+        // Handle tool role messages (for function calling responses)
+        if (msg.role === "tool") {
+          return {
+            role: "tool",
+            content:
+              typeof msg.content === "string"
+                ? msg.content
+                : JSON.stringify(msg.content),
+            tool_call_id: msg.tool_call_id,
+          };
+        }
+
+        // Handle assistant messages with tool_calls
+        if (msg.role === "assistant" && msg.tool_calls) {
+          return {
+            role: "assistant",
+            content:
+              typeof msg.content === "string"
+                ? msg.content
+                : JSON.stringify(msg.content),
+            tool_calls: msg.tool_calls,
+          };
+        }
+
         if (typeof msg.content === "string") {
           return {
             role: msg.role,
@@ -146,7 +188,9 @@ export class OpenAIProvider implements AIModelProvider {
       });
 
     // Convert tools to OpenAI format
-    const openaiTools: OpenAI.Chat.Completions.ChatCompletionTool[] | undefined = options?.tools?.map((tool) => ({
+    const openaiTools:
+      | OpenAI.Chat.Completions.ChatCompletionTool[]
+      | undefined = options?.tools?.map((tool) => ({
       type: "function",
       function: {
         name: tool.function.name,
@@ -156,7 +200,9 @@ export class OpenAIProvider implements AIModelProvider {
     }));
 
     // Convert tool choice
-    let toolChoice: OpenAI.Chat.Completions.ChatCompletionToolChoiceOption | undefined;
+    let toolChoice:
+      | OpenAI.Chat.Completions.ChatCompletionToolChoiceOption
+      | undefined;
     if (options?.toolChoice) {
       if (options.toolChoice === "auto") {
         toolChoice = "auto";
@@ -173,12 +219,8 @@ export class OpenAIProvider implements AIModelProvider {
     const response = await this.client.chat.completions.create({
       model,
       messages: openaiMessages,
-      temperature,
-      max_tokens: maxTokens,
       response_format:
-        responseFormat === "json_object"
-          ? { type: "json_object" }
-          : undefined,
+        responseFormat === "json_object" ? { type: "json_object" } : undefined,
       tools: openaiTools,
       tool_choice: toolChoice,
     });
@@ -278,8 +320,9 @@ export class OpenAIProvider implements AIModelProvider {
     input: string | string[],
     model?: string,
   ): Promise<EmbeddingsResult> {
-    const embeddingModel = model || process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
-    
+    const embeddingModel =
+      model || process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
+
     const response = await this.client.embeddings.create({
       model: embeddingModel,
       input: Array.isArray(input) ? input : [input],
@@ -295,4 +338,3 @@ export class OpenAIProvider implements AIModelProvider {
     };
   }
 }
-

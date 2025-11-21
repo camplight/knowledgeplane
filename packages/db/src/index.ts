@@ -8,5 +8,6 @@ export * from "./models/Webhook";
 export * from "./models/File";
 export * from "./models/Invitation";
 export * from "./models/WorkerLog";
+export * from "./models/ChatThread";
 export * from "./lib/webhook-trigger";
 export * from "./lib/vector-search";
