@@ -91,11 +91,24 @@ export class OpenAIProvider implements AIModelProvider {
         ) {
           // Pass full conversation history via input parameter (as array)
           // This ensures the model has access to previous chat messages
-          const response = await (this.client as any).responses.create({
+          const requestParams: any = {
             model,
             tools: mcpTools,
             input: conversationInput,
-          });
+          };
+
+          // Add response format if specified (Responses API uses text.format with type object)
+          if (responseFormat === "json_object") {
+            requestParams.text = {
+              format: {
+                type: "json_object",
+              },
+            };
+          }
+
+          const response = await (this.client as any).responses.create(
+            requestParams,
+          );
 
           return {
             content: response.output_text || "",

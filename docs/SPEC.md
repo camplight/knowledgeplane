@@ -1229,107 +1229,46 @@ X-KnowledgePlane-Signature: sha256=<signature>
 
 💬 AI Chat Interface
 
-KnowledgePlane includes an AI chat interface that combines OpenAI's language model with access to your knowledge base via MCP server:
+KnowledgePlane includes an AI chat interface that combines OpenAI's language model with access to your knowledge base:
 
 **Features:**
 - Real-time chat interface with conversation history
 - **Thread-based conversation storage** - All messages are saved in persistent threads
 - **Automatic thread management** - Each user has a thread that maintains conversation context
-- **Tool call tracking** - Tool calls and responses are stored in the thread
-- **Smart truncation** - When threads exceed 20 human messages, older messages are truncated while preserving tool calls within the window
+- **Smart truncation** - When threads exceed 20 human messages, older messages are truncated
 - Automatic fact retrieval from knowledge base based on user queries
 - Context-aware responses using relevant facts
 - Knowledge context filtering
 - Visual indication of which facts were used in responses
-- **MCP tool integration** - Direct access to MCP server tools via OpenAI's MCP connectors API
 
 **How it works:**
 1. User sends a message in the chat interface
 2. System retrieves or creates a thread for the user
 3. User message is stored in the thread
 4. System retrieves thread messages (with smart truncation if needed)
-5. System searches the knowledge base for relevant facts using the MCP server
-6. Relevant facts are included as context in the OpenAI API call
-7. **MCP tools are configured** - OpenAI can directly call MCP server tools (facts.search, facts.write, etc.) when needed
-8. AI generates a response using both its training and the knowledge base facts
-9. Assistant response (and any tool calls) are stored in the thread
-10. Response is displayed with information about which facts were used
+5. System configures OpenAI with MCP tools to access the knowledge base
+6. AI model uses MCP tools (e.g., `facts.search`) to retrieve relevant facts as needed
+7. AI generates a response using both its training and the knowledge base facts accessed via MCP tools
+8. AI returns JSON response with `content` (the response text) and `usedFacts` (array of fact IDs actually used)
+9. System parses the JSON response and fetches the actual fact objects by IDs
+10. Assistant response content is stored in the thread
+11. Response is displayed with information about which facts were actually used to construct the response
 
 **Thread Management:**
 - Each user automatically gets a thread that persists across sessions
 - All messages (user, assistant, system) are stored in the thread
-- Tool calls and tool responses are stored and associated with their messages
 - When a thread has more than 20 human messages (user + assistant messages with content), older messages are truncated
-- Truncation preserves tool calls: if a tool call is within the kept window, its corresponding tool response is also kept, even if it's outside the window
-- This ensures that tool call context is maintained even when conversations are long
-
-**MCP Integration:**
-The chat interface uses persistent MCP sessions with OpenAI's standard chat completion API and function calling. This approach maintains a persistent connection to the MCP server per chat thread, eliminating the overhead of creating a new MCP session for each message.
-
-**How It Works:**
-1. **Persistent MCP Sessions**: Each chat thread maintains a persistent MCP session that is reused across all messages in that thread. The session ID is stored in the `ChatThread` record and reused for subsequent messages.
-2. **MCP Client**: A custom MCP client (`McpClient`) manages the persistent connection to the MCP server, handling session initialization, tool discovery, and tool execution.
-3. **Function Calling**: MCP tools are converted to OpenAI function tools, allowing the AI to use them via standard function calling. When the AI requests a tool call, the system executes it through the persistent MCP session.
-4. **Tool Execution Flow**:
-   - AI generates a response with tool calls
-   - Each tool call is executed through the persistent MCP client
-   - Tool results are added to the conversation
-   - AI generates a final response incorporating the tool results
-
-**MCP Tools Available:**
-- `facts.search` - Search facts using hybrid search
-- `facts.write` - Write new facts to the knowledge base
-- `facts.update` - Update existing facts
-- `facts.trash` - Mark facts as trashed
-- `facts.bulkwrite` - Write multiple facts at once
-- `facts.consolidate` - Consolidate facts into knowledge cards
-- `knowledge_cards.create` - Create knowledge cards
-- `knowledge_cards.update` - Update knowledge cards
-- `knowledge_cards.delete` - Delete knowledge cards
-- `knowledge_cards.search` - Search knowledge cards
-- `knowledge_cards.list` - List knowledge cards
-- `knowledge_cards.split` - Split knowledge cards
-- `knowledge_cards.combine` - Combine knowledge cards
-- `files.upload` - Upload files with automatic fact extraction
-- `users.register` - Register new users
-- `workers.trigger` - Trigger background workers
-
-**Performance Benefits:**
-- **Persistent Sessions**: MCP sessions are maintained per thread, eliminating session initialization overhead for each message
-- **Reduced Latency**: No need to initialize MCP sessions, list tools, or establish connections for every message
-- **Efficient Resource Usage**: Sessions are reused across messages in the same thread, reducing server load
-- **Automatic Session Management**: Sessions are automatically initialized on first use and reused for subsequent messages
-
-**Configuration:**
-Set the following environment variables to enable MCP integration:
-- `MCP_SERVER_URL` - Full URL to MCP server (e.g., `http://localhost:8080/mcp`)
-- Or use `MCP_SERVER_HOST`, `MCP_SERVER_PORT`, and `MCP_SERVER_PROTOCOL` to construct the URL
-- `MCP_SERVER_API_KEY` - API key for internal authentication (automatically added to URL as query parameter for OpenAI MCP connector)
-
-**Session Management:**
-- MCP sessions are stored per thread in the `ChatThread` collection (`mcp_session_id` field)
-- Sessions are automatically initialized when first needed
-- If a session expires or becomes invalid, a new session is automatically created
-- Sessions are managed by the `McpSessionManager` singleton, which maintains a cache of active sessions
-- Session IDs are passed via the `mcp-session-id` header to the MCP server for session reuse
-
-**Error Handling:**
-- If MCP client initialization fails, the chat falls back to standard chat completion without MCP tools
-- Tool execution errors are caught and included in the conversation for the AI to handle
-- Session expiration is automatically detected and new sessions are created as needed
+- This ensures conversation context is maintained while preventing excessive token usage
 
 **Thread Data Model:**
 - `ChatThread` collection stores thread metadata:
   - `user_id` - User who owns the thread
   - `created_at` - Thread creation timestamp
   - `updated_at` - Last update timestamp
-  - `mcp_session_id` - Persistent MCP session ID for this thread
 - `ChatMessage` collection stores individual messages with:
   - Thread ID reference
   - Role (system, user, assistant)
   - Content
-  - Tool calls (when assistant requests tool execution)
-  - Tool call ID and response (for tool response messages)
   - Sequence number for ordering
 - Messages are automatically ordered by sequence and retrieved with truncation logic
 
@@ -1340,19 +1279,21 @@ Navigate to `/chat` in the web application (requires authentication).
 - Ask questions about stored facts: "What do we know about project Apollo?"
 - Request summaries: "Summarize all facts about deployment processes"
 - Get insights: "What are the relationships between our different projects?"
-- Direct tool usage: "Search for facts about deployment" (AI will use facts.search tool)
-- Write facts: "Remember that we use Docker for containerization" (AI can use facts.write tool)
 
 The chat interface automatically:
-- Maintains persistent MCP sessions per thread
-- Converts MCP tools to OpenAI function tools
-- Executes tool calls through the persistent MCP session
 - Maintains conversation context across messages
-- Shows which facts were referenced in each response
-- Handles errors gracefully with fallback to standard chat completion
-- Validates MCP server URLs using WHATWG URL API (not deprecated url.parse())
-- Automatically reinitializes sessions if they expire
-- Stores tool calls and responses in the conversation history
+- Shows which facts were actually used in each response (via MCP tools)
+- Handles errors gracefully
+- Uses MCP tools to give the AI model direct access to the knowledge base
+- Tracks which facts were actually used by the AI model (not just searched)
+- Returns only the facts that were actually used to construct the response
+
+**MCP Integration:**
+- The chat interface uses OpenAI's MCP (Model Context Protocol) tools feature
+- MCP server URL is configured via `MCP_SERVER_URL` or constructed from `MCP_SERVER_HOST`, `MCP_SERVER_PORT`, and `MCP_SERVER_PROTOCOL`
+- API key authentication is handled via `MCP_SERVER_API_KEY` (added as query parameter)
+- The AI model receives instructions to return JSON with `content` and `usedFacts` fields
+- Only facts that the AI model actually uses (via MCP tool calls) are tracked and returned
 
 📁 File Upload and AI Extraction
 

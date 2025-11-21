@@ -211,12 +211,14 @@ export class Fact {
       `;
     } else {
       // Try to use FULLTEXT index first
+      // Note: BM25() only works with ArangoSearch views, not FULLTEXT()
+      // FULLTEXT() already orders results by relevance, so we use score 1.0
       aql = `
         FOR fact IN FULLTEXT(facts, "content", @query)
           FILTER (fact.trashed == false || @includeTrashed == true)
           SORT fact.updated_at DESC, fact.created_at DESC
           LIMIT @offset, @limit
-          RETURN { fact: fact, score: BM25(fact) }
+          RETURN { fact: fact, score: 1.0 }
       `;
       bindVars.query = params.query;
     }
@@ -359,12 +361,11 @@ export class Fact {
         { fact: FactRecord; scores: number[] }
       >();
 
-      // Add full-text results (normalize score to 0-1 range)
+      // Add full-text results (use score as-is since FULLTEXT doesn't provide BM25 scores)
       for (const result of fullTextResults) {
-        const normalizedScore = Math.min(result.score / 10, 1); // Normalize BM25 score
         resultMap.set(result.id, {
           fact: result,
-          scores: [normalizedScore],
+          scores: [result.score],
         });
       }
 
