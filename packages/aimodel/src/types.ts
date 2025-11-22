@@ -13,7 +13,12 @@ export type MessageRole = "system" | "user" | "assistant";
  */
 export interface ChatMessage {
   role: MessageRole;
-  content: string | Array<{ type: "text" | "image_url"; text?: string; image_url?: { url: string } }>;
+  content: string | Array<{ 
+    type: "text" | "image_url" | "file"; 
+    text?: string; 
+    image_url?: { url: string };
+    file?: { file_data: string; filename: string };
+  }>;
 }
 
 /**

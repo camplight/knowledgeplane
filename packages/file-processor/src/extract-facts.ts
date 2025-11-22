@@ -3,6 +3,7 @@ import {
   type ChatMessage,
   type ChatCompletionOptions,
 } from "@knowledgeplane/aimodel";
+import * as XLSX from "xlsx";
 
 export interface ExtractedFact {
   content: string;
@@ -22,12 +23,11 @@ export interface ExtractionResult {
 }
 
 /**
- * Use OpenAI to extract facts and relations directly from a file
- * The file is passed directly to OpenAI - no text extraction is performed locally
- * OpenAI handles all file processing internally:
- * - Images: Uses Vision API with base64 encoding
- * - Documents (PDF, Word, etc.): Uploads to OpenAI Files API, OpenAI processes and extracts content
- * - Text files: Passes content directly to OpenAI for processing
+ * Extract facts and relations from a file by passing it directly to the AI model
+ * - PDF files: Passed via base64 file input (OpenAI supports PDF via file type)
+ * - Excel files: Converted to text format and passed as text content
+ * - Other files: Converted to text and passed as text content
+ * Based on: https://gist.github.com/outbounder/14c0c5df7f902b49a8219c05f3053a22
  */
 export async function extractFactsAndRelationsFromFile(
   buffer: Buffer,
@@ -92,163 +92,137 @@ Return your response as JSON with this structure:
   // Handle different file types
   let messages: ChatMessage[];
 
-  if (mimeType.startsWith("image/")) {
-    // For images, use vision API with base64
-    const base64Image = buffer.toString("base64");
-    const imageUrl = `data:${mimeType};base64,${base64Image}`;
+  // Check if it's an Excel file
+  const isExcelFile =
+    mimeType.includes("excel") ||
+    mimeType.includes("spreadsheet") ||
+    mimeType.includes("ms-excel") ||
+    filename.endsWith(".xlsx") ||
+    filename.endsWith(".xls");
 
-    const userPrompt = `Extract facts and relations from this image file:
+  if (isExcelFile) {
+    // Convert Excel file to text format
+    try {
+      const workbook = XLSX.read(buffer, { type: "buffer" });
+      const sheetNames = workbook.SheetNames;
+      let textContent = `Excel Spreadsheet: ${filename}\n\n`;
+
+      for (const sheetName of sheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+        textContent += `\n=== Sheet: ${sheetName} ===\n`;
+        if (jsonData.length > 0) {
+          // Convert to a readable text format
+          const headers = Object.keys(jsonData[0] as any);
+          textContent += `Headers: ${headers.join(", ")}\n\n`;
+
+          jsonData.forEach((row: any, index: number) => {
+            textContent += `Row ${index + 1}:\n`;
+            headers.forEach((header) => {
+              const value = row[header] !== undefined ? String(row[header]) : "";
+              if (value) {
+                textContent += `  ${header}: ${value}\n`;
+              }
+            });
+            textContent += "\n";
+          });
+        } else {
+          textContent += "(Empty sheet)\n";
+        }
+      }
+
+      // Limit content size
+      const limitedContent = textContent.substring(0, 200000);
+
+      const userPrompt = `Extract facts and relations from the following Excel spreadsheet:
 
 Filename: ${filename}
 
-Analyze the image content and extract all relevant facts and their relationships.`;
+Spreadsheet Content:
+${limitedContent}`;
 
-    const messages: ChatMessage[] = [
+      messages = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ];
+    } catch (error) {
+      throw new Error(
+        `Failed to process Excel file: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  } else if (mimeType === "application/pdf") {
+    // For PDF files, use the file input format (OpenAI supports PDF)
+    const base64File = buffer.toString("base64");
+    const fileData = `data:application/pdf;base64,${base64File}`;
+
+    const userPrompt = `Extract facts and relations from the uploaded PDF file.
+
+Filename: ${filename}
+
+Analyze the file content and extract all relevant facts and their relationships.`;
+
+    messages = [
       { role: "system", content: systemPrompt },
       {
         role: "user",
         content: [
           { type: "text", text: userPrompt },
           {
-            type: "image_url",
-            image_url: {
-              url: imageUrl,
+            type: "file",
+            file: {
+              file_data: fileData,
+              filename: filename,
             },
           },
         ],
       },
     ];
-
-    // Use vision model for images
-    const visionModel = model.includes("vision") ? model : "gpt-4o"; // Use gpt-4o which supports vision
-
-    const chatOptions: ChatCompletionOptions = {
-      model: visionModel,
-      temperature,
-      maxTokens: 4000,
-      responseFormat: "json_object",
-    };
-
-    const response = await provider.chatCompletion(messages, chatOptions);
-
-    if (!response.content) {
-      throw new Error("No response from AI model");
-    }
-
-    const parsed = JSON.parse(response.content);
-    return {
-      facts: parsed.facts || [],
-      relations: parsed.relations || [],
-    };
-  } else if (
-    mimeType === "application/pdf" ||
-    mimeType.includes("word") ||
-    mimeType.includes("excel") ||
-    mimeType.includes("powerpoint") ||
-    mimeType.includes("document")
-  ) {
-    // For documents, upload to provider's Files API
-    const uploadResult = await provider.uploadFile(buffer, {
-      filename,
-      mimeType,
-      purpose: "assistants",
-    });
-
-    try {
-      // Wait for file processing
-      const processedResult = await provider.waitForFileProcessing(
-        uploadResult.fileId,
-        60,
-      );
-
-      if (processedResult.status !== "processed") {
-        throw new Error(
-          `File processing failed with status: ${processedResult.status}`,
-        );
-      }
-
-      // Get processed file content
-      const fileContent = await provider.getFileContent(uploadResult.fileId);
-      const textContent = fileContent.content;
-
-      // Pass the AI-processed content directly to extraction
-      const userPrompt = `Extract facts and relations from the following file that has been processed:
-
-Filename: ${filename}
-
-Processed File Content:
-${textContent.substring(0, 200000)}`; // Limit to first 200k chars
-
-      const messages: ChatMessage[] = [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ];
-
-      const chatOptions: ChatCompletionOptions = {
-        model,
-        temperature,
-        responseFormat: "json_object",
-      };
-
-      const response = await provider.chatCompletion(messages, chatOptions);
-
-      if (!response.content) {
-        throw new Error("No response from AI model");
-      }
-
-      const parsed = JSON.parse(response.content);
-
-      // Clean up uploaded file
-      await provider.deleteFile(uploadResult.fileId).catch(() => {
-        // Ignore cleanup errors
-      });
-
-      return {
-        facts: parsed.facts || [],
-        relations: parsed.relations || [],
-      };
-    } catch (error) {
-      // Note: File cleanup would need fileId, but we can't access it here
-      // The provider should handle cleanup in its error handling
-      throw error;
-    }
   } else {
-    // For text files and other types, pass the file buffer directly to OpenAI
-    // OpenAI will process the content internally
-    // We pass the raw buffer content - OpenAI handles the processing
-    const textContent = buffer.toString("utf-8");
+    // For other files (text, Word docs, etc.), convert to text and pass as text content
+    let textContent: string;
+    try {
+      // Try to decode as UTF-8 text
+      textContent = buffer.toString("utf-8");
+    } catch (error) {
+      // If UTF-8 fails, try to convert binary to a readable format
+      textContent = `Binary file: ${filename}\nSize: ${buffer.length} bytes\nMIME Type: ${mimeType}\n\nNote: This file could not be converted to text.`;
+    }
 
-    const userPrompt = `Extract facts and relations from the following file that has been provided directly to you:
+    // Limit content size
+    const limitedContent = textContent.substring(0, 200000);
+
+    const userPrompt = `Extract facts and relations from the following file:
 
 Filename: ${filename}
 File Type: ${mimeType}
 
 File Content:
-${textContent.substring(0, 200000)}`; // Limit to first 200k chars
+${limitedContent}`;
 
-    const messages: ChatMessage[] = [
+    messages = [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ];
-
-    const chatOptions: ChatCompletionOptions = {
-      model,
-      temperature,
-      responseFormat: "json_object",
-    };
-
-    const response = await provider.chatCompletion(messages, chatOptions);
-
-    if (!response.content) {
-      throw new Error("No response from AI model");
-    }
-
-    const parsed = JSON.parse(response.content);
-    return {
-      facts: parsed.facts || [],
-      relations: parsed.relations || [],
-    };
   }
+
+  const chatOptions: ChatCompletionOptions = {
+    model,
+    temperature,
+    responseFormat: "json_object",
+  };
+
+  const response = await provider.chatCompletion(messages, chatOptions);
+
+  if (!response.content) {
+    throw new Error("No response from AI model");
+  }
+
+  const parsed = JSON.parse(response.content);
+  return {
+    facts: parsed.facts || [],
+    relations: parsed.relations || [],
+  };
 }
 
 // Keep the old function for backward compatibility, but it now just converts text to buffer

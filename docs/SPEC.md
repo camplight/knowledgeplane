@@ -1315,12 +1315,17 @@ KnowledgePlane supports file uploads with automatic fact and relation extraction
 
 **How it works:**
 1. User uploads a file through the web interface
-2. File is stored and text content is extracted
+2. File is processed and passed to the AI model:
+   - PDF files: Converted to base64 and passed via OpenAI's file input format (supports PDF natively)
+   - Excel files (.xlsx, .xls): Converted to text format locally using xlsx library, then passed as text content
+   - Other files (Word, text, etc.): Converted to text and passed as text content
+   - No local file storage - files are only stored as metadata in the database
+   - Based on OpenAI's file input format: https://gist.github.com/outbounder/14c0c5df7f902b49a8219c05f3053a22
 3. OpenAI analyzes the content and extracts:
    - Discrete facts with metadata
    - Relationships between facts (references, depends_on, related_to, etc.)
 4. Facts and relations are created in the knowledge base
-5. Original file is linked to all extracted facts
+5. File metadata is linked to all extracted facts
 6. Facts include metadata pointing back to the source file
 
 **Supported File Types:**
@@ -1328,13 +1333,15 @@ KnowledgePlane supports file uploads with automatic fact and relation extraction
 - JSON files (.json)
 - PDF documents (.pdf) - requires additional processing
 - Word documents (.doc, .docx) - requires additional processing
+- Excel spreadsheets (.xlsx, .xls) - requires additional processing
 - Other text-based formats
 
 **File Model:**
-- Stores file metadata (filename, size, mime type, storage path)
+- Stores file metadata (filename, size, mime type) - no local file storage
 - Tracks which facts were extracted from the file
 - Links facts back to source file via metadata
 - Supports knowledge context organization
+- Files are passed directly to OpenAI and not stored locally
 
 **Access:**
 Navigate to `/upload` in the web application (requires authentication).

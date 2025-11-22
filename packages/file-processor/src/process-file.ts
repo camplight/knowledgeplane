@@ -1,7 +1,5 @@
 import { extractFactsAndRelationsFromFile } from "./extract-facts";
 import { File, Fact, FactRelation } from "@knowledgeplane/db";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
 import { randomUUID } from "crypto";
 
 export interface ProcessFileOptions {
@@ -9,7 +7,6 @@ export interface ProcessFileOptions {
   filename: string;
   mimeType: string;
   uploadedBy: string;
-  uploadsDir?: string;
   openaiApiKey?: string;
   openaiModel?: string;
   temperature?: number;
@@ -32,8 +29,8 @@ export interface ProcessFileResult {
 }
 
 /**
- * Process a file upload: save file, delegate to OpenAI for processing, extract facts/relations, and create them in the database
- * The file is passed directly to OpenAI without text extraction - OpenAI handles all file processing internally
+ * Process a file upload: extract facts/relations using AI, and create them in the database
+ * Files are passed directly to OpenAI using base64 encoding - no local storage required
  */
 export async function processFileUpload(
   options: ProcessFileOptions,
@@ -43,34 +40,19 @@ export async function processFileUpload(
     filename,
     mimeType,
     uploadedBy,
-    uploadsDir = process.env.UPLOADS_DIR || join(process.cwd(), "uploads"),
     openaiApiKey,
     openaiModel,
     temperature,
   } = options;
 
-  // Ensure uploads directory exists
-  try {
-    await mkdir(uploadsDir, { recursive: true });
-  } catch (error) {
-    // Directory might already exist
-  }
-
-  // Save file to disk
+  // Create file record (no local storage - file is only stored in database metadata)
   const fileId = randomUUID();
-  const fileExtension = filename.split(".").pop() || "";
-  const storageFilename = `${fileId}.${fileExtension}`;
-  const storagePath = join(uploadsDir, storageFilename);
-
-  await writeFile(storagePath, buffer);
-
-  // Create file record
   const fileRecord = await File.create({
-    filename: storageFilename,
+    filename: filename, // Use original filename since we're not storing locally
     original_filename: filename,
     mime_type: mimeType,
     size: buffer.length,
-    storage_path: storagePath,
+    storage_path: "", // No local storage path
     uploaded_by: uploadedBy,
     metadata: {
       original_filename: filename,
@@ -78,7 +60,7 @@ export async function processFileUpload(
   });
 
   // Extract facts and relations directly from file using OpenAI
-  // OpenAI handles the file processing internally (no text extraction needed)
+  // File is passed as base64 in the message content - no local storage or Files API needed
   const { facts, relations } = await extractFactsAndRelationsFromFile(
     buffer,
     filename,

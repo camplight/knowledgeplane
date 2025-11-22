@@ -192,10 +192,25 @@ export class OpenAIProvider implements AIModelProvider {
             content: msg.content,
           };
         } else {
-          // Handle multimodal content
+          // Handle multimodal content (text, image_url, file)
+          // Map file type to OpenAI's expected format
+          // Based on: https://gist.github.com/outbounder/14c0c5df7f902b49a8219c05f3053a22
+          const mappedContent = msg.content.map((item: any) => {
+            if (item.type === "file") {
+              // OpenAI expects file content with file_data and filename
+              return {
+                type: "file",
+                file: {
+                  file_data: item.file?.file_data,
+                  filename: item.file?.filename,
+                },
+              };
+            }
+            return item;
+          });
           return {
             role: msg.role,
-            content: msg.content,
+            content: mappedContent,
           } as any;
         }
       });
