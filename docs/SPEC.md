@@ -80,6 +80,18 @@ ArangoDB (graph database with full-text search)
 | `knowledge_cards.combine` | Combine multiple knowledge cards into a single card using AI |
 | `users.register` | Register a new user or update an existing user's email if the username already exists |
 | `files.upload` | Upload a file and automatically extract facts and FactRelations using AI. The file content is analyzed using OpenAI to identify key information and relationships |
+| `files.list` | List files with pagination |
+| `files.get` | Get a file by ID |
+| `files.search` | Search files by fact ID. Returns all files that contain the specified fact ID in their fact_ids array |
+| `files.update` | Update a file. Only provided fields will be updated. Metadata and fact_ids can be updated |
+| `files.delete` | Delete a file by ID |
+| `fact_relations.create` | Create a relation between two facts. Relations are typed edges in the knowledge graph |
+| `fact_relations.update` | Update a fact relation. Only provided fields will be updated. Type and metadata can be updated |
+| `fact_relations.delete` | Delete a fact relation by ID |
+| `fact_relations.search` | Search fact relations with filtering. Supports filtering by from_fact, to_fact, and type. Supports pagination |
+| `fact_relations.get` | Get a fact relation by ID |
+| `fact_relations.get_related` | Get facts related to a given fact via outgoing relations. Returns relations and the related facts. Optionally filter by relation type |
+| `fact_relations.get_incoming` | Get facts that have relations pointing to a given fact (incoming relations). Returns relations and the source facts. Optionally filter by relation type |
 | `workers.trigger` | Trigger a background worker to run (card-consolidator or embeddings-generator) |
 
 **facts.write Parameters:**
@@ -181,6 +193,57 @@ ArangoDB (graph database with full-text search)
 - `mimeType` (required): MIME type of the file (e.g., 'text/plain', 'application/json')
 - `data` (required): Base64-encoded file content
 - `created_by` (optional): User ID of the uploader. If not provided, inferred from authenticated session (OAuth token or API key)
+
+**files.list Parameters:**
+- `limit` (optional): Maximum number of files to return (default: 50)
+- `offset` (optional): Offset for pagination (default: 0)
+
+**files.get Parameters:**
+- `id` (required): The ID of the file to retrieve
+
+**files.search Parameters:**
+- `fact_id` (required): The fact ID to search for in files. Returns all files that contain this fact ID in their fact_ids array
+
+**files.update Parameters:**
+- `id` (required): The ID of the file to update
+- `metadata` (optional): Updated metadata (key-value pairs)
+- `fact_ids` (optional): Updated array of fact IDs extracted from this file
+
+**files.delete Parameters:**
+- `id` (required): The ID of the file to delete
+
+**fact_relations.create Parameters:**
+- `from_fact` (required): Source fact ID
+- `to_fact` (required): Target fact ID
+- `type` (required): Relation type (e.g., 'references', 'depends_on', 'related_to', 'part_of')
+- `metadata` (optional): Additional relation metadata
+- `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
+
+**fact_relations.update Parameters:**
+- `id` (required): The ID of the relation to update
+- `type` (optional): Updated relation type
+- `metadata` (optional): Updated metadata (key-value pairs)
+
+**fact_relations.delete Parameters:**
+- `id` (required): The ID of the relation to delete
+
+**fact_relations.search Parameters:**
+- `from_fact` (optional): Filter by source fact ID
+- `to_fact` (optional): Filter by target fact ID
+- `type` (optional): Filter by relation type
+- `limit` (optional): Maximum number of relations to return (default: 50)
+- `offset` (optional): Offset for pagination (default: 0)
+
+**fact_relations.get Parameters:**
+- `id` (required): The ID of the relation to retrieve
+
+**fact_relations.get_related Parameters:**
+- `fact_id` (required): The fact ID to get related facts for
+- `relation_type` (optional): Optional filter by relation type
+
+**fact_relations.get_incoming Parameters:**
+- `fact_id` (required): The fact ID to get incoming relations for
+- `relation_type` (optional): Optional filter by relation type
 
 🔌 API Endpoints
 
@@ -447,14 +510,16 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Secure API key display with show/hide functionality
   - Copy-to-clipboard functionality for API keys
 - Knowledge base editor page (`/editor`) with:
-  - Tabbed interface for switching between Facts, Cards, and Knowledge Graph views
+  - Tabbed interface for switching between Facts, Cards, Files, and Knowledge Graph views
   - Facts view with list display, fact creation, and fact relation management
   - Cards view with knowledge cards list display and detailed card information sidebar
+  - Files view with uploaded files list display and detailed file information sidebar
   - Card details sidebar showing title, summary, full content, fact count, timestamps, and metadata
+  - File details sidebar showing filename, MIME type, size, storage path, fact count, extracted facts list (clickable to navigate to facts), timestamps, and metadata
   - Card deletion functionality with confirmation dialog
   - Fact details sidebar with relations management (create and view outgoing/incoming relations)
   - Search functionality for facts with server-side semantic search
-  - Real-time client-side filtering that filters visible facts and cards as you type, searching through content, title, and summary fields
+  - Real-time client-side filtering that filters visible facts, cards, and files as you type, searching through content, title, summary, and filename fields
 - Facts browsing page (`/facts`) with pagination, filtering, and detailed fact display
 - Users and invitations management page (`/users`) with:
   - User listing with invitation status (pending, accepted, none)
@@ -1060,6 +1125,234 @@ curl -X POST http://localhost:8080/mcp \
       "name":"knowledge_cards.delete",
       "arguments":{
         "id":"knowledge_cards/123"
+      }
+    }
+  }'
+```
+
+**Example: List files**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":17,
+    "method":"tools/call",
+    "params":{
+      "name":"files.list",
+      "arguments":{
+        "limit":20,
+        "offset":0
+      }
+    }
+  }'
+```
+
+**Example: Get a file**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":18,
+    "method":"tools/call",
+    "params":{
+      "name":"files.get",
+      "arguments":{
+        "id":"files/123"
+      }
+    }
+  }'
+```
+
+**Example: Search files by fact ID**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":19,
+    "method":"tools/call",
+    "params":{
+      "name":"files.search",
+      "arguments":{
+        "fact_id":"facts/456"
+      }
+    }
+  }'
+```
+
+**Example: Update a file**
+```bash
+curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":20,
+    "method":"tools/call",
+    "params":{
+      "name":"files.update",
+      "arguments":{
+        "id":"files/123",
+        "metadata":{"source":"manual-update"},
+        "fact_ids":["facts/456", "facts/789"]
+      }
+    }
+  }'
+```
+
+**Example: Delete a file**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":21,
+    "method":"tools/call",
+    "params":{
+      "name":"files.delete",
+      "arguments":{
+        "id":"files/123"
+      }
+    }
+  }'
+```
+
+**Example: Create a fact relation**
+```bash
+curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":22,
+    "method":"tools/call",
+    "params":{
+      "name":"fact_relations.create",
+      "arguments":{
+        "from_fact":"facts/123",
+        "to_fact":"facts/456",
+        "type":"references",
+        "metadata":{"strength":"strong"}
+      }
+    }
+  }'
+```
+
+**Example: Update a fact relation**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":23,
+    "method":"tools/call",
+    "params":{
+      "name":"fact_relations.update",
+      "arguments":{
+        "id":"fact_relations/789",
+        "type":"depends_on",
+        "metadata":{"strength":"weak"}
+      }
+    }
+  }'
+```
+
+**Example: Delete a fact relation**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":24,
+    "method":"tools/call",
+    "params":{
+      "name":"fact_relations.delete",
+      "arguments":{
+        "id":"fact_relations/789"
+      }
+    }
+  }'
+```
+
+**Example: Search fact relations**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":25,
+    "method":"tools/call",
+    "params":{
+      "name":"fact_relations.search",
+      "arguments":{
+        "from_fact":"facts/123",
+        "type":"references",
+        "limit":10
+      }
+    }
+  }'
+```
+
+**Example: Get a fact relation**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":26,
+    "method":"tools/call",
+    "params":{
+      "name":"fact_relations.get",
+      "arguments":{
+        "id":"fact_relations/789"
+      }
+    }
+  }'
+```
+
+**Example: Get related facts**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":27,
+    "method":"tools/call",
+    "params":{
+      "name":"fact_relations.get_related",
+      "arguments":{
+        "fact_id":"facts/123",
+        "relation_type":"references"
+      }
+    }
+  }'
+```
+
+**Example: Get incoming relations**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":28,
+    "method":"tools/call",
+    "params":{
+      "name":"fact_relations.get_incoming",
+      "arguments":{
+        "fact_id":"facts/456",
+        "relation_type":"depends_on"
       }
     }
   }'

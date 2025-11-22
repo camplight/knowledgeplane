@@ -2,6 +2,7 @@
 
 import { trpc } from "../../utils/trpc";
 import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 
 export function Navigation() {
@@ -59,8 +60,8 @@ export function Navigation() {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push("/dashboard")}
+            <Link
+              href="/dashboard"
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                 isActive("/dashboard")
                   ? "bg-blue-600 text-white hover:bg-blue-700"
@@ -68,9 +69,9 @@ export function Navigation() {
               }`}
             >
               Dashboard
-            </button>
-            <button
-              onClick={() => router.push("/upload")}
+            </Link>
+            <Link
+              href="/upload"
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                 isActive("/upload")
                   ? "bg-blue-600 text-white hover:bg-blue-700"
@@ -78,9 +79,9 @@ export function Navigation() {
               }`}
             >
               Upload Files
-            </button>
-            <button
-              onClick={() => router.push("/editor")}
+            </Link>
+            <Link
+              href="/editor"
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                 isActive("/editor")
                   ? "bg-blue-600 text-white hover:bg-blue-700"
@@ -88,9 +89,9 @@ export function Navigation() {
               }`}
             >
               Editor
-            </button>
-            <button
-              onClick={() => router.push("/chat")}
+            </Link>
+            <Link
+              href="/chat"
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                 isActive("/chat")
                   ? "bg-blue-600 text-white hover:bg-blue-700"
@@ -98,9 +99,9 @@ export function Navigation() {
               }`}
             >
               Chat
-            </button>
-            <button
-              onClick={() => router.push("/users")}
+            </Link>
+            <Link
+              href="/users"
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                 isActive("/users")
                   ? "bg-blue-600 text-white hover:bg-blue-700"
@@ -108,9 +109,9 @@ export function Navigation() {
               }`}
             >
               Users
-            </button>
-            <button
-              onClick={() => router.push("/worker-logs")}
+            </Link>
+            <Link
+              href="/worker-logs"
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                 isActive("/worker-logs")
                   ? "bg-blue-600 text-white hover:bg-blue-700"
@@ -118,7 +119,7 @@ export function Navigation() {
               }`}
             >
               Worker Logs
-            </button>
+            </Link>
             
             {/* User Menu with Dropdown */}
             <div className="relative" ref={dropdownRef}>
@@ -147,19 +148,17 @@ export function Navigation() {
               
               {isDropdownOpen && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
-                  <button
-                    onClick={() => {
-                      router.push("/profile");
-                      setIsDropdownOpen(false);
-                    }}
-                    className={`w-full text-left px-4 py-2 text-sm transition-colors ${
+                  <Link
+                    href="/profile"
+                    onClick={() => setIsDropdownOpen(false)}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors block ${
                       isActive("/profile")
                         ? "bg-blue-50 text-blue-700 font-medium"
                         : "text-slate-700 hover:bg-slate-100"
                     }`}
                   >
                     Profile
-                  </button>
+                  </Link>
                   <button
                     onClick={handleLogout}
                     className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 transition-colors"

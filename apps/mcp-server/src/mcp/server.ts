@@ -20,6 +20,48 @@ import {
   filesUploadTool,
   handleFilesUpload,
 } from "./handlers/files.upload.js";
+import { filesListTool, handleFilesList } from "./handlers/files.list.js";
+import { filesGetTool, handleFilesGet } from "./handlers/files.get.js";
+import {
+  filesSearchTool,
+  handleFilesSearch,
+} from "./handlers/files.search.js";
+import {
+  filesUpdateTool,
+  handleFilesUpdate,
+} from "./handlers/files.update.js";
+import {
+  filesDeleteTool,
+  handleFilesDelete,
+} from "./handlers/files.delete.js";
+import {
+  factRelationsCreateTool,
+  handleFactRelationsCreate,
+} from "./handlers/fact_relations.create.js";
+import {
+  factRelationsUpdateTool,
+  handleFactRelationsUpdate,
+} from "./handlers/fact_relations.update.js";
+import {
+  factRelationsDeleteTool,
+  handleFactRelationsDelete,
+} from "./handlers/fact_relations.delete.js";
+import {
+  factRelationsSearchTool,
+  handleFactRelationsSearch,
+} from "./handlers/fact_relations.search.js";
+import {
+  factRelationsGetTool,
+  handleFactRelationsGet,
+} from "./handlers/fact_relations.get.js";
+import {
+  factRelationsGetRelatedTool,
+  handleFactRelationsGetRelated,
+} from "./handlers/fact_relations.get_related.js";
+import {
+  factRelationsGetIncomingTool,
+  handleFactRelationsGetIncoming,
+} from "./handlers/fact_relations.get_incoming.js";
 import {
   knowledgeCardsCreateTool,
   handleKnowledgeCardsCreate,
@@ -69,6 +111,18 @@ const tools = [
   factsConsolidateTool,
   usersRegisterTool,
   filesUploadTool,
+  filesListTool,
+  filesGetTool,
+  filesSearchTool,
+  filesUpdateTool,
+  filesDeleteTool,
+  factRelationsCreateTool,
+  factRelationsUpdateTool,
+  factRelationsDeleteTool,
+  factRelationsSearchTool,
+  factRelationsGetTool,
+  factRelationsGetRelatedTool,
+  factRelationsGetIncomingTool,
   workersTriggerTool,
   knowledgeCardsCreateTool,
   knowledgeCardsUpdateTool,
@@ -197,6 +251,46 @@ export function createMcpServer(
         }
       }
       handler = handleFilesUpload;
+    } else if (name === "files.list") {
+      handlerArgs = { ...args } as any;
+      handler = handleFilesList;
+    } else if (name === "files.get") {
+      handlerArgs = { ...args } as any;
+      handler = handleFilesGet;
+    } else if (name === "files.search") {
+      handlerArgs = { ...args } as any;
+      handler = handleFilesSearch;
+    } else if (name === "files.update") {
+      handlerArgs = { ...args } as any;
+      handler = handleFilesUpdate;
+    } else if (name === "files.delete") {
+      handlerArgs = { ...args } as any;
+      handler = handleFilesDelete;
+    } else if (name === "fact_relations.create") {
+      // Merge context into args for fact_relations.create
+      handlerArgs = { ...args } as any;
+      if (context?.userId) {
+        handlerArgs.created_by = handlerArgs.created_by || context.userId;
+      }
+      handler = handleFactRelationsCreate;
+    } else if (name === "fact_relations.update") {
+      handlerArgs = { ...args } as any;
+      handler = handleFactRelationsUpdate;
+    } else if (name === "fact_relations.delete") {
+      handlerArgs = { ...args } as any;
+      handler = handleFactRelationsDelete;
+    } else if (name === "fact_relations.search") {
+      handlerArgs = { ...args } as any;
+      handler = handleFactRelationsSearch;
+    } else if (name === "fact_relations.get") {
+      handlerArgs = { ...args } as any;
+      handler = handleFactRelationsGet;
+    } else if (name === "fact_relations.get_related") {
+      handlerArgs = { ...args } as any;
+      handler = handleFactRelationsGetRelated;
+    } else if (name === "fact_relations.get_incoming") {
+      handlerArgs = { ...args } as any;
+      handler = handleFactRelationsGetIncoming;
     } else if (name === "workers.trigger") {
       handlerArgs = { ...args } as any;
       handler = handleWorkersTrigger;

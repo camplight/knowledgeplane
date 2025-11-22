@@ -9,11 +9,12 @@ import { RelationItem } from "./components/RelationItem";
 
 export default function EditorPage() {
   const router = useRouter();
-  const [selectedView, setSelectedView] = useState<"facts" | "cards" | "graph">("facts");
+  const [selectedView, setSelectedView] = useState<"facts" | "cards" | "files" | "graph">("facts");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const [selectedFact, setSelectedFact] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   
   // Create fact form state
   const [showCreateFact, setShowCreateFact] = useState(false);
@@ -69,6 +70,24 @@ export default function EditorPage() {
   const { data: selectedCardData } = trpc.cards.getById.useQuery(
     { id: selectedCard || "" },
     { enabled: !!selectedCard }
+  );
+
+  // Files queries
+  const { data: filesData, isLoading: filesLoading, refetch: refetchFiles } = trpc.files.list.useQuery({
+    limit: 50,
+    offset: 0,
+  });
+
+  // Get selected file details
+  const { data: selectedFileData } = trpc.files.getById.useQuery(
+    { id: selectedFile || "" },
+    { enabled: !!selectedFile }
+  );
+
+  // Get facts for selected file
+  const { data: fileFactsData } = trpc.files.getFacts.useQuery(
+    { fileId: selectedFile || "" },
+    { enabled: !!selectedFile }
   );
 
   // Search facts - only enabled when there's an active search query
@@ -178,7 +197,7 @@ export default function EditorPage() {
   };
 
   // Client-side filter function
-  const filterItems = <T extends { content?: string; title?: string; summary?: string }>(
+  const filterItems = <T extends { content?: string; title?: string; summary?: string; filename?: string; original_filename?: string }>(
     items: T[],
     query: string
   ): T[] => {
@@ -191,10 +210,14 @@ export default function EditorPage() {
       const content = item.content?.toLowerCase() || "";
       const title = item.title?.toLowerCase() || "";
       const summary = item.summary?.toLowerCase() || "";
+      const filename = item.filename?.toLowerCase() || "";
+      const originalFilename = item.original_filename?.toLowerCase() || "";
       
       return content.includes(lowerQuery) || 
              title.includes(lowerQuery) || 
-             summary.includes(lowerQuery);
+             summary.includes(lowerQuery) ||
+             filename.includes(lowerQuery) ||
+             originalFilename.includes(lowerQuery);
     });
   };
 
@@ -402,6 +425,10 @@ export default function EditorPage() {
   const allCards = cardsData?.cards || [];
   const filteredCards = filterItems(allCards, searchQuery);
 
+  // Apply client-side filter to files
+  const allFiles = filesData?.files || [];
+  const filteredFiles = filterItems(allFiles, searchQuery);
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Navigation />
@@ -413,7 +440,7 @@ export default function EditorPage() {
             <div className="flex-1 relative">
               <input
                 type="text"
-                placeholder="Search facts, cards, or browse knowledge graph..."
+                placeholder="Search facts, cards, files, or browse knowledge graph..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -442,12 +469,12 @@ export default function EditorPage() {
               Search
             </button>
           </div>
-          {(activeSearchQuery || (searchQuery && searchQuery.trim().length > 0)) && (
+              {(activeSearchQuery || (searchQuery && searchQuery.trim().length > 0)) && (
             <div className="mt-2 text-sm text-slate-600">
               {activeSearchQuery ? (
                 <>Showing server search results for: <span className="font-medium">"{activeSearchQuery}"</span></>
               ) : (
-                <>Filtering {selectedView === "facts" ? facts.length : filteredCards.length} {selectedView === "facts" ? "fact" : "card"}{selectedView === "facts" ? (facts.length !== 1 ? "s" : "") : (filteredCards.length !== 1 ? "s" : "")} matching: <span className="font-medium">"{searchQuery}"</span></>
+                <>Filtering {selectedView === "facts" ? facts.length : selectedView === "cards" ? filteredCards.length : filteredFiles.length} {selectedView === "facts" ? "fact" : selectedView === "cards" ? "card" : "file"}{selectedView === "facts" ? (facts.length !== 1 ? "s" : "") : selectedView === "cards" ? (filteredCards.length !== 1 ? "s" : "") : (filteredFiles.length !== 1 ? "s" : "")} matching: <span className="font-medium">"{searchQuery}"</span></>
               )}
             </div>
           )}
@@ -460,6 +487,7 @@ export default function EditorPage() {
               onClick={() => {
                 setSelectedView("facts");
                 setSelectedCard(null);
+                setSelectedFile(null);
               }}
               className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
                 selectedView === "facts"
@@ -473,6 +501,7 @@ export default function EditorPage() {
               onClick={() => {
                 setSelectedView("cards");
                 setSelectedFact(null);
+                setSelectedFile(null);
               }}
               className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
                 selectedView === "cards"
@@ -484,9 +513,24 @@ export default function EditorPage() {
             </button>
             <button
               onClick={() => {
+                setSelectedView("files");
+                setSelectedFact(null);
+                setSelectedCard(null);
+              }}
+              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                selectedView === "files"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              Files
+            </button>
+            <button
+              onClick={() => {
                 setSelectedView("graph");
                 setSelectedFact(null);
                 setSelectedCard(null);
+                setSelectedFile(null);
               }}
               className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
                 selectedView === "graph"
@@ -642,6 +686,71 @@ export default function EditorPage() {
                             </svg>
                             {card.fact_ids.length} fact{card.fact_ids.length !== 1 ? "s" : ""}
                           </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedView === "files" && (
+              <div className="bg-white rounded-xl shadow-lg border border-slate-200">
+                <div className="p-6 border-b border-slate-200">
+                  <h2 className="text-2xl font-bold text-slate-900">Files</h2>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Browse uploaded files and their extracted facts
+                  </p>
+                </div>
+
+                {filesLoading ? (
+                  <div className="p-8 text-center">
+                    <div className="text-slate-600">Loading files...</div>
+                  </div>
+                ) : !filesData?.files || filesData.files.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-lg font-medium text-slate-900 mb-2">No files found</p>
+                    <p className="text-slate-600">Upload files to extract facts from them</p>
+                  </div>
+                ) : filteredFiles.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <p className="text-lg font-medium text-slate-900 mb-2">No files match your search</p>
+                    <p className="text-slate-600">Try adjusting your search query</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-200">
+                    {filteredFiles.map((file: any) => (
+                      <div
+                        key={file.id}
+                        onClick={() => setSelectedFile(file.id)}
+                        className={`p-6 hover:bg-slate-50 transition-colors cursor-pointer ${
+                          selectedFile === file.id ? "bg-green-50 border-l-4 border-green-600" : ""
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold text-slate-900 mb-1">{file.original_filename || file.filename}</h3>
+                            <p className="text-sm text-slate-600 mb-3">
+                              {file.mime_type} • {(file.size / 1024).toFixed(2)} KB
+                            </p>
+                            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                              <span className="flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                {new Date(file.created_at).toLocaleDateString()}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                {file.fact_ids.length} fact{file.fact_ids.length !== 1 ? "s" : ""}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1036,6 +1145,91 @@ export default function EditorPage() {
                     {deleteCardMutation.isPending ? "Deleting..." : "Delete"}
                   </button>
                 </div>
+              </div>
+            )}
+
+            {selectedFile && selectedFileData?.file && (
+              <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 sticky top-24 space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-slate-900">File Details</h3>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Filename</p>
+                    <p className="text-slate-900 font-semibold">{selectedFileData.file.original_filename || selectedFileData.file.filename}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Storage Filename</p>
+                    <p className="text-slate-900 text-sm font-mono">{selectedFileData.file.filename}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">MIME Type</p>
+                    <p className="text-slate-900">{selectedFileData.file.mime_type}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Size</p>
+                    <p className="text-slate-900">{(selectedFileData.file.size / 1024).toFixed(2)} KB</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Storage Path</p>
+                    <p className="text-slate-900 text-sm font-mono break-all">{selectedFileData.file.storage_path}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Fact Count</p>
+                    <p className="text-slate-900">{selectedFileData.file.fact_ids.length} fact{selectedFileData.file.fact_ids.length !== 1 ? "s" : ""}</p>
+                  </div>
+                  {fileFactsData?.facts && fileFactsData.facts.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-slate-600 mb-2">Extracted Facts</p>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {fileFactsData.facts.map((fact: any) => (
+                          <div
+                            key={fact.id}
+                            onClick={() => {
+                              setSelectedFact(fact.id);
+                              setSelectedView("facts");
+                            }}
+                            className="p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors"
+                          >
+                            <p className="text-sm text-slate-900 line-clamp-2">{fact.content}</p>
+                            <p className="text-xs text-slate-500 mt-1 font-mono">
+                              {fact.id?.includes("/") ? fact.id.substring(fact.id.lastIndexOf("/") + 1) : fact.id?.substring(0, 8)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Created</p>
+                    <p className="text-slate-900">
+                      {new Date(selectedFileData.file.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-1">Last Updated</p>
+                    <p className="text-slate-900">
+                      {new Date(selectedFileData.file.updated_at).toLocaleString()}
+                    </p>
+                  </div>
+                  {selectedFileData.file.metadata && Object.keys(selectedFileData.file.metadata).length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-slate-600 mb-1">Metadata</p>
+                      <div className="bg-slate-50 rounded-lg p-3">
+                        <pre className="text-xs text-slate-700 whitespace-pre-wrap">
+                          {JSON.stringify(selectedFileData.file.metadata, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => setSelectedFile(null)}
+                  className="w-full px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  Close
+                </button>
               </div>
             )}
           </div>
