@@ -97,10 +97,16 @@ ArangoDB (graph database with full-text search)
 
 **facts.search Parameters:**
 - `query` (required): Search query for hybrid search (combines full-text and vector search). Use '*' to search all facts
-- `k` (optional): Limit for number of results (default: 5)
+- `k` (optional): Limit for number of results (default: 5, max: 20). Results are optimized to prevent context window issues
 - `offset` (optional): Offset for pagination (default: 0)
 - `include_trashed` (optional): If true, includes trashed facts in search results (default: false)
-- `use_vector_search` (optional): If true, use vector search only; if false, use full-text only; if undefined, use hybrid
+
+**facts.search Response Optimization:**
+- Content is automatically truncated to 500 characters to prevent context window issues
+- Embeddings and internal database fields (_key, _id, embedding_model) are excluded from results
+- Maximum 20 results per request (k is capped at 20)
+- Response includes a `content_truncated` flag for each fact if content was truncated
+- Use `facts.update` or fetch individual facts if full content is needed
 
 **facts.update Parameters:**
 - `id` (required): The ID of the fact to update
