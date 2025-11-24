@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { FactRelation } from "@knowledgeplane/db";
+import { FactRelation, Fact } from "@knowledgeplane/db";
 
 export const factRelationsGetRelatedTool: Tool = {
   name: "fact_relations.get_related",
@@ -16,6 +16,10 @@ export const factRelationsGetRelatedTool: Tool = {
         type: "string",
         description: "Optional filter by relation type",
       },
+      team_id: {
+        type: "string",
+        description: "Team ID for filtering (optional, inferred from session if authenticated)",
+      },
     },
     required: ["fact_id"],
   },
@@ -24,10 +28,28 @@ export const factRelationsGetRelatedTool: Tool = {
 export async function handleFactRelationsGetRelated(args: {
   fact_id: string;
   relation_type?: string;
+  team_id?: string;
 }) {
+  // Get the fact to check its team_id
+  const fact = await Fact.findById(args.fact_id);
+  if (!fact) {
+    throw new Error(`Fact with id ${args.fact_id} not found`);
+  }
+
+  // If team_id is provided, validate it matches the fact's team
+  if (args.team_id && fact.team_id !== args.team_id) {
+    throw new Error("Fact does not belong to the specified team");
+  }
+
   const results = await FactRelation.getRelatedFacts(
     args.fact_id,
     args.relation_type,
+  );
+
+  // Filter by team_id if provided (or use fact's team_id)
+  const teamId = args.team_id || fact.team_id;
+  const filteredResults = results.filter(
+    (r) => r.relation.team_id === teamId && r.fact.team_id === teamId,
   );
 
   return {
@@ -37,11 +59,11 @@ export async function handleFactRelationsGetRelated(args: {
         text: JSON.stringify(
           {
             fact_id: args.fact_id,
-            relations: results.map((r) => ({
+            relations: filteredResults.map((r) => ({
               relation: r.relation,
               related_fact: r.fact,
             })),
-            total: results.length,
+            total: filteredResults.length,
           },
           null,
           2,

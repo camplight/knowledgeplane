@@ -3,6 +3,7 @@ import { collections } from "../db";
 export interface WebhookInput {
   url: string;
   events: string[]; // e.g., ["fact.created", "fact.updated", "card.created"]
+  team_id: string; // Team ID
   secret?: string; // Optional secret for webhook signature
   active?: boolean;
   created_by: string;
@@ -14,6 +15,7 @@ export interface WebhookRecord {
   id: string;
   url: string;
   events: string[];
+  team_id: string; // Team ID
   secret?: string;
   active: boolean;
   created_by: string;
@@ -35,6 +37,7 @@ export class Webhook {
     const doc = {
       url: input.url,
       events: input.events,
+      team_id: input.team_id,
       secret: input.secret || null,
       active: input.active !== undefined ? input.active : true,
       created_by: input.created_by,
@@ -81,15 +84,20 @@ export class Webhook {
     }
   }
 
-  static async list(activeOnly: boolean = false): Promise<WebhookRecord[]> {
-    let aql = `FOR webhook IN webhooks`;
+  static async list(teamId?: string, activeOnly: boolean = false): Promise<WebhookRecord[]> {
+    const filters: string[] = [];
     const bindVars: any = {};
 
+    if (teamId) {
+      filters.push(`webhook.team_id == @teamId`);
+      bindVars.teamId = teamId;
+    }
     if (activeOnly) {
-      aql += ` FILTER webhook.active == true`;
+      filters.push(`webhook.active == true`);
     }
 
-    aql += ` SORT webhook.created_at DESC RETURN webhook`;
+    const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
+    const aql = `FOR webhook IN webhooks ${filterClause} SORT webhook.created_at DESC RETURN webhook`;
 
     const cursor = await collections.webhooks.database.query(aql, bindVars);
     const results = await cursor.all();
@@ -97,15 +105,25 @@ export class Webhook {
     return results.map((r: any) => this._normalizeRecord(r));
   }
 
-  static async findByEvent(event: string): Promise<WebhookRecord[]> {
+  static async findByEvent(event: string, teamId?: string): Promise<WebhookRecord[]> {
+    const filters: string[] = [
+      `webhook.active == true`,
+      `@event IN webhook.events`,
+    ];
+    const bindVars: any = { event };
+    
+    if (teamId) {
+      filters.push(`webhook.team_id == @teamId`);
+      bindVars.teamId = teamId;
+    }
+    
     const aql = `
       FOR webhook IN webhooks
-        FILTER webhook.active == true
-        FILTER @event IN webhook.events
+        FILTER ${filters.join(" && ")}
         RETURN webhook
     `;
 
-    const cursor = await collections.webhooks.database.query(aql, { event });
+    const cursor = await collections.webhooks.database.query(aql, bindVars);
     const results = await cursor.all();
 
     return results.map((r: any) => this._normalizeRecord(r));
@@ -131,6 +149,7 @@ export class Webhook {
       _id: doc._id,
       url: doc.url,
       events: doc.events || [],
+      team_id: doc.team_id,
       secret: doc.secret,
       active: doc.active !== undefined ? doc.active : true,
       created_by: doc.created_by,

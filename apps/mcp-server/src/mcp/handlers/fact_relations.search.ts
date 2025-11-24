@@ -20,6 +20,10 @@ export const factRelationsSearchTool: Tool = {
         type: "string",
         description: "Filter by relation type",
       },
+      team_id: {
+        type: "string",
+        description: "Team ID for filtering (optional, inferred from session if authenticated)",
+      },
       limit: {
         type: "number",
         description: "Maximum number of relations to return (default: 50)",
@@ -36,6 +40,7 @@ export async function handleFactRelationsSearch(args: {
   from_fact?: string;
   to_fact?: string;
   type?: string;
+  team_id?: string;
   limit?: number;
   offset?: number;
 }) {
@@ -43,6 +48,7 @@ export async function handleFactRelationsSearch(args: {
     from_fact: args.from_fact,
     to_fact: args.to_fact,
     type: args.type,
+    team_id: args.team_id,
     limit: args.limit,
     offset: args.offset,
   });

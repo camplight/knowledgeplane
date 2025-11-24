@@ -15,6 +15,10 @@ export const knowledgeCardsCreateTool: Tool = {
         items: { type: "string" },
         description: "Array of fact IDs that are consolidated into this card",
       },
+      team_id: {
+        type: "string",
+        description: "Team ID (optional, inferred from session if authenticated)",
+      },
       created_by: {
         type: "string",
         description: "User ID of the creator (optional, inferred from session if authenticated)",
@@ -38,14 +42,20 @@ export async function handleKnowledgeCardsCreate(args: {
   summary: string;
   content: string;
   fact_ids: string[];
+  team_id?: string;
   created_by?: string;
   last_updated_by?: string;
   metadata?: Record<string, any>;
 }) {
-  // Validate that user IDs are provided (either from args or should be inferred from context)
+  // Validate that user IDs and team_id are provided (should be merged from context by server.ts)
   if (!args.created_by || !args.last_updated_by) {
     throw new Error(
       "User ID is required. Either provide created_by and last_updated_by, or authenticate via session.",
+    );
+  }
+  if (!args.team_id) {
+    throw new Error(
+      "Team ID is required. Team ID should be automatically inferred from authenticated session context.",
     );
   }
 
@@ -54,6 +64,7 @@ export async function handleKnowledgeCardsCreate(args: {
     summary: args.summary,
     content: args.content,
     fact_ids: args.fact_ids,
+    team_id: args.team_id,
     created_by: args.created_by,
     last_updated_by: args.last_updated_by,
     metadata: args.metadata,

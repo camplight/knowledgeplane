@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { KnowledgeCard, Fact } from "@knowledgeplane/db";
+import { KnowledgeCard, Fact, TeamMember } from "@knowledgeplane/db";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
 import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
 
@@ -23,6 +23,10 @@ export const knowledgeCardsCombineTool: Tool = {
         type: "string",
         description: "User ID of the last updater (optional, inferred from session if authenticated)",
       },
+      team_id: {
+        type: "string",
+        description: "Team ID for validation (optional, inferred from session if authenticated)",
+      },
     },
     required: ["card_ids"],
   },
@@ -32,6 +36,7 @@ export async function handleKnowledgeCardsCombine(args: {
   card_ids: string[];
   created_by?: string;
   last_updated_by?: string;
+  team_id?: string;
 }) {
   if (!args.created_by || !args.last_updated_by) {
     throw new Error(
@@ -51,6 +56,27 @@ export async function handleKnowledgeCardsCombine(args: {
   const validCards = cards.filter((c) => c !== null) as any[];
   if (validCards.length !== args.card_ids.length) {
     throw new Error("One or more cards not found");
+  }
+
+  // Validate that all cards belong to the same team
+  const teamIds = new Set(validCards.map((c) => c.team_id));
+  if (teamIds.size > 1) {
+    throw new Error("All cards must belong to the same team");
+  }
+
+  const cardTeamId = validCards[0].team_id;
+
+  // Validate team_id if provided
+  if (args.team_id) {
+    if (cardTeamId !== args.team_id) {
+      throw new Error("Cards do not belong to the specified team");
+    }
+  }
+
+  // Validate team membership
+  const member = await TeamMember.findByTeamAndUser(cardTeamId, args.last_updated_by);
+  if (!member) {
+    throw new Error("You are not a member of this team");
   }
 
   // Collect all unique fact IDs
@@ -134,6 +160,7 @@ Provide your response as JSON with the following structure:
     summary: parsed.summary || "",
     content: parsed.content || "",
     fact_ids: Array.from(allFactIds),
+    team_id: cardTeamId,
     created_by: args.created_by!,
     last_updated_by: args.last_updated_by!,
     metadata: {

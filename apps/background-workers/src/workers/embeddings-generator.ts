@@ -1,4 +1,4 @@
-import { Fact, FactRelation, KnowledgeCard, WorkerLog, collections } from "@knowledgeplane/db";
+import { Fact, FactRelation, KnowledgeCard, WorkerLog, Team, collections } from "@knowledgeplane/db";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
 
 export class EmbeddingsGenerator {
@@ -140,135 +140,166 @@ export class EmbeddingsGenerator {
 
     const startTime = Date.now();
     this.running = true;
-    let factsProcessed = 0;
-    let relationsProcessed = 0;
-    let cardsProcessed = 0;
-    let factsUpdated = 0;
-    let relationsUpdated = 0;
-    let cardsUpdated = 0;
+    let totalFactsUpdated = 0;
+    let totalRelationsUpdated = 0;
+    let totalCardsUpdated = 0;
     let error: string | undefined;
 
     try {
       const provider = this.aiClient.getProvider();
 
-      // Process facts without embeddings or with outdated embeddings
-      const facts = await Fact.list(100, 0, false);
-      const factsNeedingEmbeddings = facts.filter(
-        (f) => !f.embedding || f.embedding_model !== this.embeddingModel,
-      );
+      // Get all teams to process embeddings per team
+      const teams = await Team.list(1000, 0);
+      console.log(`Processing embeddings for ${teams.length} teams`);
 
-      factsProcessed = factsNeedingEmbeddings.length;
-      console.log(`Processing ${factsNeedingEmbeddings.length} facts for embeddings`);
+      for (const team of teams) {
+        const teamStartTime = Date.now();
+        let teamFactsUpdated = 0;
+        let teamRelationsUpdated = 0;
+        let teamCardsUpdated = 0;
 
-      // Process facts in batches
-      for (let i = 0; i < factsNeedingEmbeddings.length; i += 10) {
-        const batch = factsNeedingEmbeddings.slice(i, i + 10);
-        const texts = batch.map((f) => f.content);
-        
         try {
-          const result = await provider.embeddings(texts, this.embeddingModel);
-          
-          for (let j = 0; j < batch.length; j++) {
-            const fact = batch[j];
-            const embedding = result.embeddings[j];
+          // Process facts without embeddings or with outdated embeddings for this team
+          const facts = await Fact.list(team.id, 100, 0, false);
+          const factsNeedingEmbeddings = facts.filter(
+            (f) => !f.embedding || f.embedding_model !== this.embeddingModel,
+          );
+
+          console.log(`Processing ${factsNeedingEmbeddings.length} facts for team ${team.id}`);
+
+          // Process facts in batches
+          for (let i = 0; i < factsNeedingEmbeddings.length; i += 10) {
+            const batch = factsNeedingEmbeddings.slice(i, i + 10);
+            const texts = batch.map((f) => f.content);
             
-            const key = Fact.extractKey(fact.id);
-            await collections.facts.update(key, {
-              embedding,
-              embedding_model: this.embeddingModel,
-            });
-            factsUpdated++;
+            try {
+              const result = await provider.embeddings(texts, this.embeddingModel);
+              
+              for (let j = 0; j < batch.length; j++) {
+                const fact = batch[j];
+                const embedding = result.embeddings[j];
+                
+                const key = Fact.extractKey(fact.id);
+                await collections.facts.update(key, {
+                  embedding,
+                  embedding_model: this.embeddingModel,
+                });
+                teamFactsUpdated++;
+              }
+            } catch (err: any) {
+              console.error(`Error processing fact batch ${i}-${i + batch.length}:`, err.message);
+            }
           }
-        } catch (err: any) {
-          console.error(`Error processing fact batch ${i}-${i + batch.length}:`, err.message);
-        }
-      }
 
-      // Process fact relations
-      const relations = await FactRelation.query({ limit: 100, offset: 0 });
-      const relationsNeedingEmbeddings = relations.filter(
-        (r) => !r.embedding || r.embedding_model !== this.embeddingModel,
-      );
+          // Process fact relations for this team
+          const relations = await FactRelation.query({ team_id: team.id, limit: 100, offset: 0 });
+          const relationsNeedingEmbeddings = relations.filter(
+            (r) => !r.embedding || r.embedding_model !== this.embeddingModel,
+          );
 
-      relationsProcessed = relationsNeedingEmbeddings.length;
-      console.log(`Processing ${relationsNeedingEmbeddings.length} relations for embeddings`);
+          console.log(`Processing ${relationsNeedingEmbeddings.length} relations for team ${team.id}`);
 
-      // Process relations in batches
-      for (let i = 0; i < relationsNeedingEmbeddings.length; i += 10) {
-        const batch = relationsNeedingEmbeddings.slice(i, i + 10);
-        // Create text representation: type + metadata
-        const texts = batch.map((r) => {
-          const metadataStr = r.metadata ? JSON.stringify(r.metadata) : "";
-          return `${r.type}${metadataStr ? ` ${metadataStr}` : ""}`;
-        });
-        
-        try {
-          const result = await provider.embeddings(texts, this.embeddingModel);
-          
-          for (let j = 0; j < batch.length; j++) {
-            const relation = batch[j];
-            const embedding = result.embeddings[j];
+          // Process relations in batches
+          for (let i = 0; i < relationsNeedingEmbeddings.length; i += 10) {
+            const batch = relationsNeedingEmbeddings.slice(i, i + 10);
+            // Create text representation: type + metadata
+            const texts = batch.map((r) => {
+              const metadataStr = r.metadata ? JSON.stringify(r.metadata) : "";
+              return `${r.type}${metadataStr ? ` ${metadataStr}` : ""}`;
+            });
             
-            const key = FactRelation.extractKey(relation.id);
-            await collections.relations.update(key, {
-              embedding,
-              embedding_model: this.embeddingModel,
-            });
-            relationsUpdated++;
+            try {
+              const result = await provider.embeddings(texts, this.embeddingModel);
+              
+              for (let j = 0; j < batch.length; j++) {
+                const relation = batch[j];
+                const embedding = result.embeddings[j];
+                
+                const key = FactRelation.extractKey(relation.id);
+                await collections.relations.update(key, {
+                  embedding,
+                  embedding_model: this.embeddingModel,
+                });
+                teamRelationsUpdated++;
+              }
+            } catch (err: any) {
+              console.error(`Error processing relation batch ${i}-${i + batch.length}:`, err.message);
+            }
           }
-        } catch (err: any) {
-          console.error(`Error processing relation batch ${i}-${i + batch.length}:`, err.message);
-        }
-      }
 
-      // Process knowledge cards
-      const cards = await KnowledgeCard.list(100, 0);
-      const cardsNeedingEmbeddings = cards.filter(
-        (c) => !c.embedding || c.embedding_model !== this.embeddingModel,
-      );
+          // Process knowledge cards for this team
+          const cards = await KnowledgeCard.list(team.id, 100, 0);
+          const cardsNeedingEmbeddings = cards.filter(
+            (c) => !c.embedding || c.embedding_model !== this.embeddingModel,
+          );
 
-      cardsProcessed = cardsNeedingEmbeddings.length;
-      console.log(`Processing ${cardsNeedingEmbeddings.length} cards for embeddings`);
+          console.log(`Processing ${cardsNeedingEmbeddings.length} cards for team ${team.id}`);
 
-      // Process cards in batches
-      for (let i = 0; i < cardsNeedingEmbeddings.length; i += 10) {
-        const batch = cardsNeedingEmbeddings.slice(i, i + 10);
-        // Create text representation: title + summary + content
-        const texts = batch.map((c) => `${c.title}\n${c.summary}\n${c.content}`);
-        
-        try {
-          const result = await provider.embeddings(texts, this.embeddingModel);
-          
-          for (let j = 0; j < batch.length; j++) {
-            const card = batch[j];
-            const embedding = result.embeddings[j];
+          // Process cards in batches
+          for (let i = 0; i < cardsNeedingEmbeddings.length; i += 10) {
+            const batch = cardsNeedingEmbeddings.slice(i, i + 10);
+            // Create text representation: title + summary + content
+            const texts = batch.map((c) => `${c.title}\n${c.summary}\n${c.content}`);
             
-            const key = KnowledgeCard.extractKey(card.id);
-            await collections.knowledge_cards.update(key, {
-              embedding,
-              embedding_model: this.embeddingModel,
-            });
-            cardsUpdated++;
+            try {
+              const result = await provider.embeddings(texts, this.embeddingModel);
+              
+              for (let j = 0; j < batch.length; j++) {
+                const card = batch[j];
+                const embedding = result.embeddings[j];
+                
+                const key = KnowledgeCard.extractKey(card.id);
+                await collections.knowledge_cards.update(key, {
+                  embedding,
+                  embedding_model: this.embeddingModel,
+                });
+                teamCardsUpdated++;
+              }
+            } catch (err: any) {
+              console.error(`Error processing card batch ${i}-${i + batch.length}:`, err.message);
+            }
           }
-        } catch (err: any) {
-          console.error(`Error processing card batch ${i}-${i + batch.length}:`, err.message);
+
+          // Create log entry for this team
+          const teamExecutionTime = Date.now() - teamStartTime;
+          await WorkerLog.create({
+            worker_name: "embeddings-generator",
+            task_type: "embeddings",
+            team_id: team.id,
+            status: "success",
+            message: `Generated embeddings for ${teamFactsUpdated} facts, ${teamRelationsUpdated} relations, ${teamCardsUpdated} cards`,
+            execution_time_ms: teamExecutionTime,
+            items_processed: factsNeedingEmbeddings.length + relationsNeedingEmbeddings.length + cardsNeedingEmbeddings.length,
+            items_created: 0,
+            items_updated: teamFactsUpdated + teamRelationsUpdated + teamCardsUpdated,
+          });
+
+          totalFactsUpdated += teamFactsUpdated;
+          totalRelationsUpdated += teamRelationsUpdated;
+          totalCardsUpdated += teamCardsUpdated;
+
+          console.log(
+            `Team ${team.id}: Updated embeddings for ${teamFactsUpdated} facts, ${teamRelationsUpdated} relations, ${teamCardsUpdated} cards`,
+          );
+        } catch (teamError: any) {
+          console.error(`Error processing team ${team.id}:`, teamError);
+          // Create error log for this team
+          const teamExecutionTime = Date.now() - teamStartTime;
+          await WorkerLog.create({
+            worker_name: "embeddings-generator",
+            task_type: "embeddings",
+            team_id: team.id,
+            status: "error",
+            message: "Embeddings generation failed for team",
+            execution_time_ms: teamExecutionTime,
+            error: teamError.message || String(teamError),
+          });
         }
       }
 
       const executionTime = Date.now() - startTime;
-      await WorkerLog.create({
-        worker_name: "embeddings-generator",
-        task_type: "embeddings",
-        status: "success",
-        message: `Generated embeddings for ${factsUpdated} facts, ${relationsUpdated} relations, ${cardsUpdated} cards`,
-        execution_time_ms: executionTime,
-        items_processed: factsProcessed + relationsProcessed + cardsProcessed,
-        items_created: 0,
-        items_updated: factsUpdated + relationsUpdated + cardsUpdated,
-      });
-
       console.log(
-        `Updated embeddings: ${factsUpdated} facts, ${relationsUpdated} relations, ${cardsUpdated} cards`,
+        `Total: Updated embeddings for ${totalFactsUpdated} facts, ${totalRelationsUpdated} relations, ${totalCardsUpdated} cards`,
       );
     } catch (err: any) {
       error = err.message || String(err);
@@ -279,9 +310,9 @@ export class EmbeddingsGenerator {
         status: "error",
         message: "Embeddings generation failed",
         execution_time_ms: executionTime,
-        items_processed: factsProcessed + relationsProcessed + cardsProcessed,
+        items_processed: 0,
         items_created: 0,
-        items_updated: factsUpdated + relationsUpdated + cardsUpdated,
+        items_updated: totalFactsUpdated + totalRelationsUpdated + totalCardsUpdated,
         error: error,
       });
       throw err;

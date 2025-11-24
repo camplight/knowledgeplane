@@ -8,6 +8,7 @@ export interface UserRecord {
   username: string;
   email: string;
   api_key?: string;
+  onboarding_completed: boolean;
   created_at: string;
 }
 
@@ -22,6 +23,7 @@ export class User {
       username: input.username,
       email: input.email,
       api_key: apiKey || null,
+      onboarding_completed: false,
       created_at: new Date().toISOString(),
     };
 
@@ -177,7 +179,7 @@ export class User {
 
   static async update(
     id: string,
-    updates: Partial<Pick<UserRecord, "username" | "email" | "api_key">>,
+    updates: Partial<Pick<UserRecord, "username" | "email" | "api_key" | "onboarding_completed">>,
   ): Promise<UserRecord> {
     const key = this._extractKey(id);
     const result = await collections.users.update(
@@ -186,6 +188,10 @@ export class User {
       { returnNew: true },
     );
     return this._normalizeRecord(result.new!);
+  }
+
+  static async completeOnboarding(id: string): Promise<UserRecord> {
+    return await this.update(id, { onboarding_completed: true });
   }
 
   static async generateApiKey(id: string): Promise<string> {
@@ -216,6 +222,7 @@ export class User {
       username: doc.username,
       email: doc.email,
       api_key: doc.api_key,
+      onboarding_completed: doc.onboarding_completed || false,
       created_at: doc.created_at,
     };
   }

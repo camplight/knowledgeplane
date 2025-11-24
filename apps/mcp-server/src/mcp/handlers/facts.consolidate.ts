@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { Fact, KnowledgeCard, FactRelation } from "@knowledgeplane/db";
+import { Fact, KnowledgeCard, FactRelation, TeamMember } from "@knowledgeplane/db";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
 import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
 
@@ -28,6 +28,10 @@ export const factsConsolidateTool: Tool = {
         type: "string",
         description: "User ID of the last updater (optional, inferred from session if authenticated)",
       },
+      team_id: {
+        type: "string",
+        description: "Team ID for validation (optional, inferred from session if authenticated)",
+      },
     },
     required: ["fact_ids"],
   },
@@ -38,6 +42,7 @@ export async function handleFactsConsolidate(args: {
   include_related?: boolean;
   created_by?: string;
   last_updated_by?: string;
+  team_id?: string;
 }) {
   if (!args.created_by || !args.last_updated_by) {
     throw new Error(
@@ -57,6 +62,27 @@ export async function handleFactsConsolidate(args: {
 
   if (validSeedFacts.length === 0) {
     throw new Error("No valid facts found");
+  }
+
+  // Validate that all facts belong to the same team
+  const teamIds = new Set(validSeedFacts.map((f) => f.team_id));
+  if (teamIds.size > 1) {
+    throw new Error("All facts must belong to the same team");
+  }
+
+  const factTeamId = validSeedFacts[0].team_id;
+
+  // Validate team_id if provided
+  if (args.team_id) {
+    if (factTeamId !== args.team_id) {
+      throw new Error("Facts do not belong to the specified team");
+    }
+  }
+
+  // Validate team membership
+  const member = await TeamMember.findByTeamAndUser(factTeamId, args.last_updated_by);
+  if (!member) {
+    throw new Error("You are not a member of this team");
   }
 
   // Get related facts if requested
@@ -131,6 +157,7 @@ Consider the relationships between these facts when consolidating. Provide your 
     summary: parsed.summary || "",
     content: parsed.content || "",
     fact_ids: allFacts.map((f) => f.id),
+    team_id: factTeamId,
     created_by: args.created_by!,
     last_updated_by: args.last_updated_by!,
     metadata: {

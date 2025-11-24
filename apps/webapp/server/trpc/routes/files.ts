@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { File, Fact } from "@knowledgeplane/db/next";
+import { File, Fact, TeamMember } from "@knowledgeplane/db/next";
 import { processFileUpload } from "@knowledgeplane/file-processor";
 import { z } from "zod";
 
@@ -14,8 +14,14 @@ export const filesRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      if (!ctx.user) {
-        throw new Error("Unauthorized");
+      if (!ctx.user || !ctx.teamId) {
+        throw new Error("User must be authenticated and have a team");
+      }
+
+      // Validate team membership
+      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      if (!member) {
+        throw new Error("You are not a member of this team");
       }
 
       // Decode base64 data
@@ -26,8 +32,8 @@ export const filesRouter = router({
         buffer,
         filename: input.filename,
         mimeType: input.mimeType,
+        teamId: ctx.teamId,
         uploadedBy: ctx.user.userId,
-        knowledgeContext: input.knowledgeContext,
         openaiApiKey: process.env.OPENAI_API_KEY,
         openaiModel: process.env.OPENAI_MODEL,
       });
@@ -45,39 +51,82 @@ export const filesRouter = router({
         })
         .optional(),
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      if (!ctx.user || !ctx.teamId) {
+        throw new Error("User must be authenticated and have a team");
+      }
+
+      // Validate team membership
+      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      if (!member) {
+        throw new Error("You are not a member of this team");
+      }
+
       const limit = input?.limit || 50;
       const offset = input?.offset || 0;
-      const knowledgeContext = input?.knowledgeContext;
 
-      const files = await File.list(limit, offset, knowledgeContext);
+      const files = await File.list(ctx.teamId, limit, offset);
       return { files };
     }),
 
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      if (!ctx.user || !ctx.teamId) {
+        throw new Error("User must be authenticated and have a team");
+      }
+
       const file = await File.findById(input.id);
       if (!file) {
         throw new Error("File not found");
       }
+
+      // Validate that file belongs to user's team
+      if (file.team_id !== ctx.teamId) {
+        throw new Error("File does not belong to your team");
+      }
+
+      // Validate team membership
+      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      if (!member) {
+        throw new Error("You are not a member of this team");
+      }
+
       return { file };
     }),
 
   getFacts: protectedProcedure
     .input(z.object({ fileId: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      if (!ctx.user || !ctx.teamId) {
+        throw new Error("User must be authenticated and have a team");
+      }
+
       const file = await File.findById(input.fileId);
       if (!file) {
         throw new Error("File not found");
+      }
+
+      // Validate that file belongs to user's team
+      if (file.team_id !== ctx.teamId) {
+        throw new Error("File does not belong to your team");
+      }
+
+      // Validate team membership
+      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      if (!member) {
+        throw new Error("You are not a member of this team");
       }
 
       const facts = await Promise.all(
         file.fact_ids.map((factId) => Fact.findById(factId)),
       );
 
+      // Filter facts to only return those belonging to the team
+      const teamFacts = facts.filter((f) => f !== null && f.team_id === ctx.teamId);
+
       return {
-        facts: facts.filter((f) => f !== null),
+        facts: teamFacts,
       };
     }),
 });

@@ -6,6 +6,7 @@ export interface KnowledgeCardInput {
   summary: string;
   content: string; // Full consolidated content
   fact_ids: string[]; // Array of fact IDs that were consolidated
+  team_id: string; // Team ID
   created_by: string;
   last_updated_by: string;
   metadata?: Record<string, any>;
@@ -19,6 +20,7 @@ export interface KnowledgeCardRecord {
   summary: string;
   content: string;
   fact_ids: string[];
+  team_id: string; // Team ID
   created_by: string;
   last_updated_by: string;
   metadata: Record<string, any>;
@@ -46,6 +48,7 @@ export class KnowledgeCard {
       summary: input.summary,
       content: input.content,
       fact_ids: input.fact_ids,
+      team_id: input.team_id,
       created_by: input.created_by,
       last_updated_by: input.last_updated_by,
       metadata: input.metadata || {},
@@ -136,16 +139,30 @@ export class KnowledgeCard {
   }
 
   static async list(
+    teamId?: string,
     limit: number = 50,
     offset: number = 0,
   ): Promise<KnowledgeCardRecord[]> {
+    // Ensure limit and offset are valid numbers
+    const validLimit = Math.max(1, limit || 50);
+    const validOffset = Math.max(0, offset || 0);
+    
+    const filters: string[] = [];
+    const bindVars: any = { limit: validLimit, offset: validOffset };
+    
+    if (teamId) {
+      filters.push(`card.team_id == @teamId`);
+      bindVars.teamId = teamId;
+    }
+    
+    const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
     const aql = `
       FOR card IN knowledge_cards
+        ${filterClause}
         SORT card.updated_at DESC
         LIMIT @offset, @limit
         RETURN card
     `;
-    const bindVars: any = { limit, offset };
 
     const cursor = await collections.knowledge_cards.database.query(aql, bindVars);
     const results = await cursor.all();
@@ -153,16 +170,26 @@ export class KnowledgeCard {
     return results.map((r: any) => this._normalizeRecord(r));
   }
 
-  static async count(): Promise<number> {
+  static async count(teamId?: string): Promise<number> {
+    const filters: string[] = [];
+    const bindVars: any = {};
+    
+    if (teamId) {
+      filters.push(`card.team_id == @teamId`);
+      bindVars.teamId = teamId;
+    }
+    
+    const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
     const aql = `
       LET count = LENGTH(
         FOR card IN knowledge_cards
+          ${filterClause}
           RETURN card
       )
       RETURN count
     `;
 
-    const cursor = await collections.knowledge_cards.database.query(aql);
+    const cursor = await collections.knowledge_cards.database.query(aql, bindVars);
     const result = await cursor.next();
     return result || 0;
   }
@@ -189,6 +216,7 @@ export class KnowledgeCard {
       summary: doc.summary,
       content: doc.content,
       fact_ids: doc.fact_ids || [],
+      team_id: doc.team_id,
       created_by: doc.created_by,
       last_updated_by: doc.last_updated_by,
       metadata: doc.metadata || {},

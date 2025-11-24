@@ -159,6 +159,7 @@ export class CardConsolidator {
     let factsProcessed = 0;
     let relationsCreated = 0;
     let error: string | undefined;
+    const teamsProcessed = new Set<string>();
 
     try {
       // Get facts that haven't been consolidated into knowledge cards
@@ -180,31 +181,64 @@ export class CardConsolidator {
       factsProcessed = facts.length;
       console.log(`Processing ${facts.length} unconsolidated facts`);
 
-      // Create fact relations before grouping
-      console.log("Creating fact relations...");
-      relationsCreated = await this.createFactRelations(facts);
-      console.log(`Created ${relationsCreated} fact relations`);
-
-      // Group facts by related clusters using graph traversal
-      const factClusters = await this.groupRelatedFacts(facts);
-
-      for (const cluster of factClusters) {
-        const knowledgeCard = await this.consolidateCluster(cluster);
-        if (knowledgeCard) {
-          cardsCreated++;
+      // Group facts by team first
+      const factsByTeam = new Map<string, any[]>();
+      for (const fact of facts) {
+        const teamId = fact.team_id;
+        if (teamId) {
+          if (!factsByTeam.has(teamId)) {
+            factsByTeam.set(teamId, []);
+          }
+          factsByTeam.get(teamId)!.push(fact);
+          teamsProcessed.add(teamId);
         }
       }
 
-      const executionTime = Date.now() - startTime;
-      await WorkerLog.create({
-        worker_name: "card-consolidator",
-        task_type: "consolidation",
-        status: "success",
-        message: `Created ${relationsCreated} relations and consolidated ${factsProcessed} facts into ${cardsCreated} knowledge cards`,
-        execution_time_ms: executionTime,
-        items_processed: factsProcessed,
-        items_created: cardsCreated,
-      });
+      // Process each team separately
+      for (const [teamId, teamFacts] of factsByTeam) {
+        console.log(`Processing ${teamFacts.length} facts for team ${teamId}`);
+
+        // Create fact relations before grouping
+        const teamRelationsCreated = await this.createFactRelations(teamFacts);
+        relationsCreated += teamRelationsCreated;
+
+        // Group facts by related clusters using graph traversal
+        const factClusters = await this.groupRelatedFacts(teamFacts);
+
+        for (const cluster of factClusters) {
+          const knowledgeCard = await this.consolidateCluster(cluster);
+          if (knowledgeCard) {
+            cardsCreated++;
+          }
+        }
+
+        // Create log entry for this team
+        const executionTime = Date.now() - startTime;
+        await WorkerLog.create({
+          worker_name: "card-consolidator",
+          task_type: "consolidation",
+          team_id: teamId,
+          status: "success",
+          message: `Created ${teamRelationsCreated} relations and consolidated ${teamFacts.length} facts into ${factClusters.length} knowledge cards`,
+          execution_time_ms: executionTime,
+          items_processed: teamFacts.length,
+          items_created: factClusters.length,
+        });
+      }
+
+      // Create summary log if multiple teams were processed
+      if (teamsProcessed.size > 1) {
+        const executionTime = Date.now() - startTime;
+        await WorkerLog.create({
+          worker_name: "card-consolidator",
+          task_type: "consolidation",
+          status: "success",
+          message: `Processed ${teamsProcessed.size} teams: Created ${relationsCreated} relations and consolidated ${factsProcessed} facts into ${cardsCreated} knowledge cards`,
+          execution_time_ms: executionTime,
+          items_processed: factsProcessed,
+          items_created: cardsCreated,
+        });
+      }
 
       console.log(
         `Created ${relationsCreated} relations and ${cardsCreated} knowledge cards from ${factsProcessed} facts`,
@@ -212,16 +246,36 @@ export class CardConsolidator {
     } catch (err: any) {
       error = err.message || String(err);
       const executionTime = Date.now() - startTime;
-      await WorkerLog.create({
-        worker_name: "card-consolidator",
-        task_type: "consolidation",
-        status: "error",
-        message: "Card consolidation failed",
-        execution_time_ms: executionTime,
-        items_processed: factsProcessed,
-        items_created: cardsCreated,
-        error: error,
-      });
+
+      // Create error logs for each team that was being processed
+      for (const teamId of teamsProcessed) {
+        await WorkerLog.create({
+          worker_name: "card-consolidator",
+          task_type: "consolidation",
+          team_id: teamId,
+          status: "error",
+          message: "Card consolidation failed",
+          execution_time_ms: executionTime,
+          items_processed: factsProcessed,
+          items_created: cardsCreated,
+          error: error,
+        });
+      }
+
+      // Also create a general error log if no teams were tracked
+      if (teamsProcessed.size === 0) {
+        await WorkerLog.create({
+          worker_name: "card-consolidator",
+          task_type: "consolidation",
+          status: "error",
+          message: "Card consolidation failed",
+          execution_time_ms: executionTime,
+          items_processed: factsProcessed,
+          items_created: cardsCreated,
+          error: error,
+        });
+      }
+
       throw err;
     } finally {
       this.running = false;
@@ -230,9 +284,11 @@ export class CardConsolidator {
 
   private async getUnconsolidatedFacts(): Promise<any[]> {
     // Get facts that are not in any knowledge card's fact_ids
+    // Only process facts that have a team_id (team-scoped facts)
     const aql = `
       FOR fact IN facts
         FILTER fact.trashed == false
+        FILTER fact.team_id != null AND fact.team_id != ""
         LET inCard = (
           FOR card IN knowledge_cards
             FILTER fact._id IN card.fact_ids
@@ -276,11 +332,30 @@ export class CardConsolidator {
           const fromFactId = fromFact._id || fromFact.id;
           const toFactId = toFact._id || toFact.id;
 
+          // Ensure both facts belong to the same team
+          const fromFactTeamId = fromFact.team_id;
+          const toFactTeamId = toFact.team_id;
+
+          if (!fromFactTeamId || !toFactTeamId) {
+            console.warn(
+              `Skipping relation: facts missing team_id (from: ${fromFactTeamId}, to: ${toFactTeamId})`,
+            );
+            continue;
+          }
+
+          if (fromFactTeamId !== toFactTeamId) {
+            console.warn(
+              `Skipping relation: facts belong to different teams (from: ${fromFactTeamId}, to: ${toFactTeamId})`,
+            );
+            continue;
+          }
+
           // Check if relation already exists
           const existingRelations = await FactRelation.query({
             from_fact: fromFactId,
             to_fact: toFactId,
             type: relation.type,
+            team_id: fromFactTeamId,
           });
 
           if (existingRelations.length === 0) {
@@ -289,6 +364,7 @@ export class CardConsolidator {
                 from_fact: fromFactId,
                 to_fact: toFactId,
                 type: relation.type,
+                team_id: fromFactTeamId,
                 metadata: {
                   ...relation.metadata,
                   source: "card-consolidator",
@@ -404,7 +480,24 @@ Identify relationships that would be useful for organizing and understanding the
       return null;
     }
 
-    console.log(`Consolidating ${facts.length} related facts`);
+    // Ensure all facts belong to the same team
+    const teamIds = new Set(facts.map((f) => f.team_id).filter(Boolean));
+    if (teamIds.size === 0) {
+      console.warn("Skipping cluster: no facts have team_id");
+      return null;
+    }
+    if (teamIds.size > 1) {
+      console.warn(
+        `Skipping cluster: facts belong to multiple teams: ${Array.from(teamIds).join(", ")}`,
+      );
+      return null;
+    }
+
+    const teamId = Array.from(teamIds)[0];
+
+    console.log(
+      `Consolidating ${facts.length} related facts for team ${teamId}`,
+    );
 
     // Prepare content for AI
     const factContents = facts.map((f) => `- ${f.content}`).join("\n");
@@ -418,6 +511,7 @@ Identify relationships that would be useful for organizing and understanding the
       summary: consolidation.summary,
       content: consolidation.content,
       fact_ids: facts.map((f) => f._id || f.id),
+      team_id: teamId,
       created_by: "system",
       last_updated_by: "system",
     });
@@ -427,6 +521,20 @@ Identify relationships that would be useful for organizing and understanding the
   }
 
   private async getRelatedFacts(seedFacts: any[]): Promise<any[]> {
+    // Ensure all seed facts belong to the same team
+    const seedTeamIds = new Set(
+      seedFacts.map((f) => f.team_id).filter(Boolean),
+    );
+    if (seedTeamIds.size === 0) {
+      return seedFacts; // No team_id, return as-is
+    }
+    if (seedTeamIds.size > 1) {
+      console.warn(
+        `Seed facts belong to multiple teams: ${Array.from(seedTeamIds).join(", ")}. Using first team.`,
+      );
+    }
+    const teamId = Array.from(seedTeamIds)[0];
+
     // Use graph traversal to find related facts via FactRelations
     const factIds = seedFacts.map((f) => f._id || f.id);
     const allRelated: Set<string> = new Set(factIds);
@@ -436,11 +544,16 @@ Identify relationships that would be useful for organizing and understanding the
       const outgoing = await FactRelation.getRelatedFacts(factId);
       const incoming = await FactRelation.getIncomingRelations(factId);
 
+      // Filter relations to only include facts from the same team
       for (const rel of outgoing) {
-        allRelated.add(rel.fact._id || rel.fact.id);
+        if (rel.fact.team_id === teamId) {
+          allRelated.add(rel.fact._id || rel.fact.id);
+        }
       }
       for (const rel of incoming) {
-        allRelated.add(rel.fact._id || rel.fact.id);
+        if (rel.fact.team_id === teamId) {
+          allRelated.add(rel.fact._id || rel.fact.id);
+        }
       }
     }
 
@@ -448,7 +561,7 @@ Identify relationships that would be useful for organizing and understanding the
     const relatedFacts: any[] = [];
     for (const factId of allRelated) {
       const fact = await Fact.findById(factId);
-      if (fact && !fact.trashed) {
+      if (fact && !fact.trashed && fact.team_id === teamId) {
         relatedFacts.push(fact);
       }
     }

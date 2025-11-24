@@ -8,6 +8,7 @@ import { filesRouter } from "./files";
 import { invitationsRouter } from "./invitations";
 import { workerLogsRouter } from "./worker-logs";
 import { factRelationsRouter } from "./fact-relations";
+import { teamsRouter } from "./teams";
 
 export const appRouter = router({
   auth: authRouter,
@@ -19,6 +20,7 @@ export const appRouter = router({
   invitations: invitationsRouter,
   workerLogs: workerLogsRouter,
   factRelations: factRelationsRouter,
+  teams: teamsRouter,
 });
 
 export type AppRouter = typeof appRouter;

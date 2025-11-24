@@ -6,6 +6,7 @@ import type { AIModelProvider } from "@knowledgeplane/aimodel";
 export interface FactInput {
   content: string;
   metadata?: Record<string, string>;
+  team_id: string; // Team ID
   created_by: string; // User ID
   last_updated_by: string; // User ID
 }
@@ -16,6 +17,7 @@ export interface FactRecord {
   id: string;
   content: string;
   metadata: Record<string, string>;
+  team_id: string; // Team ID
   created_at: string;
   updated_at: string;
   created_by: string;
@@ -31,6 +33,7 @@ export interface FactSearchResult extends FactRecord {
 
 export interface FactSearchParams {
   query: string;
+  team_id?: string; // Team ID for filtering
   k?: number;
   offset?: number;
   include_trashed?: boolean;
@@ -51,6 +54,7 @@ export class Fact {
     const doc = {
       content: input.content,
       metadata: input.metadata || {},
+      team_id: input.team_id,
       created_by: input.created_by,
       last_updated_by: input.last_updated_by,
       trashed: false,
@@ -78,6 +82,7 @@ export class Fact {
     const docs = inputs.map((input) => ({
       content: input.content,
       metadata: input.metadata || {},
+      team_id: input.team_id,
       created_by: input.created_by,
       last_updated_by: input.last_updated_by,
       trashed: false,
@@ -201,10 +206,18 @@ export class Fact {
       includeTrashed,
     };
 
+    const filters: string[] = [];
+    if (params.team_id) {
+      filters.push(`fact.team_id == @teamId`);
+      bindVars.teamId = params.team_id;
+    }
+    filters.push(`(fact.trashed == false || @includeTrashed == true)`);
+    const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
+
     if (isWildcard) {
       aql = `
         FOR fact IN facts
-          FILTER (fact.trashed == false || @includeTrashed == true)
+          ${filterClause}
           SORT fact.updated_at DESC, fact.created_at DESC
           LIMIT @offset, @limit
           RETURN { fact: fact, score: 1.0 }
@@ -215,7 +228,7 @@ export class Fact {
       // FULLTEXT() already orders results by relevance, so we use score 1.0
       aql = `
         FOR fact IN FULLTEXT(facts, "content", @query)
-          FILTER (fact.trashed == false || @includeTrashed == true)
+          ${filterClause}
           SORT fact.updated_at DESC, fact.created_at DESC
           LIMIT @offset, @limit
           RETURN { fact: fact, score: 1.0 }
@@ -240,10 +253,17 @@ export class Fact {
         console.warn("Fulltext index not found, falling back to LIKE search");
 
         // Fallback to LIKE search (case-insensitive)
+        const fallbackFilters: string[] = [];
+        if (params.team_id) {
+          fallbackFilters.push(`fact.team_id == @teamId`);
+        }
+        fallbackFilters.push(`(fact.trashed == false || @includeTrashed == true)`);
+        fallbackFilters.push(`LOWER(fact.content) LIKE LOWER(CONCAT("%", @query, "%"))`);
+        const fallbackFilterClause = fallbackFilters.length > 0 ? `FILTER ${fallbackFilters.join(" && ")}` : "";
+        
         const fallbackAql = `
           FOR fact IN facts
-            FILTER (fact.trashed == false || @includeTrashed == true)
-            FILTER LOWER(fact.content) LIKE LOWER(CONCAT("%", @query, "%"))
+            ${fallbackFilterClause}
             SORT fact.updated_at DESC, fact.created_at DESC
             LIMIT @offset, @limit
             RETURN { fact: fact, score: 1.0 }
@@ -290,16 +310,21 @@ export class Fact {
 
       // Get all facts with embeddings and calculate cosine similarity manually
       // This approach works with any ArangoDB version and doesn't require APPROX_NEAR_COSINE
-      const aql = `
-        FOR fact IN facts
-          FILTER fact.embedding != null
-          FILTER (fact.trashed == false || @includeTrashed == true)
-          RETURN fact
-      `;
-
+      const filters: string[] = [`fact.embedding != null`, `(fact.trashed == false || @includeTrashed == true)`];
       const bindVars: any = {
         includeTrashed,
       };
+      
+      if (params.team_id) {
+        filters.push(`fact.team_id == @teamId`);
+        bindVars.teamId = params.team_id;
+      }
+      
+      const aql = `
+        FOR fact IN facts
+          FILTER ${filters.join(" && ")}
+          RETURN fact
+      `;
 
       const cursor = await collections.facts.database.query(aql, bindVars);
       const allFacts = await cursor.all();
@@ -407,41 +432,62 @@ export class Fact {
   }
 
   static async list(
+    teamId?: string,
     limit: number = 50,
     offset: number = 0,
     includeTrashed: boolean = false,
   ): Promise<FactRecord[]> {
+    // Ensure limit and offset are valid numbers
+    const validLimit = Math.max(1, limit || 50);
+    const validOffset = Math.max(0, offset || 0);
+    
+    const filters: string[] = [`(fact.trashed == false || @includeTrashed == true)`];
+    const bindVars: any = {
+      limit: validLimit,
+      offset: validOffset,
+      includeTrashed,
+    };
+    
+    if (teamId) {
+      filters.push(`fact.team_id == @teamId`);
+      bindVars.teamId = teamId;
+    }
+    
     const aql = `
       FOR fact IN facts
-        FILTER (fact.trashed == false || @includeTrashed == true)
+        FILTER ${filters.join(" && ")}
         SORT fact.updated_at DESC, fact.created_at DESC
         LIMIT @offset, @limit
         RETURN fact
     `;
 
-    const cursor = await collections.facts.database.query(aql, {
-      limit,
-      offset,
-      includeTrashed,
-    });
+    const cursor = await collections.facts.database.query(aql, bindVars);
     const results = await cursor.all();
 
     return results.map((r: any) => this._normalizeRecord(r));
   }
 
-  static async count(includeTrashed: boolean = false): Promise<number> {
+  static async count(teamId?: string, includeTrashed: boolean = false): Promise<number> {
+    const filters: string[] = [`(fact.trashed == false || @includeTrashed == true)`];
+    const bindVars: any = {
+      includeTrashed,
+    };
+    
+    if (teamId) {
+      filters.push(`fact.team_id == @teamId`);
+      bindVars.teamId = teamId;
+    }
+    
     const aql = `
       LET count = LENGTH(
         FOR fact IN facts
-          FILTER (fact.trashed == false || @includeTrashed == true)
+          FILTER ${filters.join(" && ")}
           RETURN fact
       )
       RETURN count
     `;
 
-    const cursor = await collections.facts.database.query(aql, {
-      includeTrashed,
-    });
+    const cursor = await collections.facts.database.query(aql, bindVars);
     const result = await cursor.next();
 
     return result || 0;
@@ -485,6 +531,7 @@ export class Fact {
       _id: doc._id,
       content: doc.content || "", // Ensure content is never undefined
       metadata: doc.metadata || {},
+      team_id: doc.team_id,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
       created_by: doc.created_by,

@@ -52,6 +52,59 @@ export const userRouter = router({
     await User.removeApiKey(ctx.user.userId);
     return { success: true };
   }),
+  completeOnboarding: protectedProcedure.mutation(async ({ ctx }) => {
+    const user = await User.findById(ctx.user.userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+    return await User.completeOnboarding(ctx.user.userId);
+  }),
+  getMcpUrl: protectedProcedure
+    .input(
+      z.object({
+        teamId: z.string().optional(),
+      }).optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const user = await User.findById(ctx.user.userId);
+      if (!user) {
+        throw new Error("User not found");
+      }
+      
+      if (!user.api_key) {
+        throw new Error("API key not found. Please generate an API key first.");
+      }
+
+      // Build MCP server URL with user's API key
+      // Prefer full URL if provided
+      let baseUrl: string;
+      if (process.env.MCP_SERVER_URL) {
+        baseUrl = process.env.MCP_SERVER_URL;
+      } else {
+        // Otherwise construct from components
+        const protocol = process.env.MCP_SERVER_PROTOCOL || "http";
+        const host = process.env.MCP_SERVER_HOST || "localhost";
+        const port = process.env.MCP_SERVER_PORT || "8080";
+        baseUrl = `${protocol}://${host}:${port}/mcp`;
+      }
+
+      // Add API key as query parameter
+      const url = new URL(baseUrl);
+      url.searchParams.set("api_key", user.api_key);
+      
+      // Add team_id if provided
+      if (input?.teamId) {
+        // Validate that user is a member of this team
+        const { TeamMember } = await import("@knowledgeplane/db/next");
+        const member = await TeamMember.findByTeamAndUser(input.teamId, ctx.user.userId);
+        if (!member) {
+          throw new Error("You are not a member of this team");
+        }
+        url.searchParams.set("team_id", input.teamId);
+      }
+      
+      return { url: url.toString() };
+    }),
   list: protectedProcedure
     .input(
       z.object({

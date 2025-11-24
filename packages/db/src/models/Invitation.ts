@@ -5,17 +5,18 @@ export interface InvitationRecord {
   _key?: string;
   _id?: string;
   id: string;
-  email: string;
+  team_id: string; // Team ID
   invited_by: string; // User ID
-  token: string; // Unique invitation token
+  token: string; // Unique invitation token (personal invitation link)
   status: "pending" | "accepted" | "expired";
   expires_at: string; // ISO 8601 timestamp
   accepted_at?: string; // ISO 8601 timestamp
+  accepted_by?: string; // User ID who accepted the invitation
   created_at: string; // ISO 8601 timestamp
 }
 
 export interface InvitationInput {
-  email: string;
+  team_id: string; // Team ID
   invited_by: string; // User ID
   expires_in_days?: number; // Default 7 days
 }
@@ -29,7 +30,7 @@ export class Invitation {
     const token = `inv_${crypto.randomBytes(32).toString("base64url")}`;
 
     const doc = {
-      email: input.email.toLowerCase().trim(),
+      team_id: input.team_id,
       invited_by: input.invited_by,
       token,
       status: "pending" as const,
@@ -77,16 +78,23 @@ export class Invitation {
     return this._normalizeRecord(results[0]);
   }
 
-  static async findByEmail(email: string): Promise<InvitationRecord[]> {
+  static async findByTeam(
+    teamId: string,
+    limit: number = 50,
+    offset: number = 0,
+  ): Promise<InvitationRecord[]> {
     const aql = `
       FOR inv IN invitations
-        FILTER inv.email == @email
+        FILTER inv.team_id == @teamId
         SORT inv.created_at DESC
+        LIMIT @offset, @limit
         RETURN inv
     `;
 
     const cursor = await collections.invitations.database.query(aql, {
-      email: email.toLowerCase().trim(),
+      teamId,
+      limit,
+      offset,
     });
     const results = await cursor.all();
 
@@ -98,6 +106,7 @@ export class Invitation {
   }
 
   static async list(
+    teamId?: string,
     limit: number = 50,
     offset: number = 0,
     status?: "pending" | "accepted" | "expired",
@@ -106,8 +115,20 @@ export class Invitation {
       FOR inv IN invitations
     `;
 
+    const filters: string[] = [];
+    const bindVars: any = { limit, offset };
+
+    if (teamId) {
+      filters.push(`inv.team_id == @teamId`);
+      bindVars.teamId = teamId;
+    }
     if (status) {
-      aql += ` FILTER inv.status == @status`;
+      filters.push(`inv.status == @status`);
+      bindVars.status = status;
+    }
+
+    if (filters.length > 0) {
+      aql += ` FILTER ${filters.join(" && ")}`;
     }
 
     aql += `
@@ -115,11 +136,6 @@ export class Invitation {
         LIMIT @offset, @limit
         RETURN inv
     `;
-
-    const bindVars: any = { limit, offset };
-    if (status) {
-      bindVars.status = status;
-    }
 
     const cursor = await collections.invitations.database.query(aql, bindVars);
     const results = await cursor.all();
@@ -131,14 +147,29 @@ export class Invitation {
     return results.map((r: any) => this._normalizeRecord(r));
   }
 
-  static async count(status?: "pending" | "accepted" | "expired"): Promise<number> {
+  static async count(
+    teamId?: string,
+    status?: "pending" | "accepted" | "expired",
+  ): Promise<number> {
     let aql = `
       LET count = LENGTH(
         FOR inv IN invitations
     `;
 
+    const filters: string[] = [];
+    const bindVars: any = {};
+
+    if (teamId) {
+      filters.push(`inv.team_id == @teamId`);
+      bindVars.teamId = teamId;
+    }
     if (status) {
-      aql += ` FILTER inv.status == @status`;
+      filters.push(`inv.status == @status`);
+      bindVars.status = status;
+    }
+
+    if (filters.length > 0) {
+      aql += ` FILTER ${filters.join(" && ")}`;
     }
 
     aql += `
@@ -146,11 +177,6 @@ export class Invitation {
       )
       RETURN count
     `;
-
-    const bindVars: any = {};
-    if (status) {
-      bindVars.status = status;
-    }
 
     const cursor = await collections.invitations.database.query(aql, bindVars);
     const result = await cursor.next();
@@ -184,6 +210,7 @@ export class Invitation {
       {
         status: "accepted",
         accepted_at: new Date().toISOString(),
+        accepted_by: userId,
       },
       { returnNew: true },
     );
@@ -237,12 +264,13 @@ export class Invitation {
       id: doc._id || `invitations/${doc._key}`,
       _key: doc._key,
       _id: doc._id,
-      email: doc.email,
+      team_id: doc.team_id,
       invited_by: doc.invited_by,
       token: doc.token,
       status: doc.status,
       expires_at: doc.expires_at,
       accepted_at: doc.accepted_at,
+      accepted_by: doc.accepted_by,
       created_at: doc.created_at,
     };
   }

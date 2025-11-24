@@ -97,6 +97,7 @@ import {
 
 export interface McpContext {
   userId?: string;
+  teamId?: string;
 }
 
 // Tool definitions from handlers
@@ -192,12 +193,15 @@ export function createMcpServer(
       // Merge context into args for facts.write
       handlerArgs = { ...args } as any;
 
-      // Infer userId from context if available
+      // Infer userId and teamId from context if available
       if (context?.userId) {
         // Use context userId as default for created_by and last_updated_by if not provided
         handlerArgs.created_by = handlerArgs.created_by || context.userId;
         handlerArgs.last_updated_by =
           handlerArgs.last_updated_by || context.userId;
+      }
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
       }
 
       handler = handleFactsWrite;
@@ -205,18 +209,22 @@ export function createMcpServer(
       // Merge context into args for facts.bulkwrite
       handlerArgs = { ...args } as any;
 
-      // Infer userId from context and apply to all facts if available
+      // Infer userId and teamId from context and apply to all facts if available
       if (context?.userId && handlerArgs.facts) {
         handlerArgs.facts = handlerArgs.facts.map((fact: any) => ({
           ...fact,
           created_by: fact.created_by || context.userId,
           last_updated_by: fact.last_updated_by || context.userId,
+          team_id: fact.team_id || context.teamId,
         }));
       }
 
       handler = handleFactsBulkWrite;
     } else if (name === "facts.search") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
       handler = handleFactsSearch;
     } else if (name === "facts.update") {
       // Merge context into args for facts.update
@@ -227,6 +235,9 @@ export function createMcpServer(
           handlerArgs.last_updated_by =
             handlerArgs.last_updated_by || context.userId;
         }
+        if (context.teamId) {
+          handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+        }
       }
       handler = handleFactsUpdate;
     } else if (name === "facts.trash") {
@@ -235,6 +246,9 @@ export function createMcpServer(
       if (context?.userId) {
         handlerArgs.last_updated_by =
           handlerArgs.last_updated_by || context.userId;
+      }
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
       }
       handler = handleFactsTrash;
     } else if (name === "users.register") {
@@ -249,22 +263,49 @@ export function createMcpServer(
           handlerArgs.created_by =
             handlerArgs.created_by || context.userId;
         }
+        if (context.teamId) {
+          handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+        }
       }
       handler = handleFilesUpload;
     } else if (name === "files.list") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
       handler = handleFilesList;
     } else if (name === "files.get") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
+      if (context?.userId) {
+        handlerArgs.user_id = handlerArgs.user_id || context.userId;
+      }
       handler = handleFilesGet;
     } else if (name === "files.search") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
       handler = handleFilesSearch;
     } else if (name === "files.update") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
+      if (context?.userId) {
+        handlerArgs.user_id = handlerArgs.user_id || context.userId;
+      }
       handler = handleFilesUpdate;
     } else if (name === "files.delete") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
+      if (context?.userId) {
+        handlerArgs.user_id = handlerArgs.user_id || context.userId;
+      }
       handler = handleFilesDelete;
     } else if (name === "fact_relations.create") {
       // Merge context into args for fact_relations.create
@@ -272,24 +313,54 @@ export function createMcpServer(
       if (context?.userId) {
         handlerArgs.created_by = handlerArgs.created_by || context.userId;
       }
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
       handler = handleFactRelationsCreate;
     } else if (name === "fact_relations.update") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
+      if (context?.userId) {
+        handlerArgs.user_id = handlerArgs.user_id || context.userId;
+      }
       handler = handleFactRelationsUpdate;
     } else if (name === "fact_relations.delete") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
+      if (context?.userId) {
+        handlerArgs.user_id = handlerArgs.user_id || context.userId;
+      }
       handler = handleFactRelationsDelete;
     } else if (name === "fact_relations.search") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
       handler = handleFactRelationsSearch;
     } else if (name === "fact_relations.get") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
+      if (context?.userId) {
+        handlerArgs.user_id = handlerArgs.user_id || context.userId;
+      }
       handler = handleFactRelationsGet;
     } else if (name === "fact_relations.get_related") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
       handler = handleFactRelationsGetRelated;
     } else if (name === "fact_relations.get_incoming") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
       handler = handleFactRelationsGetIncoming;
     } else if (name === "workers.trigger") {
       handlerArgs = { ...args } as any;
@@ -302,6 +373,9 @@ export function createMcpServer(
         handlerArgs.last_updated_by =
           handlerArgs.last_updated_by || context.userId;
       }
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
       handler = handleFactsConsolidate;
     } else if (name === "knowledge_cards.create") {
       // Merge context into args for knowledge_cards.create
@@ -311,6 +385,9 @@ export function createMcpServer(
         handlerArgs.last_updated_by =
           handlerArgs.last_updated_by || context.userId;
       }
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
       handler = handleKnowledgeCardsCreate;
     } else if (name === "knowledge_cards.update") {
       // Merge context into args for knowledge_cards.update
@@ -319,9 +396,30 @@ export function createMcpServer(
         handlerArgs.last_updated_by =
           handlerArgs.last_updated_by || context.userId;
       }
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
       handler = handleKnowledgeCardsUpdate;
+    } else if (name === "knowledge_cards.list") {
+      handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
+      handler = handleKnowledgeCardsList;
+    } else if (name === "knowledge_cards.search") {
+      handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
+      handler = handleKnowledgeCardsSearch;
     } else if (name === "knowledge_cards.delete") {
       handlerArgs = { ...args } as any;
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
+      if (context?.userId) {
+        handlerArgs.user_id = handlerArgs.user_id || context.userId;
+      }
       handler = handleKnowledgeCardsDelete;
     } else if (name === "knowledge_cards.search") {
       handlerArgs = { ...args } as any;
@@ -337,6 +435,9 @@ export function createMcpServer(
         handlerArgs.last_updated_by =
           handlerArgs.last_updated_by || context.userId;
       }
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
+      }
       handler = handleKnowledgeCardsSplit;
     } else if (name === "knowledge_cards.combine") {
       // Merge context into args for knowledge_cards.combine
@@ -345,6 +446,9 @@ export function createMcpServer(
         handlerArgs.created_by = handlerArgs.created_by || context.userId;
         handlerArgs.last_updated_by =
           handlerArgs.last_updated_by || context.userId;
+      }
+      if (context?.teamId) {
+        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
       }
       handler = handleKnowledgeCardsCombine;
     } else {

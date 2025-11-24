@@ -12,6 +12,8 @@ export default function ProfilePage() {
   const [email, setEmail] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  const [mcpUrlCopied, setMcpUrlCopied] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -19,6 +21,15 @@ export default function ProfilePage() {
   const { data: profileData, refetch: refetchUserProfile } = trpc.user.getProfile.useQuery(undefined, {
     enabled: !!userData?.user,
   });
+  const { data: teamsData } = trpc.teams.list.useQuery(undefined, {
+    enabled: !!userData?.user,
+  });
+  const { data: mcpUrlData } = trpc.user.getMcpUrl.useQuery(
+    { teamId: selectedTeamId || undefined },
+    {
+      enabled: !!userData?.user && !!profileData?.api_key,
+    },
+  );
 
   const updateProfileMutation = trpc.user.updateProfile.useMutation({
     onSuccess: () => {
@@ -75,6 +86,18 @@ export default function ProfilePage() {
     }
   }, [profileData]);
 
+  // Set default team when teams are loaded
+  useEffect(() => {
+    if (teamsData && teamsData.length > 0 && !selectedTeamId) {
+      // Use current team if available, otherwise use first team
+      const currentTeamId = userData?.currentTeamId;
+      const defaultTeamId = currentTeamId && teamsData.some(t => t.id === currentTeamId)
+        ? currentTeamId
+        : teamsData[0].id;
+      setSelectedTeamId(defaultTeamId);
+    }
+  }, [teamsData, userData, selectedTeamId]);
+
   const handleSave = () => {
     setError(null);
     setSuccess(null);
@@ -103,6 +126,14 @@ export default function ProfilePage() {
       navigator.clipboard.writeText(profileData.api_key);
       setApiKeyCopied(true);
       setTimeout(() => setApiKeyCopied(false), 2000);
+    }
+  };
+
+  const handleCopyMcpUrl = () => {
+    if (mcpUrlData?.url) {
+      navigator.clipboard.writeText(mcpUrlData.url);
+      setMcpUrlCopied(true);
+      setTimeout(() => setMcpUrlCopied(false), 2000);
     }
   };
 
@@ -248,7 +279,7 @@ export default function ProfilePage() {
         </div>
 
         {/* API Key Management Card */}
-        <div className="bg-white rounded-xl shadow-lg border border-slate-200">
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 mb-6">
           <div className="p-6 border-b border-slate-200">
             <div>
               <h2 className="text-2xl font-bold text-slate-900">API Key Management</h2>
@@ -322,6 +353,76 @@ export default function ProfilePage() {
             )}
           </div>
         </div>
+
+        {/* MCP Server URL Card */}
+        {profileData.api_key && (
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200">
+            <div className="p-6 border-b border-slate-200">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">MCP Server URL</h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  Copy your personal MCP server URL with your API key and team context included
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {mcpUrlData?.url ? (
+                <div className="space-y-4">
+                  {teamsData && teamsData.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Select Team
+                      </label>
+                      <select
+                        value={selectedTeamId || ""}
+                        onChange={(e) => setSelectedTeamId(e.target.value || null)}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                      >
+                        {teamsData.map((team) => (
+                          <option key={team.id} value={team.id}>
+                            {team.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Choose which team's context to include in the MCP URL
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      MCP Server URL
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={mcpUrlData.url}
+                        readOnly
+                        className="flex-1 px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 font-mono text-xs break-all"
+                      />
+                      <button
+                        onClick={handleCopyMcpUrl}
+                        className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors whitespace-nowrap"
+                      >
+                        {mcpUrlCopied ? "Copied!" : "Copy URL"}
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Use this URL to connect AI agents and tools to your KnowledgePlane MCP server. Your API key and team context are included in the URL.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-slate-600">
+                    Generate an API key to get your MCP server URL.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

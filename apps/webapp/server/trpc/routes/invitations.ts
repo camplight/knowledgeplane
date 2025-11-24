@@ -1,38 +1,27 @@
 import { router, protectedProcedure } from "../router";
-import { Invitation, User } from "@knowledgeplane/db/next";
+import { Invitation, User, TeamMember } from "@knowledgeplane/db/next";
 import { z } from "zod";
 
 export const invitationsRouter = router({
   create: protectedProcedure
     .input(
       z.object({
-        email: z.string().email(),
         expires_in_days: z.number().min(1).max(365).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Check if user with this email already exists
-      const existingUser = await User.findByUsername(input.email);
-      if (existingUser) {
-        throw new Error("User with this email already exists");
+      if (!ctx.user || !ctx.teamId) {
+        throw new Error("User must be authenticated and have a team");
       }
 
-      // Check if there's already a pending invitation for this email
-      const existingInvitations = await Invitation.findByEmail(input.email);
-      const pendingInvitation = existingInvitations.find(
-        (inv) => inv.status === "pending",
-      );
-      if (pendingInvitation) {
-        const expiresAt = new Date(pendingInvitation.expires_at);
-        if (expiresAt > new Date()) {
-          throw new Error(
-            "A pending invitation already exists for this email address",
-          );
-        }
+      // Validate team membership
+      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      if (!member) {
+        throw new Error("You are not a member of this team");
       }
 
       return await Invitation.create({
-        email: input.email,
+        team_id: ctx.teamId,
         invited_by: ctx.user.userId,
         expires_in_days: input.expires_in_days,
       });
@@ -48,7 +37,17 @@ export const invitationsRouter = router({
         })
         .optional(),
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      if (!ctx.user || !ctx.teamId) {
+        throw new Error("User must be authenticated and have a team");
+      }
+
+      // Validate team membership
+      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      if (!member) {
+        throw new Error("You are not a member of this team");
+      }
+
       const limit = input?.limit || 50;
       const offset = input?.offset || 0;
       const status = input?.status;
@@ -56,8 +55,8 @@ export const invitationsRouter = router({
       // Check and expire old invitations
       await Invitation.checkAndExpire();
 
-      const invitations = await Invitation.list(limit, offset, status);
-      const total = await Invitation.count(status);
+      const invitations = await Invitation.list(ctx.teamId, limit, offset, status);
+      const total = await Invitation.count(ctx.teamId, status);
 
       // Enrich with inviter information
       const enriched = await Promise.all(
@@ -86,24 +85,39 @@ export const invitationsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      if (!ctx.user) {
+        throw new Error("User must be authenticated");
+      }
+
       const invitation = await Invitation.findByToken(input.token);
       if (!invitation) {
         throw new Error("Invitation not found");
       }
 
-      // Check if the user's email matches the invitation email
-      const user = await User.findById(ctx.user.userId);
-      if (!user) {
-        throw new Error("User not found");
+      // Check if user is already a member
+      const member = await TeamMember.findByTeamAndUser(invitation.team_id, ctx.user.userId);
+      if (member) {
+        throw new Error("You are already a member of this team");
       }
 
-      if (user.email.toLowerCase() !== invitation.email.toLowerCase()) {
-        throw new Error(
-          "Your email does not match the invitation email address",
-        );
+      // Accept invitation
+      await Invitation.accept(input.token, ctx.user.userId);
+
+      // Add user to team as member
+      try {
+        await TeamMember.create({
+          team_id: invitation.team_id,
+          user_id: ctx.user.userId,
+          role: "member",
+        });
+      } catch (error: any) {
+        // User might already be a member (race condition), ignore error
+        if (!error.message.includes("already a member")) {
+          throw error;
+        }
       }
 
-      return await Invitation.accept(input.token, ctx.user.userId);
+      return { success: true, team_id: invitation.team_id };
     }),
 
   getByToken: protectedProcedure

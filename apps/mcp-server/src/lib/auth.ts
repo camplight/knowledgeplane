@@ -196,12 +196,36 @@ async function validateApiKey(apiKey?: string): Promise<AuthContext | null> {
       .map((k) => k.trim())
       .filter(Boolean) || [];
 
-  // If API_KEYS is configured, validate against it
-  // Otherwise, allow any API key and create/find user by it
-  if (validKeys.length > 0 && !validKeys.includes(apiKey)) {
+  // If API_KEYS is configured, check if key is in the list OR if it exists in database
+  if (validKeys.length > 0) {
+    // Allow if key is in the configured list
+    if (validKeys.includes(apiKey)) {
+      // Get or create a user for this API key
+      const user = await User.getOrCreateByApiKey(apiKey);
+      return {
+        userId: user.id,
+        email: user.email,
+        provider: undefined,
+        apiKey: true,
+      };
+    }
+    
+    // Also check if the key exists in the database (user's personal API key)
+    const existingUser = await User.findByApiKey(apiKey);
+    if (existingUser) {
+      return {
+        userId: existingUser.id,
+        email: existingUser.email,
+        provider: undefined,
+        apiKey: true,
+      };
+    }
+    
+    // Key not in list and not in database
     return null;
   }
 
+  // If API_KEYS is not configured, allow any API key and create/find user by it
   // Get or create a user for this API key
   // This ensures API keys can be used with database operations that require a user ID
   // and the same key will always map to the same user

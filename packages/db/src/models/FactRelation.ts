@@ -5,6 +5,7 @@ export interface FactRelationInput {
   from_fact: string; // Fact ID
   to_fact: string; // Fact ID
   type: string; // e.g., "references", "depends_on", "related_to", "part_of"
+  team_id: string; // Team ID
   metadata?: Record<string, any>;
   created_by: string; // User ID
 }
@@ -18,6 +19,7 @@ export interface FactRelationRecord {
   from_fact: string; // Fact ID (normalized)
   to_fact: string; // Fact ID (normalized)
   type: string;
+  team_id: string; // Team ID
   metadata: Record<string, any>;
   created_by: string;
   created_at: string;
@@ -26,6 +28,7 @@ export interface FactRelationRecord {
 }
 
 export interface FactRelationQueryParams {
+  team_id?: string;
   from_fact?: string;
   to_fact?: string;
   type?: string;
@@ -45,6 +48,7 @@ export class FactRelation {
       from_fact: input.from_fact,
       to_fact: input.to_fact,
       type: input.type,
+      team_id: input.team_id,
       metadata: input.metadata || {},
       created_by: input.created_by,
       created_at: new Date().toISOString(),
@@ -135,13 +139,17 @@ export class FactRelation {
   static async query(
     params: FactRelationQueryParams,
   ): Promise<FactRelationRecord[]> {
-    const limit = params.limit || 50;
-    const offset = params.offset || 0;
+    const limit = Math.max(1, params.limit || 50);
+    const offset = Math.max(0, params.offset || 0);
 
     let aql = `FOR relation IN relations`;
     const bindVars: any = { limit, offset };
 
     const filters: string[] = [];
+    if (params.team_id) {
+      filters.push(`relation.team_id == @teamId`);
+      bindVars.teamId = params.team_id;
+    }
     if (params.from_fact) {
       filters.push(`relation.from_fact == @fromFact`);
       bindVars.fromFact = params.from_fact;
@@ -437,6 +445,7 @@ export class FactRelation {
       from_fact: doc.from_fact,
       to_fact: doc.to_fact,
       type: doc.type,
+      team_id: doc.team_id,
       metadata: doc.metadata || {},
       created_by: doc.created_by,
       created_at: doc.created_at,

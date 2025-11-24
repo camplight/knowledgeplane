@@ -6,6 +6,7 @@ export interface ChatThreadRecord {
   _id?: string;
   id: string;
   user_id: string;
+  team_id: string; // Team ID
   created_at: string;
   updated_at: string;
   mcp_session_id?: string; // MCP session ID for persistent connections
@@ -36,15 +37,16 @@ export interface ChatMessageInput {
 
 export class ChatThread {
   /**
-   * Create or get existing thread for a user
+   * Create or get existing thread for a user and team
    */
-  static async getOrCreate(userId: string): Promise<ChatThreadRecord> {
+  static async getOrCreate(userId: string, teamId: string): Promise<ChatThreadRecord> {
     await ensureInitialized();
 
     // Try to find existing thread
     const aql = `
       FOR thread IN chat_threads
         FILTER thread.user_id == @userId
+        FILTER thread.team_id == @teamId
         SORT thread.updated_at DESC
         LIMIT 1
         RETURN thread
@@ -52,6 +54,7 @@ export class ChatThread {
 
     const cursor = await collections.chat_threads.database.query(aql, {
       userId,
+      teamId,
     });
     const existing = await cursor.next();
 
@@ -63,6 +66,7 @@ export class ChatThread {
     const now = new Date().toISOString();
     const doc = {
       user_id: userId,
+      team_id: teamId,
       created_at: now,
       updated_at: now,
     };
@@ -311,6 +315,7 @@ export class ChatThread {
       _key: doc._key,
       _id: doc._id,
       user_id: doc.user_id,
+      team_id: doc.team_id,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
       mcp_session_id: doc.mcp_session_id,

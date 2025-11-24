@@ -13,6 +13,7 @@ export const factsWriteTool: Tool = {
         description: "Key-value pairs of metadata",
         additionalProperties: { type: "string" },
       },
+      team_id: { type: "string", description: "Team ID (optional, inferred from session if authenticated)" },
       created_by: { type: "string", description: "User ID of the creator (optional, inferred from session if authenticated)" },
       last_updated_by: { type: "string", description: "User ID of the last updater (optional, inferred from session if authenticated)" },
     },
@@ -23,17 +24,22 @@ export const factsWriteTool: Tool = {
 export async function handleFactsWrite(args: {
   content: string;
   metadata?: Record<string, string>;
+  team_id?: string;
   created_by?: string;
   last_updated_by?: string;
 }) {
-  // Validate that user IDs are provided (either from args or should be inferred from context)
+  // Validate that user IDs and team_id are provided (should be merged from context by server.ts)
   if (!args.created_by || !args.last_updated_by) {
     throw new Error("User ID is required. Either provide created_by and last_updated_by, or authenticate via session.");
+  }
+  if (!args.team_id) {
+    throw new Error("Team ID is required. Either provide team_id, or authenticate via session with team context.");
   }
 
   const fact = await Fact.write({
     content: args.content,
     metadata: args.metadata,
+    team_id: args.team_id,
     created_by: args.created_by,
     last_updated_by: args.last_updated_by,
   });

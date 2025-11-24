@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { KnowledgeCard } from "@knowledgeplane/db";
+import { KnowledgeCard, TeamMember } from "@knowledgeplane/db";
 
 export const knowledgeCardsUpdateTool: Tool = {
   name: "knowledge_cards.update",
@@ -7,10 +7,22 @@ export const knowledgeCardsUpdateTool: Tool = {
   inputSchema: {
     type: "object",
     properties: {
-      id: { type: "string", description: "The ID of the knowledge card to update" },
-      title: { type: "string", description: "Updated title of the knowledge card" },
-      summary: { type: "string", description: "Updated summary of the knowledge card" },
-      content: { type: "string", description: "Updated content of the knowledge card" },
+      id: {
+        type: "string",
+        description: "The ID of the knowledge card to update",
+      },
+      title: {
+        type: "string",
+        description: "Updated title of the knowledge card",
+      },
+      summary: {
+        type: "string",
+        description: "Updated summary of the knowledge card",
+      },
+      content: {
+        type: "string",
+        description: "Updated content of the knowledge card",
+      },
       fact_ids: {
         type: "array",
         items: { type: "string" },
@@ -23,7 +35,13 @@ export const knowledgeCardsUpdateTool: Tool = {
       },
       last_updated_by: {
         type: "string",
-        description: "User ID of the person updating the card (optional, inferred from session if authenticated)",
+        description:
+          "User ID of the person updating the card (optional, inferred from session if authenticated)",
+      },
+      team_id: {
+        type: "string",
+        description:
+          "Team ID for validation (optional, inferred from session if authenticated)",
       },
     },
     required: ["id"],
@@ -38,11 +56,42 @@ export async function handleKnowledgeCardsUpdate(args: {
   fact_ids?: string[];
   metadata?: Record<string, any>;
   last_updated_by?: string;
+  team_id?: string;
 }) {
   if (!args.last_updated_by) {
     throw new Error(
       "User ID is required. Either provide last_updated_by, or authenticate via session.",
     );
+  }
+
+  // Get the card first to check its team_id
+  const existingCard = await KnowledgeCard.findById(args.id);
+  if (!existingCard) {
+    throw new Error(`Knowledge card with id ${args.id} not found`);
+  }
+
+  // Validate team_id if provided
+  if (args.team_id) {
+    if (existingCard.team_id !== args.team_id) {
+      throw new Error("Knowledge card does not belong to the specified team");
+    }
+    // Validate team membership
+    const member = await TeamMember.findByTeamAndUser(
+      args.team_id,
+      args.last_updated_by,
+    );
+    if (!member) {
+      throw new Error("You are not a member of this team");
+    }
+  } else {
+    // If team_id not provided, validate membership on the card's team
+    const member = await TeamMember.findByTeamAndUser(
+      existingCard.team_id,
+      args.last_updated_by,
+    );
+    if (!member) {
+      throw new Error("You are not a member of this team");
+    }
   }
 
   const card = await KnowledgeCard.update({
@@ -64,4 +113,3 @@ export async function handleKnowledgeCardsUpdate(args: {
     ],
   };
 }
-

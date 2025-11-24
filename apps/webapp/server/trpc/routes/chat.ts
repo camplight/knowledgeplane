@@ -10,32 +10,33 @@ import {
   type ChatCompletionOptions,
 } from "@knowledgeplane/aimodel";
 
-// Build MCP server URL with API key
-function getMcpServerUrl(): string | undefined {
+// Build MCP server URL with API key and team_id
+function getMcpServerUrl(teamId?: string | null): string | undefined {
   // Prefer full URL if provided
+  let baseUrl: string;
   if (process.env.MCP_SERVER_URL) {
-    const url = new URL(process.env.MCP_SERVER_URL);
-    // Add API key as query parameter if provided
-    if (process.env.MCP_SERVER_API_KEY) {
-      url.searchParams.set("api_key", process.env.MCP_SERVER_API_KEY);
-    }
-    return url.toString();
+    baseUrl = process.env.MCP_SERVER_URL;
+  } else {
+    // Otherwise construct from components
+    const protocol = process.env.MCP_SERVER_PROTOCOL || "http";
+    const host = process.env.MCP_SERVER_HOST || "localhost";
+    const port = process.env.MCP_SERVER_PORT || "8080";
+    baseUrl = `${protocol}://${host}:${port}/mcp`;
   }
 
-  // Otherwise construct from components
-  const protocol = process.env.MCP_SERVER_PROTOCOL || "http";
-  const host = process.env.MCP_SERVER_HOST || "localhost";
-  const port = process.env.MCP_SERVER_PORT || "8080";
-  const baseUrl = `${protocol}://${host}:${port}/mcp`;
-
+  const url = new URL(baseUrl);
+  
   // Add API key as query parameter if provided
   if (process.env.MCP_SERVER_API_KEY) {
-    const url = new URL(baseUrl);
     url.searchParams.set("api_key", process.env.MCP_SERVER_API_KEY);
-    return url.toString();
+  }
+  
+  // Add team_id as query parameter if provided
+  if (teamId) {
+    url.searchParams.set("team_id", teamId);
   }
 
-  return baseUrl;
+  return url.toString();
 }
 
 export const chatRouter = router({
@@ -49,11 +50,22 @@ export const chatRouter = router({
       // Ensure database is initialized (applies fetch patch)
       await ensureInitialized();
 
+      if (!ctx.user || !ctx.teamId) {
+        throw new Error("User must be authenticated and have a team");
+      }
+
       const { message } = input;
       const userId = ctx.user.userId;
 
-      // Get or create thread for user
-      const thread = await ChatThread.getOrCreate(userId);
+      // Validate team membership
+      const { TeamMember } = await import("@knowledgeplane/db/next");
+      const member = await TeamMember.findByTeamAndUser(ctx.teamId, userId);
+      if (!member) {
+        throw new Error("You are not a member of this team");
+      }
+
+      // Get or create thread for user and team
+      const thread = await ChatThread.getOrCreate(userId, ctx.teamId);
 
       // Store user message
       await ChatThread.addMessage({
@@ -68,8 +80,8 @@ export const chatRouter = router({
         process.env.OPENAI_API_KEY,
       );
 
-      // Get MCP server URL
-      const mcpServerUrl = getMcpServerUrl();
+      // Get MCP server URL with team_id
+      const mcpServerUrl = getMcpServerUrl(ctx.teamId);
 
       // Build system prompt with instructions for JSON response
       const systemPrompt = `You are a helpful assistant with access to a knowledge base through MCP tools.

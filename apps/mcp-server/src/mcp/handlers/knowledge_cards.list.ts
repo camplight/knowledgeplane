@@ -7,6 +7,7 @@ export const knowledgeCardsListTool: Tool = {
   inputSchema: {
     type: "object",
     properties: {
+      team_id: { type: "string", description: "Team ID (optional, inferred from session if authenticated)" },
       limit: {
         type: "number",
         description: "Maximum number of cards to return (default: 50)",
@@ -20,13 +21,14 @@ export const knowledgeCardsListTool: Tool = {
 };
 
 export async function handleKnowledgeCardsList(args: {
+  team_id?: string;
   limit?: number;
   offset?: number;
 }) {
   const limit = args.limit || 50;
   const offset = args.offset || 0;
 
-  const cards = await KnowledgeCard.list(limit, offset);
+  const cards = await KnowledgeCard.list(args.team_id, limit, offset);
 
   return {
     content: [

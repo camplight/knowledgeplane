@@ -38,6 +38,7 @@ export const knowledgeCardsSearchTool: Tool = {
         type: "string",
         description: "Search query for hybrid search. Use '*' to search all cards.",
       },
+      team_id: { type: "string", description: "Team ID (optional, inferred from session if authenticated)" },
       k: {
         type: "number",
         description: "Optional limit for number of results (default: 5)",
@@ -62,6 +63,7 @@ interface KnowledgeCardSearchResult {
 
 export async function handleKnowledgeCardsSearch(args: {
   query: string;
+  team_id?: string;
   k?: number;
   offset?: number;
   use_vector_search?: boolean;
@@ -80,7 +82,7 @@ export async function handleKnowledgeCardsSearch(args: {
 
   // If vector search is explicitly disabled or query is wildcard, use full-text only
   if (useVectorSearch === false || isWildcard) {
-    const results = await _fullTextSearch(args.query, limit, offset);
+    const results = await _fullTextSearch(args.query, args.team_id, limit, offset);
     return {
       content: [
         {
@@ -93,7 +95,7 @@ export async function handleKnowledgeCardsSearch(args: {
 
   // If vector search is explicitly enabled, use vector search only
   if (useVectorSearch === true) {
-    const results = await _vectorSearch(args.query, limit, offset, provider);
+    const results = await _vectorSearch(args.query, args.team_id, limit, offset, provider);
     return {
       content: [
         {
@@ -105,7 +107,7 @@ export async function handleKnowledgeCardsSearch(args: {
   }
 
   // Otherwise, use hybrid search (default)
-  const results = await _hybridSearch(args.query, limit, offset, provider);
+  const results = await _hybridSearch(args.query, args.team_id, limit, offset, provider);
   return {
     content: [
       {
@@ -118,6 +120,7 @@ export async function handleKnowledgeCardsSearch(args: {
 
 async function _fullTextSearch(
   query: string,
+  teamId: string | undefined,
   limit: number,
   offset: number,
 ): Promise<KnowledgeCardSearchResult[]> {
@@ -130,9 +133,17 @@ async function _fullTextSearch(
     offset,
   };
 
+  const filters: string[] = [];
+  if (teamId) {
+    filters.push(`card.team_id == @teamId`);
+    bindVars.teamId = teamId;
+  }
+  const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
+
   if (isWildcard) {
     aql = `
       FOR card IN knowledge_cards
+        ${filterClause}
         SORT card.updated_at DESC, card.created_at DESC
         LIMIT @offset, @limit
         RETURN { card: card, score: 1.0 }
@@ -141,6 +152,7 @@ async function _fullTextSearch(
     // Try to use FULLTEXT index first
     aql = `
       FOR card IN FULLTEXT(knowledge_cards, "content", @query)
+        ${filterClause}
         SORT card.updated_at DESC, card.created_at DESC
         LIMIT @offset, @limit
         RETURN { card: card, score: BM25(card) }
@@ -161,11 +173,18 @@ async function _fullTextSearch(
     if (error.errorNum === 1571 || error.message?.includes("fulltext index")) {
       console.warn("Fulltext index not found, falling back to LIKE search");
 
+      const fallbackFilters: string[] = [];
+      if (teamId) {
+        fallbackFilters.push(`card.team_id == @teamId`);
+      }
+      fallbackFilters.push(`(LOWER(card.title) LIKE LOWER(CONCAT("%", @query, "%"))
+             OR LOWER(card.summary) LIKE LOWER(CONCAT("%", @query, "%"))
+             OR LOWER(card.content) LIKE LOWER(CONCAT("%", @query, "%")))`);
+      const fallbackFilterClause = fallbackFilters.length > 0 ? `FILTER ${fallbackFilters.join(" && ")}` : "";
+      
       const fallbackAql = `
         FOR card IN knowledge_cards
-          FILTER LOWER(card.title) LIKE LOWER(CONCAT("%", @query, "%"))
-             OR LOWER(card.summary) LIKE LOWER(CONCAT("%", @query, "%"))
-             OR LOWER(card.content) LIKE LOWER(CONCAT("%", @query, "%"))
+          ${fallbackFilterClause}
           SORT card.updated_at DESC, card.created_at DESC
           LIMIT @offset, @limit
           RETURN { card: card, score: 1.0 }
@@ -189,6 +208,7 @@ async function _fullTextSearch(
 
 async function _vectorSearch(
   query: string,
+  teamId: string | undefined,
   limit: number,
   offset: number,
   provider: any,
@@ -199,7 +219,7 @@ async function _vectorSearch(
     console.warn(
       "Vector search requires embedding provider. Falling back to full-text search.",
     );
-    return _fullTextSearch(query, limit, offset);
+    return _fullTextSearch(query, teamId, limit, offset);
   }
 
   try {
@@ -207,13 +227,20 @@ async function _vectorSearch(
     const queryEmbedding = await generateQueryEmbedding(query, provider);
 
     // Get all cards with embeddings and calculate cosine similarity manually
+    const filters: string[] = [`card.embedding != null`];
+    const bindVars: any = {};
+    if (teamId) {
+      filters.push(`card.team_id == @teamId`);
+      bindVars.teamId = teamId;
+    }
+    
     const aql = `
       FOR card IN knowledge_cards
-        FILTER card.embedding != null
+        FILTER ${filters.join(" && ")}
         RETURN card
     `;
 
-    const cursor = await collections.knowledge_cards.database.query(aql);
+    const cursor = await collections.knowledge_cards.database.query(aql, bindVars);
     const allCards = await cursor.all();
 
     // Calculate cosine similarity for each card and sort by score
@@ -240,26 +267,27 @@ async function _vectorSearch(
     return resultsWithScores;
   } catch (error: any) {
     console.error("Vector search error:", error.message);
-    return _fullTextSearch(query, limit, offset);
+    return _fullTextSearch(query, teamId, limit, offset);
   }
 }
 
 async function _hybridSearch(
   query: string,
+  teamId: string | undefined,
   limit: number,
   offset: number,
   provider: any,
 ): Promise<KnowledgeCardSearchResult[]> {
   // If no provider, use full-text only
   if (!provider) {
-    return _fullTextSearch(query, limit, offset);
+    return _fullTextSearch(query, teamId, limit, offset);
   }
 
   try {
     // Get results from both full-text and vector search
     const [fullTextResults, vectorResults] = await Promise.all([
-      _fullTextSearch(query, limit * 2, 0), // Get more results to merge
-      _vectorSearch(query, limit * 2, 0, provider),
+      _fullTextSearch(query, teamId, limit * 2, 0), // Get more results to merge
+      _vectorSearch(query, teamId, limit * 2, 0, provider),
     ]);
 
     // Create a map to deduplicate and combine scores
@@ -308,7 +336,7 @@ async function _hybridSearch(
     return combinedResults.slice(offset, offset + limit);
   } catch (error: any) {
     console.error("Hybrid search error:", error.message);
-    return _fullTextSearch(query, limit, offset);
+    return _fullTextSearch(query, teamId, limit, offset);
   }
 }
 

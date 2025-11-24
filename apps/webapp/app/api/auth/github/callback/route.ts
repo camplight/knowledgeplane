@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "crypto";
-import { User } from "@knowledgeplane/db/next";
+import { User, Team, TeamMember } from "@knowledgeplane/db/next";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -89,10 +89,26 @@ export async function GET(request: NextRequest) {
 
     const username = userInfo.login || userInfo.id?.toString();
 
+    const isNewUser = !(await User.findByUsername(username));
     const user = await User.getOrCreate({
       username,
       email,
     });
+
+    // Create default team for new users
+    if (isNewUser) {
+      const defaultTeam = await Team.create({
+        name: `${user.username}'s Team`,
+        description: "Default team",
+        created_by: user.id,
+      });
+
+      await TeamMember.create({
+        team_id: defaultTeam.id,
+        user_id: user.id,
+        role: "owner",
+      });
+    }
 
     cookieStore.set("session", crypto.randomBytes(32).toString("base64url"), {
       httpOnly: true,
@@ -106,6 +122,11 @@ export async function GET(request: NextRequest) {
       sameSite: "lax",
       maxAge: 60 * 60 * 24 * 7,
     });
+
+    // Redirect to onboarding if not completed
+    if (!user.onboarding_completed) {
+      return NextResponse.redirect(new URL("/onboarding", request.url));
+    }
 
     return NextResponse.redirect(new URL("/dashboard", request.url));
   } catch (error: any) {

@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { File } from "@knowledgeplane/db";
+import { File, TeamMember } from "@knowledgeplane/db";
 
 export const filesUpdateTool: Tool = {
   name: "files.update",
@@ -24,6 +24,14 @@ export const filesUpdateTool: Tool = {
           type: "string",
         },
       },
+      team_id: {
+        type: "string",
+        description: "Team ID for validation (optional, inferred from session if authenticated)",
+      },
+      user_id: {
+        type: "string",
+        description: "User ID for team membership validation (optional, inferred from session if authenticated)",
+      },
     },
     required: ["id"],
   },
@@ -33,7 +41,30 @@ export async function handleFilesUpdate(args: {
   id: string;
   metadata?: Record<string, any>;
   fact_ids?: string[];
+  team_id?: string;
+  user_id?: string;
 }) {
+  // Get the file first to check its team_id
+  const existingFile = await File.findById(args.id);
+  if (!existingFile) {
+    throw new Error(`File with id ${args.id} not found`);
+  }
+
+  // Validate team_id if provided
+  if (args.team_id) {
+    if (existingFile.team_id !== args.team_id) {
+      throw new Error("File does not belong to the specified team");
+    }
+  }
+
+  // Validate team membership if user_id is provided
+  if (args.user_id) {
+    const member = await TeamMember.findByTeamAndUser(existingFile.team_id, args.user_id);
+    if (!member) {
+      throw new Error("You are not a member of this team");
+    }
+  }
+
   const file = await File.update({
     id: args.id,
     metadata: args.metadata,

@@ -4,7 +4,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer, type McpContext } from "../mcp/server.js";
 import { requireAuth, type AuthContext } from "../lib/auth.js";
-import { User } from "@knowledgeplane/db";
+import { User, TeamMember } from "@knowledgeplane/db";
 
 // AsyncLocalStorage for per-request context tracking
 const contextStorage = new AsyncLocalStorage<McpContext | string>();
@@ -52,6 +52,7 @@ export default async function mcpRoutes(app: FastifyInstance) {
 
     // Extract query params first (needed for API key from query and user creation)
     const query = request.query as Record<string, string>;
+    const teamIdFromQuery = query.team_id as string | undefined;
 
     let authContext: AuthContext | undefined;
     try {
@@ -110,10 +111,29 @@ export default async function mcpRoutes(app: FastifyInstance) {
       }
     }
 
+    // Get team_id - prioritize from query, then get user's first team
+    let teamId: string | undefined = teamIdFromQuery;
+    if (!teamId && userId) {
+      try {
+        const userTeams = await TeamMember.findByUser(userId, 1, 0);
+        if (userTeams.length > 0) {
+          teamId = userTeams[0].team_id;
+        }
+      } catch (error: any) {
+        app.log.warn(
+          { error: error.message, userId },
+          "MCP: Failed to get user's teams",
+        );
+      }
+    }
+
     // Build context for this request
     const requestContext: McpContext = {};
     if (userId) {
       requestContext.userId = userId;
+    }
+    if (teamId) {
+      requestContext.teamId = teamId;
     }
 
     // Store context for this session (if sessionId exists)
@@ -122,6 +142,7 @@ export default async function mcpRoutes(app: FastifyInstance) {
       sessionContexts.set(sessionId, {
         ...existingContext,
         userId: userId || existingContext.userId,
+        teamId: teamId || existingContext.teamId,
       });
     }
 
@@ -139,6 +160,7 @@ export default async function mcpRoutes(app: FastifyInstance) {
         sessionContexts.set(sessionId, {
           ...existingContext,
           userId: userId || existingContext.userId,
+          teamId: teamId || existingContext.teamId,
         });
       }
     } else {
@@ -163,6 +185,7 @@ export default async function mcpRoutes(app: FastifyInstance) {
           if (userId) {
             sessionContexts.set(id, {
               userId,
+              teamId,
             });
           }
           app.log.info({ sessionId: id }, "MCP: Session initialized");

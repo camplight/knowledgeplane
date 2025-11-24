@@ -6,6 +6,7 @@ export interface FileInput {
   mime_type: string;
   size: number;
   storage_path: string; // Path where file is stored
+  team_id: string; // Team ID
   uploaded_by: string; // User ID
   metadata?: Record<string, any>;
 }
@@ -19,6 +20,7 @@ export interface FileRecord {
   mime_type: string;
   size: number;
   storage_path: string;
+  team_id: string; // Team ID
   uploaded_by: string;
   metadata: Record<string, any>;
   created_at: string;
@@ -41,6 +43,7 @@ export class File {
       mime_type: input.mime_type,
       size: input.size,
       storage_path: input.storage_path,
+      team_id: input.team_id,
       uploaded_by: input.uploaded_by,
       metadata: input.metadata || {},
       fact_ids: [],
@@ -86,13 +89,20 @@ export class File {
   }
 
   static async list(
+    teamId?: string,
     limit: number = 50,
     offset: number = 0,
   ): Promise<FileRecord[]> {
-    let aql = `FOR file IN files`;
+    const filters: string[] = [];
     const bindVars: any = { limit, offset };
-
-    aql += ` SORT file.created_at DESC LIMIT @offset, @limit RETURN file`;
+    
+    if (teamId) {
+      filters.push(`file.team_id == @teamId`);
+      bindVars.teamId = teamId;
+    }
+    
+    const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
+    const aql = `FOR file IN files ${filterClause} SORT file.created_at DESC LIMIT @offset, @limit RETURN file`;
 
     const cursor = await collections.files.database.query(aql, bindVars);
     const results = await cursor.all();
@@ -131,6 +141,7 @@ export class File {
       mime_type: doc.mime_type,
       size: doc.size,
       storage_path: doc.storage_path,
+      team_id: doc.team_id,
       uploaded_by: doc.uploaded_by,
       metadata: doc.metadata || {},
       created_at: doc.created_at,

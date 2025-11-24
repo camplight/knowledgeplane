@@ -7,6 +7,7 @@ export const filesListTool: Tool = {
   inputSchema: {
     type: "object",
     properties: {
+      team_id: { type: "string", description: "Team ID (optional, inferred from session if authenticated)" },
       limit: {
         type: "number",
         description: "Maximum number of files to return (default: 50)",
@@ -20,13 +21,14 @@ export const filesListTool: Tool = {
 };
 
 export async function handleFilesList(args: {
+  team_id?: string;
   limit?: number;
   offset?: number;
 }) {
   const limit = args.limit || 50;
   const offset = args.offset || 0;
 
-  const files = await File.list(limit, offset);
+  const files = await File.list(args.team_id, limit, offset);
 
   return {
     content: [

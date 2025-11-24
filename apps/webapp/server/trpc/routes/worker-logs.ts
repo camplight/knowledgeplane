@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { WorkerLog } from "@knowledgeplane/db/next";
+import { WorkerLog, TeamMember } from "@knowledgeplane/db/next";
 import { collections } from "@knowledgeplane/db";
 import { z } from "zod";
 
@@ -15,13 +15,23 @@ export const workerLogsRouter = router({
         })
         .optional(),
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      if (!ctx.user || !ctx.teamId) {
+        throw new Error("User must be authenticated and have a team");
+      }
+
+      // Validate team membership
+      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      if (!member) {
+        throw new Error("You are not a member of this team");
+      }
+
       const limit = input?.limit || 50;
       const offset = input?.offset || 0;
       const worker_name = input?.worker_name;
       const status = input?.status;
-      const logs = await WorkerLog.list(limit, offset, worker_name, status);
-      const total = await WorkerLog.count(worker_name, status);
+      const logs = await WorkerLog.list(ctx.teamId, limit, offset, worker_name, status);
+      const total = await WorkerLog.count(ctx.teamId, worker_name, status);
       return { logs, total, limit, offset };
     }),
   trigger: protectedProcedure
@@ -30,7 +40,7 @@ export const workerLogsRouter = router({
         worker: z.enum(["card-consolidator", "embeddings-generator"]),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       // Create a trigger record in the database
       // Workers can check this collection for pending triggers
       const now = new Date().toISOString();
@@ -62,6 +72,7 @@ export const workerLogsRouter = router({
         await WorkerLog.create({
           worker_name: input.worker,
           task_type: "manual-trigger",
+          team_id: ctx.teamId || undefined,
           status: "running",
           message: `Manual trigger requested for ${input.worker}`,
         });

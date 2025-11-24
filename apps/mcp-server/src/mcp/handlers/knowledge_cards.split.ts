@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { KnowledgeCard, Fact } from "@knowledgeplane/db";
+import { KnowledgeCard, Fact, TeamMember } from "@knowledgeplane/db";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
 import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
 
@@ -26,6 +26,10 @@ export const knowledgeCardsSplitTool: Tool = {
         type: "string",
         description: "User ID of the last updater (optional, inferred from session if authenticated)",
       },
+      team_id: {
+        type: "string",
+        description: "Team ID for validation (optional, inferred from session if authenticated)",
+      },
     },
     required: ["id"],
   },
@@ -36,6 +40,7 @@ export async function handleKnowledgeCardsSplit(args: {
   num_cards?: number;
   created_by?: string;
   last_updated_by?: string;
+  team_id?: string;
 }) {
   if (!args.created_by || !args.last_updated_by) {
     throw new Error(
@@ -49,6 +54,19 @@ export async function handleKnowledgeCardsSplit(args: {
   const originalCard = await KnowledgeCard.findById(args.id);
   if (!originalCard) {
     throw new Error(`Knowledge card with id ${args.id} not found`);
+  }
+
+  // Validate team_id if provided
+  if (args.team_id) {
+    if (originalCard.team_id !== args.team_id) {
+      throw new Error("Knowledge card does not belong to the specified team");
+    }
+  }
+
+  // Validate team membership
+  const member = await TeamMember.findByTeamAndUser(originalCard.team_id, args.last_updated_by);
+  if (!member) {
+    throw new Error("You are not a member of this team");
   }
 
   // Get the facts associated with the card
@@ -131,6 +149,7 @@ Provide your response as JSON with the following structure:
       summary: cardInfo.summary || "",
       content: cardInfo.content || "",
       fact_ids: cardInfo.fact_ids || [],
+      team_id: originalCard.team_id,
       created_by: args.created_by!,
       last_updated_by: args.last_updated_by!,
       metadata: {

@@ -12,6 +12,7 @@ export default function DashboardPage() {
   const limit = 10;
 
   const { data: userData, isLoading: userLoading } = trpc.auth.me.useQuery();
+  const { data: teamsData } = trpc.teams.list.useQuery();
   const { data: factsData, isLoading: factsLoading } = trpc.facts.list.useQuery({
     limit,
     offset: factsPage * limit,
@@ -61,9 +62,16 @@ export default function DashboardPage() {
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">
-            Welcome back, <span className="gradient-text-blue">{user.username}</span>!
-          </h1>
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-4xl font-bold text-slate-900">
+              Welcome back, <span className="gradient-text-blue">{user.username}</span>!
+            </h1>
+            {userData?.currentTeamId && teamsData && (
+              <div className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-medium">
+                {teamsData.find((t) => t.id === userData.currentTeamId)?.name || "Team"}
+              </div>
+            )}
+          </div>
           <p className="text-lg text-slate-600">
             Manage your knowledge base and facts
           </p>

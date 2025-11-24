@@ -19,6 +19,7 @@ export const factsBulkWriteTool: Tool = {
               description: "Key-value pairs of metadata",
               additionalProperties: { type: "string" },
             },
+            team_id: { type: "string", description: "Team ID (optional, inferred from session if authenticated)" },
             created_by: { type: "string", description: "User ID of the creator (optional, inferred from session if authenticated)" },
             last_updated_by: { type: "string", description: "User ID of the last updater (optional, inferred from session if authenticated)" },
           },
@@ -34,6 +35,7 @@ export async function handleFactsBulkWrite(args: {
   facts: Array<{
     content: string;
     metadata?: Record<string, string>;
+    team_id?: string;
     created_by?: string;
     last_updated_by?: string;
   }>;
@@ -43,14 +45,20 @@ export async function handleFactsBulkWrite(args: {
     throw new Error("At least one fact is required");
   }
 
-  // Validate that user IDs are provided (should be merged from context by server.ts)
+  // Validate that user IDs and team_id are provided (should be merged from context by server.ts)
   const hasUserIds = args.facts.every(
     (fact) => fact.created_by && fact.last_updated_by,
   );
+  const hasTeamIds = args.facts.every((fact) => fact.team_id);
 
   if (!hasUserIds) {
     throw new Error(
       "User ID is required for all facts. Either provide created_by and last_updated_by for each fact, or authenticate via session.",
+    );
+  }
+  if (!hasTeamIds) {
+    throw new Error(
+      "Team ID is required for all facts. Team ID should be automatically inferred from authenticated session context.",
     );
   }
 
@@ -58,6 +66,7 @@ export async function handleFactsBulkWrite(args: {
   const factInputs = args.facts.map((fact) => ({
     content: fact.content,
     metadata: fact.metadata,
+    team_id: fact.team_id!,
     created_by: fact.created_by!,
     last_updated_by: fact.last_updated_by!,
   }));

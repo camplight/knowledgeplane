@@ -38,7 +38,11 @@ REST API – comprehensive REST API for programmatic access.
 
 User management – automatic user creation and tracking via username/email.
 
-User invitations – send invitations to users to join the system, track invitation status, and view all users and their invitation history.
+Team management – users can create teams, invite members, and manage team settings. All domain data (facts, cards, files, etc.) is scoped to teams.
+
+User onboarding – automatic onboarding flow for new users on first login, including default team creation.
+
+Team invitations – personal invitation links (shareable tokens) for inviting users to teams. Links can be copied and shared with friends.
 
 Session-based context – MCP sessions maintain user and knowledge context across requests.
 
@@ -97,6 +101,7 @@ ArangoDB (graph database with full-text search)
 **facts.write Parameters:**
 - `content` (required): The content of the fact
 - `metadata` (optional): Key-value pairs of metadata
+- `team_id` (optional): Team ID. If not provided, inferred from authenticated session (uses user's first team)
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 
@@ -109,6 +114,7 @@ ArangoDB (graph database with full-text search)
 
 **facts.search Parameters:**
 - `query` (required): Search query for hybrid search (combines full-text and vector search). Use '*' to search all facts
+- `team_id` (optional): Team ID for filtering. If not provided, inferred from authenticated session (uses user's first team)
 - `k` (optional): Limit for number of results (default: 5, max: 20). Results are optimized to prevent context window issues
 - `offset` (optional): Offset for pagination (default: 0)
 - `include_trashed` (optional): If true, includes trashed facts in search results (default: false)
@@ -144,6 +150,7 @@ ArangoDB (graph database with full-text search)
 - `summary` (required): Brief summary of the knowledge card
 - `content` (required): Full content of the knowledge card
 - `fact_ids` (required): Array of fact IDs that are consolidated into this card
+- `team_id` (optional): Team ID. If not provided, inferred from authenticated session (uses user's first team)
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 - `metadata` (optional): Key-value pairs of metadata
@@ -162,11 +169,13 @@ ArangoDB (graph database with full-text search)
 
 **knowledge_cards.search Parameters:**
 - `query` (required): Search query for hybrid search. Use '*' to search all cards
+- `team_id` (optional): Team ID for filtering. If not provided, inferred from authenticated session (uses user's first team)
 - `k` (optional): Limit for number of results (default: 5)
 - `offset` (optional): Offset for pagination (default: 0)
 - `use_vector_search` (optional): If true, use vector search only; if false, use full-text only; if undefined, use hybrid
 
 **knowledge_cards.list Parameters:**
+- `team_id` (optional): Team ID for filtering. If not provided, inferred from authenticated session (uses user's first team)
 - `limit` (optional): Maximum number of cards to return (default: 50)
 - `offset` (optional): Offset for pagination (default: 0)
 
@@ -192,9 +201,11 @@ ArangoDB (graph database with full-text search)
 - `filename` (required): Original filename of the file being uploaded
 - `mimeType` (required): MIME type of the file (e.g., 'text/plain', 'application/json')
 - `data` (required): Base64-encoded file content
+- `team_id` (optional): Team ID. If not provided, inferred from authenticated session (uses user's first team)
 - `created_by` (optional): User ID of the uploader. If not provided, inferred from authenticated session (OAuth token or API key)
 
 **files.list Parameters:**
+- `team_id` (optional): Team ID for filtering. If not provided, inferred from authenticated session (uses user's first team)
 - `limit` (optional): Maximum number of files to return (default: 50)
 - `offset` (optional): Offset for pagination (default: 0)
 
@@ -216,6 +227,7 @@ ArangoDB (graph database with full-text search)
 - `from_fact` (required): Source fact ID
 - `to_fact` (required): Target fact ID
 - `type` (required): Relation type (e.g., 'references', 'depends_on', 'related_to', 'part_of')
+- `team_id` (optional): Team ID. If not provided, inferred from authenticated session (uses user's first team)
 - `metadata` (optional): Additional relation metadata
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 
@@ -228,6 +240,7 @@ ArangoDB (graph database with full-text search)
 - `id` (required): The ID of the relation to delete
 
 **fact_relations.search Parameters:**
+- `team_id` (optional): Team ID for filtering. If not provided, inferred from authenticated session (uses user's first team)
 - `from_fact` (optional): Filter by source fact ID
 - `to_fact` (optional): Filter by target fact ID
 - `type` (optional): Filter by relation type
@@ -274,8 +287,10 @@ ArangoDB (graph database with full-text search)
 | `GET /chat` | AI chat interface with MCP server connection (protected, requires session) |
 | `GET /upload` | File upload page with AI-powered fact extraction (protected, requires session) |
 | `GET /facts` | Browse facts page (protected, requires session) |
-| `GET /users` | Users and invitations management page (protected, requires session) - view all users, send invitations, and manage invitation status |
 | `GET /profile` | User profile and management page (protected, requires session) |
+| `GET /onboarding` | Onboarding page for new users (protected, requires session) - create first team and complete onboarding |
+| `GET /teams` | Team management page (protected, requires session) - create teams, manage members, and invitations |
+| `GET /invite/:token` | Public invitation acceptance page - accept team invitations via personal links |
 
 **REST API Endpoints (Port 8081):**
 | Endpoint | Description |
@@ -298,6 +313,20 @@ ArangoDB (graph database with full-text search)
 | `POST /api/webhooks` | Create a new webhook |
 | `PUT /api/webhooks/:id` | Update a webhook |
 | `DELETE /api/webhooks/:id` | Delete a webhook |
+
+**Team Management:**
+
+KnowledgePlane supports team-based collaboration:
+
+- **Teams**: Users can create multiple teams, each with its own isolated knowledge base
+- **Team Members**: Users can be members of multiple teams with different roles:
+  - **Owner**: Full control, can delete team, manage all members
+  - **Admin**: Can manage members and team settings (except deletion)
+  - **Member**: Can create and manage content within the team
+- **Default Team**: New users automatically get a default team created on first login
+- **Team Scoping**: All domain data (facts, knowledge cards, files, relations, etc.) is scoped to teams
+- **Personal Invitation Links**: Team owners/admins can generate shareable invitation links (tokens) that can be copied and sent to friends
+- **Onboarding**: New users are redirected to onboarding flow on first login
 
 **Session Management:**
 
@@ -328,9 +357,14 @@ KnowledgePlane supports three types of authentication:
 **MCP Session Management:**
 - Sessions are identified by `mcp-session-id` header
 - User context is automatically inferred from authenticated session (OAuth token or API key)
+- Team context is automatically inferred from authenticated user's first team, or can be provided via query params: `?team_id=teams/123`
 - User context can also be provided via query params: `?username=user&email=user@example.com` (fallback if not authenticated)
 - Authentication via `Authorization: Bearer <token>` header (OAuth), `knowledgeplane-key` header (API key), or `api_key` query parameter (for internal use)
-- For `facts.write`, `created_by` and `last_updated_by` are automatically set from the authenticated user's ID if not explicitly provided
+- **Team ID Auto-Inference**: All MCP tool handlers automatically infer `team_id` from the authenticated user's session context. Tools no longer require `team_id` as a parameter - it is automatically set from the user's team context. If a user is authenticated, their `team_id` is automatically inferred from their first team or from the `team_id` query parameter.
+- For `facts.write` and other creation operations, `created_by`, `last_updated_by`, and `team_id` are automatically set from the authenticated session if not explicitly provided
+- All MCP operations are scoped to the team context (either from query param or user's first team)
+- **Personal MCP URL**: Users can generate and copy their personal MCP server URL with their API key included via the profile page. This URL includes the API key as a query parameter and can be used to connect AI agents and tools.
+- **Team-Aware Chat**: The chat interface is team-aware and automatically passes the current team's `team_id` to the MCP server URL. When users switch teams, the chat automatically uses the correct team context for MCP operations.
 - **Server Restart Handling**: When the server restarts, in-memory session state is lost. Clients reconnecting with an existing `mcp-session-id` will have a new transport created. The MCP protocol requires clients to send an `initialize` request before any other requests. If a client sends a non-initialize request after a server restart, it will receive a 400 error and should reinitialize the session.
 
 🗄️ Data Model
@@ -341,13 +375,34 @@ KnowledgePlane supports three types of authentication:
 - `username` (string): Unique username
 - `email` (string): User email
 - `api_key` (string): Optional API key stored in user profile (for API key-based authentication)
+- `onboarding_completed` (boolean): Whether the user has completed onboarding (default: false)
 - `created_at` (string): Creation timestamp (ISO 8601)
+
+**Team Collection:**
+- `_id` (ArangoDB document ID): Primary key
+- `_key` (string): Document key
+- `name` (string): Team name
+- `slug` (string): URL-friendly team identifier (unique)
+- `description` (string): Optional team description
+- `created_by` (string): Reference to user ID who created the team
+- `created_at` (string): Creation timestamp (ISO 8601)
+- `updated_at` (string): Last update timestamp (ISO 8601)
+
+**TeamMember Collection:**
+- `_id` (ArangoDB document ID): Primary key
+- `_key` (string): Document key
+- `team_id` (string): Reference to team ID
+- `user_id` (string): Reference to user ID
+- `role` (string): Team member role - "owner", "admin", or "member"
+- `created_at` (string): Creation timestamp (ISO 8601)
+- `updated_at` (string): Last update timestamp (ISO 8601)
 
 **Fact Collection:**
 - `_id` (ArangoDB document ID): Primary key
 - `_key` (string): Document key
 - `content` (string): Fact content
 - `metadata` (object): Key-value metadata
+- `team_id` (string): Reference to team ID
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
 - `created_by` (string): Reference to user ID
@@ -362,6 +417,7 @@ KnowledgePlane supports three types of authentication:
 - `from_fact` (string): Source fact ID (normalized)
 - `to_fact` (string): Target fact ID (normalized)
 - `type` (string): Relation type (e.g., "references", "depends_on", "related_to", "part_of")
+- `team_id` (string): Reference to team ID
 - `metadata` (object): Additional relation metadata
 - `created_by` (string): Reference to user ID
 - `created_at` (string): Creation timestamp (ISO 8601)
@@ -375,6 +431,7 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `summary` (string): Brief summary
 - `content` (string): Full consolidated content
 - `fact_ids` (array): Array of fact IDs that were consolidated
+- `team_id` (string): Reference to team ID
 - `created_by` (string): Reference to user ID
 - `last_updated_by` (string): Reference to user ID
 - `metadata` (object): Key-value metadata
@@ -386,6 +443,7 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `_key` (string): Document key
 - `url` (string): Webhook URL
 - `events` (array): Array of event names to subscribe to (e.g., ["fact.created", "card.updated"])
+- `team_id` (string): Reference to team ID
 - `secret` (string): Optional secret for webhook signature
 - `active` (boolean): Whether the webhook is active
 - `created_by` (string): Reference to user ID
@@ -400,6 +458,7 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `mime_type` (string): MIME type of the file
 - `size` (number): File size in bytes
 - `storage_path` (string): Path where file is stored on disk
+- `team_id` (string): Reference to team ID
 - `uploaded_by` (string): Reference to user ID
 - `metadata` (object): Additional metadata
 - `created_at` (string): Creation timestamp (ISO 8601)
@@ -409,18 +468,20 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 **Invitation Collection:**
 - `_id` (ArangoDB document ID): Primary key
 - `_key` (string): Document key
-- `email` (string): Email address of the invited user
+- `team_id` (string): Reference to team ID
 - `invited_by` (string): Reference to user ID who sent the invitation
-- `token` (string): Unique invitation token
+- `token` (string): Unique invitation token (personal invitation link)
 - `status` (string): Invitation status - "pending", "accepted", or "expired"
 - `expires_at` (string): Expiration timestamp (ISO 8601)
 - `accepted_at` (string): Acceptance timestamp (ISO 8601, only set when status is "accepted")
+- `accepted_by` (string): Reference to user ID who accepted the invitation (only set when status is "accepted")
 - `created_at` (string): Creation timestamp (ISO 8601)
 
 **ChatThread Collection:**
 - `_id` (ArangoDB document ID): Primary key
 - `_key` (string): Document key
 - `user_id` (string): Reference to user ID
+- `team_id` (string): Reference to team ID
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
 
@@ -509,6 +570,8 @@ The web interface is built with React and Tailwind CSS, featuring:
   - API key management (view, generate, regenerate, and remove API keys)
   - Secure API key display with show/hide functionality
   - Copy-to-clipboard functionality for API keys
+  - Personal MCP server URL display with API key included
+  - Copy-to-clipboard functionality for MCP server URL
 - Knowledge base editor page (`/editor`) with:
   - Tabbed interface for switching between Facts, Cards, Files, and Knowledge Graph views
   - Facts view with list display, fact creation, and fact relation management
@@ -521,13 +584,20 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Search functionality for facts with server-side semantic search
   - Real-time client-side filtering that filters visible facts, cards, and files as you type, searching through content, title, summary, and filename fields
 - Facts browsing page (`/facts`) with pagination, filtering, and detailed fact display
-- Users and invitations management page (`/users`) with:
-  - User listing with invitation status (pending, accepted, none)
-  - Invitation management (create, view, track status)
-  - Tabbed interface for switching between users and invitations views
-  - Invitation form with email and expiration settings
-  - Invitation status badges (pending, accepted, expired)
-  - Pagination for both users and invitations
+- Team management page (`/teams`) with:
+  - Team listing and creation
+  - Team settings (name, description)
+  - Team member management (add, update roles, remove members)
+  - Invitation management (create invitation links, view, copy links, track status)
+  - Role-based access control (owner/admin/member permissions)
+  - Tabbed interface for team settings, members, and invitations
+- Onboarding page (`/onboarding`) for new users:
+  - First-time user flow to create initial team
+  - Onboarding completion tracking
+- Invitation acceptance page (`/invite/:token`) for public invitation links:
+  - Accept team invitations via personal links
+  - Shows team and inviter information
+  - Handles expired and invalid invitations
 
 **Token-Based Authentication:**
 All endpoints support Bearer token authentication via the `Authorization` header:
@@ -1532,36 +1602,40 @@ KnowledgePlane includes an AI chat interface that combines OpenAI's language mod
 
 **Features:**
 - Real-time chat interface with conversation history
-- **Thread-based conversation storage** - All messages are saved in persistent threads
-- **Automatic thread management** - Each user has a thread that maintains conversation context
+- **Thread-based conversation storage** - All messages are saved in persistent threads, scoped per user and team
+- **Automatic thread management** - Each user has a thread per team that maintains conversation context
+- **Team-aware** - Chat automatically uses the current team's context when connecting to the MCP server
 - **Smart truncation** - When threads exceed 20 human messages, older messages are truncated
 - Automatic fact retrieval from knowledge base based on user queries
-- Context-aware responses using relevant facts
-- Knowledge context filtering
+- Context-aware responses using relevant facts from the current team's knowledge base
+- Knowledge context filtering scoped to the current team
 - Visual indication of which facts were used in responses
 
 **How it works:**
 1. User sends a message in the chat interface
-2. System retrieves or creates a thread for the user
+2. System retrieves or creates a thread for the user and current team
 3. User message is stored in the thread
 4. System retrieves thread messages (with smart truncation if needed)
-5. System configures OpenAI with MCP tools to access the knowledge base
-6. AI model uses MCP tools (e.g., `facts.search`) to retrieve relevant facts as needed
+5. System configures OpenAI with MCP tools to access the knowledge base, passing the current team's `team_id` in the MCP server URL
+6. AI model uses MCP tools (e.g., `facts.search`) to retrieve relevant facts from the current team's knowledge base as needed
 7. AI generates a response using both its training and the knowledge base facts accessed via MCP tools
 8. AI returns JSON response with `content` (the response text) and `usedFacts` (array of fact IDs actually used)
 9. System parses the JSON response and fetches the actual fact objects by IDs
 10. Assistant response content is stored in the thread
 11. Response is displayed with information about which facts were actually used to construct the response
+12. When the user switches teams, the chat automatically uses the new team's context for subsequent MCP operations
 
 **Thread Management:**
-- Each user automatically gets a thread that persists across sessions
+- Each user automatically gets a thread per team that persists across sessions
 - All messages (user, assistant, system) are stored in the thread
 - When a thread has more than 20 human messages (user + assistant messages with content), older messages are truncated
 - This ensures conversation context is maintained while preventing excessive token usage
+- Threads are scoped to teams, so switching teams creates/uses a different thread
 
 **Thread Data Model:**
 - `ChatThread` collection stores thread metadata:
   - `user_id` - User who owns the thread
+  - `team_id` - Team that the thread belongs to
   - `created_at` - Thread creation timestamp
   - `updated_at` - Last update timestamp
 - `ChatMessage` collection stores individual messages with:

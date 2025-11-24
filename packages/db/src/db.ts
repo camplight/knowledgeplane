@@ -175,6 +175,8 @@ export const collections = {
   worker_triggers: db.collection("worker_triggers"),
   chat_threads: db.collection("chat_threads"),
   chat_messages: db.collection("chat_messages"),
+  teams: db.collection("teams"),
+  team_members: db.collection("team_members"),
 };
 
 // Graph for relations
@@ -222,6 +224,8 @@ export async function init() {
     "worker_triggers",
     "chat_threads",
     "chat_messages",
+    "teams",
+    "team_members",
   ];
 
   for (const name of documentCollectionNames) {
@@ -273,6 +277,11 @@ export async function init() {
 
   // Create indexes
   try {
+    await collections.facts.ensureIndex({
+      type: "persistent",
+      fields: ["team_id"],
+      name: "idx_fact_team_id",
+    });
     await collections.facts.ensureIndex({
       type: "persistent",
       fields: ["created_by"],
@@ -348,8 +357,8 @@ export async function init() {
     });
     await collections.invitations.ensureIndex({
       type: "persistent",
-      fields: ["email"],
-      name: "idx_invitation_email",
+      fields: ["team_id"],
+      name: "idx_invitation_team_id",
     });
     await collections.invitations.ensureIndex({
       type: "persistent",
@@ -366,6 +375,33 @@ export async function init() {
       type: "persistent",
       fields: ["invited_by"],
       name: "idx_invitation_invited_by",
+    });
+    await collections.teams.ensureIndex({
+      type: "persistent",
+      fields: ["slug"],
+      unique: true,
+      name: "idx_team_slug",
+    });
+    await collections.teams.ensureIndex({
+      type: "persistent",
+      fields: ["created_by"],
+      name: "idx_team_created_by",
+    });
+    await collections.team_members.ensureIndex({
+      type: "persistent",
+      fields: ["team_id"],
+      name: "idx_team_member_team_id",
+    });
+    await collections.team_members.ensureIndex({
+      type: "persistent",
+      fields: ["user_id"],
+      name: "idx_team_member_user_id",
+    });
+    await collections.team_members.ensureIndex({
+      type: "persistent",
+      fields: ["team_id", "user_id"],
+      unique: true,
+      name: "idx_team_member_team_user",
     });
     await collections.relations.ensureIndex({
       type: "persistent",
@@ -417,6 +453,11 @@ export async function init() {
     });
     await collections.chat_threads.ensureIndex({
       type: "persistent",
+      fields: ["team_id"],
+      name: "idx_chat_thread_team_id",
+    });
+    await collections.chat_threads.ensureIndex({
+      type: "persistent",
       fields: ["user_id"],
       name: "idx_chat_thread_user_id",
     });
@@ -424,6 +465,26 @@ export async function init() {
       type: "persistent",
       fields: ["updated_at"],
       name: "idx_chat_thread_updated_at",
+    });
+    await collections.knowledge_cards.ensureIndex({
+      type: "persistent",
+      fields: ["team_id"],
+      name: "idx_knowledge_card_team_id",
+    });
+    await collections.files.ensureIndex({
+      type: "persistent",
+      fields: ["team_id"],
+      name: "idx_file_team_id",
+    });
+    await collections.relations.ensureIndex({
+      type: "persistent",
+      fields: ["team_id"],
+      name: "idx_relation_team_id",
+    });
+    await collections.webhooks.ensureIndex({
+      type: "persistent",
+      fields: ["team_id"],
+      name: "idx_webhook_team_id",
     });
     await collections.chat_messages.ensureIndex({
       type: "persistent",
