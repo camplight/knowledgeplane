@@ -8,6 +8,13 @@
 - OpenAPI + tiny JS SDK
 - Docker-first deploy
 
+**📚 Documentation:**
+- **[Getting Started](./GETTING_STARTED.md)** - Quick start guide
+- **[Development Guide](./DEVELOPMENT.md)** - Localhost setup with ngrok
+- **[Deployment Guide](./DEPLOYMENT.md)** - Cloud deployment (Digital Ocean, etc.)
+- **[Environment Setup](./ENV_SETUP.md)** - Environment variables configuration
+- **[API Specification](./docs/SPEC.md)** - Complete API documentation
+
 ### Quickstart
 
 **Development Mode (with hot reload):**
@@ -16,20 +23,34 @@
 # 1) Clone & bootstrap
 npm run bootstrap
 
-# 2) Start infrastructure + dev server (auto-reloads on code changes)
+# 2) Set up environment variables
+./scripts/setup-env.sh  # Creates .env files from examples
+# Edit .env files with your values (see DEVELOPMENT.md)
+
+# 3) Start infrastructure + dev server (auto-reloads on code changes)
 npm run dev
 
+# 4) In a separate terminal, start ngrok for OAuth callbacks
+./scripts/start-ngrok.sh 8080
+
 # The command will:
-# - Start PostgreSQL with pgvector in Docker
+# - Start ArangoDB in Docker (port 8529)
 # - Wait for database to be ready
-# - Start the server in watch mode (code changes auto-reload)
+# - Start MCP server in watch mode (port 8080)
+# - Start webapp in dev mode (port 3000)
+# - Start background workers
 ```
+
+**For detailed development setup including ngrok and OAuth configuration, see [DEVELOPMENT.md](./DEVELOPMENT.md)**
 
 **Production Mode:**
 
 ```bash
-# Start full stack (Postgres + server in Docker)
+# Start full stack (ArangoDB + all services in Docker)
 docker compose -f infra/docker-compose.yml up --build
+```
+
+**For quick cloud deployment (Railway recommended), see [DEPLOYMENT.md](./DEPLOYMENT.md)**
 
 **Stop development servers:**
 ```bash

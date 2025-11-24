@@ -1,0 +1,89 @@
+version: '3.9'
+services:
+  db:
+    image: arangodb/arangodb:latest
+    command: --experimental-vector-index
+    environment:
+      ARANGO_ROOT_PASSWORD: ${ARANGO_PASSWORD:-root}
+    volumes:
+      - dbdata:/var/lib/arangodb3
+    restart: unless-stopped
+    networks:
+      - knowledgeplane
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8529/_api/version || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mcp-server:
+    build: ../apps/mcp-server
+    env_file:
+      - ../apps/mcp-server/.env.production
+    environment:
+      - ARANGO_URL=http://db:8529
+      - ARANGO_DB_NAME=knowledgeplane
+      - ARANGO_USER=root
+      - ARANGO_PASSWORD=${ARANGO_PASSWORD:-root}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - knowledgeplane
+
+  webapp:
+    build: ../apps/webapp
+    env_file:
+      - ../apps/webapp/.env.production
+    environment:
+      - ARANGO_URL=http://db:8529
+      - ARANGO_DB_NAME=knowledgeplane
+      - ARANGO_USER=root
+      - ARANGO_PASSWORD=${ARANGO_PASSWORD:-root}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - knowledgeplane
+
+  background-workers:
+    build: ../apps/background-workers
+    env_file:
+      - ../apps/background-workers/.env.production
+    environment:
+      - ARANGO_URL=http://db:8529
+      - ARANGO_DB_NAME=knowledgeplane
+      - ARANGO_USER=root
+      - ARANGO_PASSWORD=${ARANGO_PASSWORD:-root}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - knowledgeplane
+
+  rest-api:
+    build: ../apps/rest-api
+    env_file:
+      - ../apps/rest-api/.env.production
+    environment:
+      - ARANGO_URL=http://db:8529
+      - ARANGO_DB_NAME=knowledgeplane
+      - ARANGO_USER=root
+      - ARANGO_PASSWORD=${ARANGO_PASSWORD:-root}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - knowledgeplane
+
+volumes:
+  dbdata:
+
+networks:
+  knowledgeplane:
+    driver: bridge
+

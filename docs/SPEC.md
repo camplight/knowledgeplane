@@ -627,7 +627,12 @@ API key behavior:
 
 **Environment Variables:**
 
-**MCP Server:**
+For complete environment variable documentation and setup instructions, see:
+- [DEVELOPMENT.md](../DEVELOPMENT.md) - Local development setup with ngrok
+- [DEPLOYMENT.md](../DEPLOYMENT.md) - Production deployment configuration
+- `.env.example` files in each app directory
+
+**MCP Server (`apps/mcp-server/.env.dev`):**
 - `ARANGO_URL` - ArangoDB connection URL (default: `http://localhost:8529`)
 - `ARANGO_DB_NAME` - ArangoDB database name (default: `knowledgeplane`)
 - `ARANGO_USER` - ArangoDB username (default: `root`)
@@ -638,8 +643,8 @@ API key behavior:
 - `GITHUB_CLIENT_SECRET` - GitHub OAuth client secret
 - `SESSION_SECRET` - Secret key for session encryption (minimum 32 characters, defaults to insecure placeholder in development)
 - `API_KEYS` - Comma-separated list of valid API keys for API key authentication (optional)
-- `OAUTH_REDIRECT_BASE_URL` - Base URL for OAuth callbacks (default: `http://localhost:8080`)
-- `OAUTH_SUCCESS_REDIRECT_URL` - URL to redirect after successful auth (default: `http://localhost:5173`)
+- `OAUTH_REDIRECT_BASE_URL` - Base URL for OAuth callbacks (default: `http://localhost:8080`, use ngrok URL for localhost development)
+- `OAUTH_SUCCESS_REDIRECT_URL` - URL to redirect after successful auth (default: `http://localhost:3000`)
 - `OAUTH_PROVIDER` - Force a specific provider: `google` or `github` (optional)
 - `JWKS_URI` - JWKS endpoint for custom OAuth providers (optional)
 - `JWT_SECRET` - Secret for JWT verification (development only)
@@ -651,16 +656,19 @@ API key behavior:
 - `ANTHROPIC_MODEL` - Anthropic model to use (default: `claude-3-5-sonnet-20241022`)
 - `UPLOADS_DIR` - Directory for storing uploaded files (default: `./uploads`)
 
-**Background Worker:**
+**Background Worker (`apps/background-workers/.env.dev`):**
 - `ARANGO_URL` - ArangoDB connection URL
 - `ARANGO_DB_NAME` - ArangoDB database name
 - `ARANGO_USER` - ArangoDB username
 - `ARANGO_PASSWORD` - ArangoDB password
 - `AI_PROVIDER` - AI provider to use: `openai` or `anthropic` (default: `openai`)
 - `OPENAI_API_KEY` - OpenAI API key (required if using OpenAI provider)
+- `OPENAI_MODEL` - OpenAI model to use (default: `gpt-4o`)
+- `OPENAI_EMBEDDING_MODEL` - OpenAI embedding model (default: `text-embedding-3-small`)
 - `ANTHROPIC_API_KEY` - Anthropic API key (required if using Anthropic provider)
+- `ANTHROPIC_MODEL` - Anthropic model to use (default: `claude-3-5-sonnet-20241022`)
 
-**Webapp:**
+**Webapp (`apps/webapp/.env.local`):**
 - `ARANGO_URL` - ArangoDB connection URL
 - `ARANGO_DB_NAME` - ArangoDB database name
 - `ARANGO_USER` - ArangoDB username
@@ -670,22 +678,25 @@ API key behavior:
 - `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
 - `GITHUB_CLIENT_ID` - GitHub OAuth client ID
 - `GITHUB_CLIENT_SECRET` - GitHub OAuth client secret
-- `MCP_SERVER_URL` - Full URL to MCP server (e.g., `http://localhost:8080/mcp`)
-- `MCP_SERVER_HOST` - MCP server hostname (default: `localhost`)
+- `MCP_SERVER_URL` - Full URL to MCP server (e.g., `http://localhost:8080/mcp` or `https://your-ngrok-url.ngrok.io/mcp`)
+- `MCP_SERVER_HOST` - MCP server hostname (default: `localhost`, use ngrok domain for localhost development)
 - `MCP_SERVER_PORT` - MCP server port (default: `8080`)
-- `MCP_SERVER_PROTOCOL` - MCP server protocol (default: `http`)
+- `MCP_SERVER_PROTOCOL` - MCP server protocol (default: `http`, use `https` with ngrok)
 - `MCP_SERVER_API_KEY` - API key for internal MCP server authentication (automatically added to URL as query parameter)
 - `AI_PROVIDER` - AI provider to use: `openai` or `anthropic` (default: `openai`)
 - `OPENAI_API_KEY` - OpenAI API key (required if using OpenAI provider)
 - `OPENAI_MODEL` - OpenAI model to use (default: `gpt-4o`)
 - `ANTHROPIC_API_KEY` - Anthropic API key (required if using Anthropic provider)
 
-**REST API:**
+**REST API (`apps/rest-api/.env.dev`):**
 - `ARANGO_URL` - ArangoDB connection URL
 - `ARANGO_DB_NAME` - ArangoDB database name
 - `ARANGO_USER` - ArangoDB username
 - `ARANGO_PASSWORD` - ArangoDB password
 - `PORT` - Server port (default: `8081`)
+
+**Localhost Development with ngrok:**
+For localhost development, you'll need to set up ngrok to expose port 8080 for OAuth callbacks. See [DEVELOPMENT.md](../DEVELOPMENT.md) for detailed instructions.
 
 **Example: Using OAuth Token**
 ```bash
@@ -745,14 +756,23 @@ curl -X POST http://localhost:8080/mcp \
 🚀 Quick Start
 
 **Monorepo Structure:**
-This project uses npm workspaces with two main packages:
-- `server` - Backend server (Fastify + TypeScript)
-- `web` - Frontend application (React + Vite + TypeScript)
+This project uses npm workspaces with multiple packages:
+- `apps/mcp-server` - Backend MCP server (Fastify + TypeScript)
+- `apps/webapp` - Frontend web application (Next.js + React + TypeScript)
+- `apps/background-workers` - Background workers for card consolidation and embeddings
+- `apps/rest-api` - REST API server (optional)
+- `packages/db` - Shared database package
+- `packages/file-processor` - File processing utilities
+- `packages/aimodel` - AI model client abstraction
 
 **Installation:**
 ```bash
 # Bootstrap all dependencies
 npm run bootstrap
+
+# Set up environment variables
+./scripts/setup-env.sh  # Creates .env files from examples
+# Edit .env files with your actual values
 ```
 
 **Development Mode:**
@@ -761,11 +781,17 @@ npm run bootstrap
 npm run dev
 
 # This will:
-# - Start PostgreSQL with pgvector in Docker
+# - Start ArangoDB in Docker (port 8529)
 # - Wait for database to be ready
-# - Start the server in watch mode (port 8080)
-# - Start the web app in dev mode (port 5173)
+# - Start MCP server in watch mode (port 8080)
+# - Start webapp in dev mode (port 3000)
+# - Start background workers
+
+# In a separate terminal, start ngrok for OAuth callbacks:
+./scripts/start-ngrok.sh 8080
 ```
+
+**For detailed development setup including ngrok configuration and OAuth setup, see [DEVELOPMENT.md](../DEVELOPMENT.md)**
 
 **Other Commands:**
 ```bash
@@ -796,7 +822,9 @@ npm run dev:stop
 docker compose -f infra/docker-compose.yml up --build
 ```
 
-The server will start on `http://localhost:8080`
+**For cloud deployment instructions (Digital Ocean, Railway, Render, etc.), see [DEPLOYMENT.md](../DEPLOYMENT.md)**
+
+The MCP server will start on `http://localhost:8080` and webapp on `http://localhost:3000`
 
 **Test MCP Connection:**
 ```bash
