@@ -5,7 +5,7 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+COPY apps/webapp/package.json apps/webapp/package-lock.json* ./
 RUN npm ci
 
 # Rebuild the source code only when needed
@@ -13,11 +13,11 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 
-# Copy public directory explicitly (required for Next.js build)
-COPY public ./public
+# Copy all webapp source files (including public directory)
+COPY apps/webapp .
 
-# Copy remaining source files
-COPY . .
+# Ensure public directory exists (Next.js requires it)
+RUN mkdir -p ./public
 
 ENV NEXT_TELEMETRY_DISABLED 1
 
