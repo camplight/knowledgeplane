@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   description: "Shared Team Memory for AI Agents",
 };
 
+// Force all routes to be dynamic - webapp is fully dynamic
+export const dynamic = 'force-dynamic';
+
 export default function RootLayout({
   children,
 }: Readonly<{

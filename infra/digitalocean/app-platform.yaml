@@ -14,10 +14,8 @@ services:
       repo: camplight/knowledgeplane
       branch: main
       deploy_on_push: true
-    source_dir: apps/mcp-server
-    build_command: npm install && npm run build
-    run_command: npm start
-    environment_slug: node-js
+    source_dir: .
+    dockerfile_path: apps/mcp-server/Dockerfile
     instance_count: 1
     instance_size_slug: basic-xxs
     http_port: 8080
@@ -84,10 +82,8 @@ services:
       repo: camplight/knowledgeplane
       branch: main
       deploy_on_push: true
-    source_dir: apps/webapp
-    build_command: npm install && npm run build
-    run_command: npm start
-    environment_slug: node-js
+    source_dir: .
+    dockerfile_path: apps/webapp/Dockerfile
     instance_count: 1
     instance_size_slug: basic-xxs
     http_port: 3000
@@ -154,10 +150,8 @@ workers:
       repo: camplight/knowledgeplane
       branch: main
       deploy_on_push: true
-    source_dir: apps/background-workers
-    build_command: npm install && npm run build
-    run_command: npm start
-    environment_slug: node-js
+    source_dir: .
+    dockerfile_path: apps/background-workers/Dockerfile
     instance_count: 1
     instance_size_slug: basic-xxs
     envs:

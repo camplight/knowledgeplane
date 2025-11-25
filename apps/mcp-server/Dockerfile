@@ -54,5 +54,9 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/mcp-server/package.json ./pa
 
 USER nodejs
 
+EXPOSE 8080
+
+ENV PORT 8080
+
 CMD ["tsx", "dist/index.js"]
 
