@@ -1,4 +1,4 @@
-import { router, protectedProcedure } from "../router";
+import { router, protectedProcedure, publicProcedure } from "../router";
 import { Team, TeamMember, User, Invitation } from "@knowledgeplane/db/next";
 import { z } from "zod";
 
@@ -361,10 +361,19 @@ export const teamsRouter = router({
         }
       }
 
+      // Switch user's active team to the invited team
+      const cookieStore = await import("next/headers").then((m) => m.cookies());
+      cookieStore.set("teamId", invitation.team_id, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+      });
+
       return { success: true, team_id: invitation.team_id };
     }),
 
-  getInvitationByToken: protectedProcedure
+  getInvitationByToken: publicProcedure
     .input(
       z.object({
         token: z.string(),
@@ -396,6 +405,39 @@ export const teamsRouter = router({
             }
           : null,
       };
+    }),
+
+  deleteInvitation: protectedProcedure
+    .input(
+      z.object({
+        team_id: z.string(),
+        invitation_id: z.string(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Check if user is admin or owner
+      const member = await TeamMember.findByTeamAndUser(
+        input.team_id,
+        ctx.user.userId,
+      );
+      if (!member) {
+        throw new Error("You are not a member of this team");
+      }
+      if (member.role !== "owner" && member.role !== "admin") {
+        throw new Error("Only owners and admins can delete invitations");
+      }
+
+      const invitation = await Invitation.findById(input.invitation_id);
+      if (!invitation) {
+        throw new Error("Invitation not found");
+      }
+
+      if (invitation.team_id !== input.team_id) {
+        throw new Error("Invitation does not belong to this team");
+      }
+
+      await Invitation.delete(input.invitation_id);
+      return { success: true };
     }),
 
   switchTeam: protectedProcedure

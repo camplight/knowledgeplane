@@ -7,7 +7,6 @@ export const knowledgeCardsListTool: Tool = {
   inputSchema: {
     type: "object",
     properties: {
-      team_id: { type: "string", description: "Team ID (optional, inferred from session if authenticated)" },
       limit: {
         type: "number",
         description: "Maximum number of cards to return (default: 50)",

@@ -16,24 +16,12 @@ import {
   usersRegisterTool,
   handleUsersRegister,
 } from "./handlers/users.register.js";
-import {
-  filesUploadTool,
-  handleFilesUpload,
-} from "./handlers/files.upload.js";
+import { filesUploadTool, handleFilesUpload } from "./handlers/files.upload.js";
 import { filesListTool, handleFilesList } from "./handlers/files.list.js";
 import { filesGetTool, handleFilesGet } from "./handlers/files.get.js";
-import {
-  filesSearchTool,
-  handleFilesSearch,
-} from "./handlers/files.search.js";
-import {
-  filesUpdateTool,
-  handleFilesUpdate,
-} from "./handlers/files.update.js";
-import {
-  filesDeleteTool,
-  handleFilesDelete,
-} from "./handlers/files.delete.js";
+import { filesSearchTool, handleFilesSearch } from "./handlers/files.search.js";
+import { filesUpdateTool, handleFilesUpdate } from "./handlers/files.update.js";
+import { filesDeleteTool, handleFilesDelete } from "./handlers/files.delete.js";
 import {
   factRelationsCreateTool,
   handleFactRelationsCreate,
@@ -100,8 +88,108 @@ export interface McpContext {
   teamId?: string;
 }
 
+/**
+ * Options for preparing handler arguments from context
+ */
+interface PrepareArgsOptions {
+  /** Set created_by from context.userId if not provided */
+  setCreatedBy?: boolean;
+  /** Set last_updated_by from context.userId if not provided */
+  setLastUpdatedBy?: boolean;
+  /** Set user_id from context.userId if not provided */
+  setUserId?: boolean;
+}
+
+/**
+ * Prepares handler arguments by:
+ * 1. Removing team_id from args (team_id is never accepted from args)
+ * 2. Setting team_id from context if available
+ * 3. Optionally setting userId-related fields from context
+ */
+function prepareHandlerArgs(
+  args: any,
+  context: McpContext | undefined,
+  options: PrepareArgsOptions = {},
+): any {
+  const { setCreatedBy, setLastUpdatedBy, setUserId } = options;
+
+  // Remove team_id from args - it should never come from args, only from context
+  const { team_id, ...cleanedArgs } = args;
+
+  const preparedArgs = { ...cleanedArgs };
+
+  // Always set team_id from context if available (never from args)
+  if (context?.teamId) {
+    preparedArgs.team_id = context.teamId;
+  }
+
+  // Optionally set userId-related fields from context
+  if (context?.userId) {
+    if (setCreatedBy && !preparedArgs.created_by) {
+      preparedArgs.created_by = context.userId;
+    }
+    if (setLastUpdatedBy && !preparedArgs.last_updated_by) {
+      preparedArgs.last_updated_by = context.userId;
+    }
+    if (setUserId && !preparedArgs.user_id) {
+      preparedArgs.user_id = context.userId;
+    }
+  }
+
+  return preparedArgs;
+}
+
+/**
+ * Prepares handler arguments for bulk operations (e.g., facts.bulkwrite)
+ * where team_id needs to be removed from nested fact objects
+ */
+function prepareBulkHandlerArgs(
+  args: any,
+  context: McpContext | undefined,
+  options: PrepareArgsOptions = {},
+): any {
+  const { setCreatedBy, setLastUpdatedBy } = options;
+
+  // Remove team_id from top-level args
+  const { team_id, ...cleanedArgs } = args;
+
+  const preparedArgs = { ...cleanedArgs };
+
+  // Handle nested facts array if present
+  if (preparedArgs.facts && Array.isArray(preparedArgs.facts)) {
+    preparedArgs.facts = preparedArgs.facts.map((fact: any) => {
+      // Remove team_id from each fact
+      const { team_id: factTeamId, ...factWithoutTeamId } = fact;
+
+      const preparedFact: any = { ...factWithoutTeamId };
+
+      // Always set team_id from context if available
+      if (context?.teamId) {
+        preparedFact.team_id = context.teamId;
+      }
+
+      // Optionally set userId-related fields from context
+      if (context?.userId) {
+        if (setCreatedBy && !preparedFact.created_by) {
+          preparedFact.created_by = context.userId;
+        }
+        if (setLastUpdatedBy && !preparedFact.last_updated_by) {
+          preparedFact.last_updated_by = context.userId;
+        }
+      }
+
+      return preparedFact;
+    });
+  }
+
+  return preparedArgs;
+}
+
 // Tool definitions from handlers
-import { workersTriggerTool, handleWorkersTrigger } from "./handlers/workers.trigger.js";
+import {
+  workersTriggerTool,
+  handleWorkersTrigger,
+} from "./handlers/workers.trigger.js";
 
 const tools = [
   factsWriteTool,
@@ -190,266 +278,130 @@ export function createMcpServer(
     let handlerArgs: any;
 
     if (name === "facts.write") {
-      // Merge context into args for facts.write
-      handlerArgs = { ...args } as any;
-
-      // Infer userId and teamId from context if available
-      if (context?.userId) {
-        // Use context userId as default for created_by and last_updated_by if not provided
-        handlerArgs.created_by = handlerArgs.created_by || context.userId;
-        handlerArgs.last_updated_by =
-          handlerArgs.last_updated_by || context.userId;
-      }
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
-
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setCreatedBy: true,
+        setLastUpdatedBy: true,
+      });
       handler = handleFactsWrite;
     } else if (name === "facts.bulkwrite") {
-      // Merge context into args for facts.bulkwrite
-      handlerArgs = { ...args } as any;
-
-      // Infer userId and teamId from context and apply to all facts if available
-      if (context?.userId && handlerArgs.facts) {
-        handlerArgs.facts = handlerArgs.facts.map((fact: any) => ({
-          ...fact,
-          created_by: fact.created_by || context.userId,
-          last_updated_by: fact.last_updated_by || context.userId,
-          team_id: fact.team_id || context.teamId,
-        }));
-      }
-
+      handlerArgs = prepareBulkHandlerArgs(args, context, {
+        setCreatedBy: true,
+        setLastUpdatedBy: true,
+      });
       handler = handleFactsBulkWrite;
     } else if (name === "facts.search") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFactsSearch;
     } else if (name === "facts.update") {
-      // Merge context into args for facts.update
-      handlerArgs = { ...args } as any;
-      if (context) {
-        if (context.userId) {
-          // Use context userId as default for last_updated_by if not provided
-          handlerArgs.last_updated_by =
-            handlerArgs.last_updated_by || context.userId;
-        }
-        if (context.teamId) {
-          handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-        }
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setLastUpdatedBy: true,
+      });
       handler = handleFactsUpdate;
     } else if (name === "facts.trash") {
-      // Merge context into args for facts.trash
-      handlerArgs = { ...args } as any;
-      if (context?.userId) {
-        handlerArgs.last_updated_by =
-          handlerArgs.last_updated_by || context.userId;
-      }
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setLastUpdatedBy: true,
+      });
       handler = handleFactsTrash;
     } else if (name === "users.register") {
       handlerArgs = { ...args } as any;
       handler = handleUsersRegister;
     } else if (name === "files.upload") {
-      // Merge context into args for files.upload
-      handlerArgs = { ...args } as any;
-      if (context) {
-        if (context.userId) {
-          // Use context userId as default for created_by if not provided
-          handlerArgs.created_by =
-            handlerArgs.created_by || context.userId;
-        }
-        if (context.teamId) {
-          handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-        }
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setCreatedBy: true,
+      });
       handler = handleFilesUpload;
     } else if (name === "files.list") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFilesList;
     } else if (name === "files.get") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
-      if (context?.userId) {
-        handlerArgs.user_id = handlerArgs.user_id || context.userId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setUserId: true,
+      });
       handler = handleFilesGet;
     } else if (name === "files.search") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFilesSearch;
     } else if (name === "files.update") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
-      if (context?.userId) {
-        handlerArgs.user_id = handlerArgs.user_id || context.userId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setUserId: true,
+      });
       handler = handleFilesUpdate;
     } else if (name === "files.delete") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
-      if (context?.userId) {
-        handlerArgs.user_id = handlerArgs.user_id || context.userId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setUserId: true,
+      });
       handler = handleFilesDelete;
     } else if (name === "fact_relations.create") {
-      // Merge context into args for fact_relations.create
-      handlerArgs = { ...args } as any;
-      if (context?.userId) {
-        handlerArgs.created_by = handlerArgs.created_by || context.userId;
-      }
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setCreatedBy: true,
+      });
       handler = handleFactRelationsCreate;
     } else if (name === "fact_relations.update") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
-      if (context?.userId) {
-        handlerArgs.user_id = handlerArgs.user_id || context.userId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setUserId: true,
+      });
       handler = handleFactRelationsUpdate;
     } else if (name === "fact_relations.delete") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
-      if (context?.userId) {
-        handlerArgs.user_id = handlerArgs.user_id || context.userId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setUserId: true,
+      });
       handler = handleFactRelationsDelete;
     } else if (name === "fact_relations.search") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFactRelationsSearch;
     } else if (name === "fact_relations.get") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
-      if (context?.userId) {
-        handlerArgs.user_id = handlerArgs.user_id || context.userId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setUserId: true,
+      });
       handler = handleFactRelationsGet;
     } else if (name === "fact_relations.get_related") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFactRelationsGetRelated;
     } else if (name === "fact_relations.get_incoming") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFactRelationsGetIncoming;
     } else if (name === "workers.trigger") {
       handlerArgs = { ...args } as any;
       handler = handleWorkersTrigger;
     } else if (name === "facts.consolidate") {
-      // Merge context into args for facts.consolidate
-      handlerArgs = { ...args } as any;
-      if (context?.userId) {
-        handlerArgs.created_by = handlerArgs.created_by || context.userId;
-        handlerArgs.last_updated_by =
-          handlerArgs.last_updated_by || context.userId;
-      }
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setCreatedBy: true,
+        setLastUpdatedBy: true,
+      });
       handler = handleFactsConsolidate;
     } else if (name === "knowledge_cards.create") {
-      // Merge context into args for knowledge_cards.create
-      handlerArgs = { ...args } as any;
-      if (context?.userId) {
-        handlerArgs.created_by = handlerArgs.created_by || context.userId;
-        handlerArgs.last_updated_by =
-          handlerArgs.last_updated_by || context.userId;
-      }
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setCreatedBy: true,
+        setLastUpdatedBy: true,
+      });
       handler = handleKnowledgeCardsCreate;
     } else if (name === "knowledge_cards.update") {
-      // Merge context into args for knowledge_cards.update
-      handlerArgs = { ...args } as any;
-      if (context?.userId) {
-        handlerArgs.last_updated_by =
-          handlerArgs.last_updated_by || context.userId;
-      }
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setLastUpdatedBy: true,
+      });
       handler = handleKnowledgeCardsUpdate;
     } else if (name === "knowledge_cards.list") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context);
       handler = handleKnowledgeCardsList;
     } else if (name === "knowledge_cards.search") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context);
       handler = handleKnowledgeCardsSearch;
     } else if (name === "knowledge_cards.delete") {
-      handlerArgs = { ...args } as any;
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
-      if (context?.userId) {
-        handlerArgs.user_id = handlerArgs.user_id || context.userId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setUserId: true,
+      });
       handler = handleKnowledgeCardsDelete;
-    } else if (name === "knowledge_cards.search") {
-      handlerArgs = { ...args } as any;
-      handler = handleKnowledgeCardsSearch;
-    } else if (name === "knowledge_cards.list") {
-      handlerArgs = { ...args } as any;
-      handler = handleKnowledgeCardsList;
     } else if (name === "knowledge_cards.split") {
-      // Merge context into args for knowledge_cards.split
-      handlerArgs = { ...args } as any;
-      if (context?.userId) {
-        handlerArgs.created_by = handlerArgs.created_by || context.userId;
-        handlerArgs.last_updated_by =
-          handlerArgs.last_updated_by || context.userId;
-      }
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setCreatedBy: true,
+        setLastUpdatedBy: true,
+      });
       handler = handleKnowledgeCardsSplit;
     } else if (name === "knowledge_cards.combine") {
-      // Merge context into args for knowledge_cards.combine
-      handlerArgs = { ...args } as any;
-      if (context?.userId) {
-        handlerArgs.created_by = handlerArgs.created_by || context.userId;
-        handlerArgs.last_updated_by =
-          handlerArgs.last_updated_by || context.userId;
-      }
-      if (context?.teamId) {
-        handlerArgs.team_id = handlerArgs.team_id || context.teamId;
-      }
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setCreatedBy: true,
+        setLastUpdatedBy: true,
+      });
       handler = handleKnowledgeCardsCombine;
     } else {
       const error = `Unknown tool: ${name}`;

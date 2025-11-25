@@ -13,6 +13,7 @@ export default function TeamsPage() {
   const [teamDescription, setTeamDescription] = useState("");
   const [isCreatingTeam, setIsCreatingTeam] = useState(false);
   const [expiresInDays, setExpiresInDays] = useState(7);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const { data: userData, isLoading: userLoading } = trpc.auth.me.useQuery();
   const { data: teamsData, refetch: refetchTeams } = trpc.teams.list.useQuery();
@@ -77,6 +78,18 @@ export default function TeamsPage() {
     },
   });
 
+  const deleteInvitationMutation = trpc.teams.deleteInvitation.useMutation({
+    onSuccess: () => {
+      refetchInvitations();
+      setToastMessage("Invitation deleted successfully");
+      setTimeout(() => setToastMessage(null), 3000);
+    },
+    onError: (error) => {
+      setToastMessage(`Failed to delete invitation: ${error.message}`);
+      setTimeout(() => setToastMessage(null), 3000);
+    },
+  });
+
   useEffect(() => {
     if (!userLoading && !userData?.user) {
       router.push("/");
@@ -129,7 +142,8 @@ export default function TeamsPage() {
   const copyInvitationLink = (token: string) => {
     const link = `${window.location.origin}/invite/${token}`;
     navigator.clipboard.writeText(link);
-    alert("Invitation link copied to clipboard!");
+    setToastMessage("Invitation link copied to clipboard!");
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
   if (userLoading) {
@@ -153,6 +167,35 @@ export default function TeamsPage() {
   return (
     <div className="min-h-screen bg-white">
       <Navigation />
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-5">
+          <div className="bg-slate-900 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[300px]">
+            <svg
+              className="w-5 h-5 flex-shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <span className="flex-1">{toastMessage}</span>
+            <button
+              onClick={() => setToastMessage(null)}
+              className="text-slate-400 hover:text-white"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-slate-900">Team Management</h1>
@@ -400,24 +443,33 @@ export default function TeamsPage() {
                   <div className="space-y-4">
                     {canManage && (
                       <form onSubmit={handleCreateInvitation} className="p-4 bg-slate-50 rounded-lg">
-                        <div className="flex gap-2">
+                        <div className="mb-3">
+                          <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Expiration Days
+                          </label>
                           <input
                             type="number"
                             min="1"
                             max="365"
-                            value={expiresInDays}
-                            onChange={(e) => setExpiresInDays(parseInt(e.target.value))}
-                            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg"
-                            placeholder="Expires in days"
+                            value={isNaN(expiresInDays) ? "" : expiresInDays}
+                            onChange={(e) => {
+                              const value = parseInt(e.target.value, 10);
+                              setExpiresInDays(isNaN(value) ? 7 : value);
+                            }}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                            placeholder="7"
                           />
-                          <button
-                            type="submit"
-                            disabled={createInvitationMutation.isPending}
-                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                          >
-                            Create Invitation
-                          </button>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Number of days until the invitation expires (default: 7 days)
+                          </p>
                         </div>
+                        <button
+                          type="submit"
+                          disabled={createInvitationMutation.isPending}
+                          className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                        >
+                          Create Invitation
+                        </button>
                       </form>
                     )}
 
@@ -427,7 +479,7 @@ export default function TeamsPage() {
                           key={inv.id}
                           className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
                         >
-                          <div>
+                          <div className="flex-1">
                             <div className="font-medium">
                               Invitation Link
                             </div>
@@ -438,12 +490,43 @@ export default function TeamsPage() {
                               Status: {inv.status} • Expires: {new Date(inv.expires_at).toLocaleDateString()}
                             </div>
                           </div>
-                          <button
-                            onClick={() => copyInvitationLink(inv.token)}
-                            className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                          >
-                            Copy Link
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => copyInvitationLink(inv.token)}
+                              className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                            >
+                              Copy Link
+                            </button>
+                            {canManage && (
+                              <button
+                                onClick={() => {
+                                  if (confirm("Are you sure you want to delete this invitation?")) {
+                                    deleteInvitationMutation.mutate({
+                                      team_id: selectedTeamId!,
+                                      invitation_id: inv.id,
+                                    });
+                                  }
+                                }}
+                                disabled={deleteInvitationMutation.isPending}
+                                className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                                title="Delete invitation"
+                              >
+                                <svg
+                                  className="w-5 h-5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>

@@ -13,7 +13,6 @@ export const factsWriteTool: Tool = {
         description: "Key-value pairs of metadata",
         additionalProperties: { type: "string" },
       },
-      team_id: { type: "string", description: "Team ID (optional, inferred from session if authenticated)" },
       created_by: { type: "string", description: "User ID of the creator (optional, inferred from session if authenticated)" },
       last_updated_by: { type: "string", description: "User ID of the last updater (optional, inferred from session if authenticated)" },
     },

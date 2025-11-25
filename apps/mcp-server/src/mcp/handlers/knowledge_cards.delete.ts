@@ -8,7 +8,6 @@ export const knowledgeCardsDeleteTool: Tool = {
     type: "object",
     properties: {
       id: { type: "string", description: "The ID of the knowledge card to delete" },
-      team_id: { type: "string", description: "Team ID for validation (optional, inferred from session if authenticated)" },
       user_id: { type: "string", description: "User ID for team membership validation (optional, inferred from session if authenticated)" },
     },
     required: ["id"],
@@ -26,11 +25,13 @@ export async function handleKnowledgeCardsDelete(args: {
     throw new Error(`Knowledge card with id ${args.id} not found`);
   }
 
-  // Validate team_id if provided
-  if (args.team_id) {
-    if (card.team_id !== args.team_id) {
-      throw new Error("Knowledge card does not belong to the specified team");
-    }
+  // Validate team_id (should be set from context)
+  if (!args.team_id) {
+    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  }
+  
+  if (card.team_id !== args.team_id) {
+    throw new Error("Knowledge card does not belong to the specified team");
   }
 
   // Validate team membership if user_id is provided

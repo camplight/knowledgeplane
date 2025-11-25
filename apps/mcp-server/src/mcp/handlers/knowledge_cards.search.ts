@@ -38,7 +38,6 @@ export const knowledgeCardsSearchTool: Tool = {
         type: "string",
         description: "Search query for hybrid search. Use '*' to search all cards.",
       },
-      team_id: { type: "string", description: "Team ID (optional, inferred from session if authenticated)" },
       k: {
         type: "number",
         description: "Optional limit for number of results (default: 5)",

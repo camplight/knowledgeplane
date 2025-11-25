@@ -101,9 +101,10 @@ ArangoDB (graph database with full-text search)
 **facts.write Parameters:**
 - `content` (required): The content of the fact
 - `metadata` (optional): Key-value pairs of metadata
-- `team_id` (optional): Team ID. If not provided, inferred from authenticated session (uses user's first team)
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
+
+**Note:** `team_id` is NOT accepted as a parameter. It is automatically set from the authenticated session context. Any `team_id` provided in tool arguments will be ignored and replaced with the team ID from the session context.
 
 **facts.bulkwrite Parameters:**
 - `facts` (required): Array of fact objects to write. Each fact object has the same parameters as `facts.write`:
@@ -112,12 +113,15 @@ ArangoDB (graph database with full-text search)
   - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
   - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 
+**Note:** `team_id` is NOT accepted as a parameter in any fact object. It is automatically set from the authenticated session context for all facts. Any `team_id` provided in tool arguments will be ignored and replaced with the team ID from the session context.
+
 **facts.search Parameters:**
 - `query` (required): Search query for hybrid search (combines full-text and vector search). Use '*' to search all facts
-- `team_id` (optional): Team ID for filtering. If not provided, inferred from authenticated session (uses user's first team)
 - `k` (optional): Limit for number of results (default: 5, max: 20). Results are optimized to prevent context window issues
 - `offset` (optional): Offset for pagination (default: 0)
 - `include_trashed` (optional): If true, includes trashed facts in search results (default: false)
+
+**Note:** `team_id` is NOT accepted as a parameter. It is automatically set from the authenticated session context. Any `team_id` provided in tool arguments will be ignored and replaced with the team ID from the session context.
 
 **facts.search Response Optimization:**
 - Content is automatically truncated to 500 characters to prevent context window issues
@@ -290,7 +294,7 @@ ArangoDB (graph database with full-text search)
 | `GET /profile` | User profile and management page (protected, requires session) |
 | `GET /onboarding` | Onboarding page for new users (protected, requires session) - create first team and complete onboarding |
 | `GET /teams` | Team management page (protected, requires session) - create teams, manage members, and invitations |
-| `GET /invite/:token` | Public invitation acceptance page - accept team invitations via personal links |
+| `GET /invite/:token` | Public invitation acceptance page - view invitation details (public), accept team invitations via personal links (requires authentication) |
 
 **REST API Endpoints (Port 8081):**
 | Endpoint | Description |
@@ -325,7 +329,7 @@ KnowledgePlane supports team-based collaboration:
   - **Member**: Can create and manage content within the team
 - **Default Team**: New users automatically get a default team created on first login
 - **Team Scoping**: All domain data (facts, knowledge cards, files, relations, etc.) is scoped to teams
-- **Personal Invitation Links**: Team owners/admins can generate shareable invitation links (tokens) that can be copied and sent to friends
+- **Personal Invitation Links**: Team owners/admins can generate shareable invitation links (tokens) that can be copied and sent to friends. Invitations can be deleted by owners/admins. Invitation links are publicly accessible (no authentication required to view invitation details), but require authentication to accept.
 - **Onboarding**: New users are redirected to onboarding flow on first login
 
 **Session Management:**
@@ -360,7 +364,8 @@ KnowledgePlane supports three types of authentication:
 - Team context is automatically inferred from authenticated user's first team, or can be provided via query params: `?team_id=teams/123`
 - User context can also be provided via query params: `?username=user&email=user@example.com` (fallback if not authenticated)
 - Authentication via `Authorization: Bearer <token>` header (OAuth), `knowledgeplane-key` header (API key), or `api_key` query parameter (for internal use)
-- **Team ID Auto-Inference**: All MCP tool handlers automatically infer `team_id` from the authenticated user's session context. Tools no longer require `team_id` as a parameter - it is automatically set from the user's team context. If a user is authenticated, their `team_id` is automatically inferred from their first team or from the `team_id` query parameter.
+- **Team ID Auto-Inference**: All MCP tool handlers automatically infer `team_id` from the authenticated user's session context. Tools do NOT accept `team_id` as a parameter - it is automatically set from the user's team context. If a user is authenticated, their `team_id` is automatically inferred from their first team or from the `team_id` query parameter.
+- **Team ID Not Accepted in Args**: `team_id` is NOT accepted in tool handler arguments. Any `team_id` provided in tool arguments will be automatically removed and replaced with the team ID from the authenticated session context. This ensures that authenticated users always operate within their authorized team context, preventing incorrect team_id values (e.g., team names instead of IDs) from being used.
 - For `facts.write` and other creation operations, `created_by`, `last_updated_by`, and `team_id` are automatically set from the authenticated session if not explicitly provided
 - All MCP operations are scoped to the team context (either from query param or user's first team)
 - **Personal MCP URL**: Users can generate and copy their personal MCP server URL with their API key included via the profile page. This URL includes the API key as a query parameter and can be used to connect AI agents and tools.
@@ -588,16 +593,21 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Team listing and creation
   - Team settings (name, description)
   - Team member management (add, update roles, remove members)
-  - Invitation management (create invitation links, view, copy links, track status)
+  - Invitation management (create invitation links, view, copy links, track status, delete invitations)
   - Role-based access control (owner/admin/member permissions)
   - Tabbed interface for team settings, members, and invitations
+  - Toast notifications for user feedback (copy link, delete invitation)
+  - Expiration days input with label and help text showing default value (7 days)
 - Onboarding page (`/onboarding`) for new users:
   - First-time user flow to create initial team
   - Onboarding completion tracking
 - Invitation acceptance page (`/invite/:token`) for public invitation links:
-  - Accept team invitations via personal links
+  - Public access - unauthenticated users can view invitation details
+  - Welcome page for unauthenticated users with team information and sign-in prompt
+  - Accept team invitations via personal links (requires authentication)
   - Shows team and inviter information
   - Handles expired and invalid invitations
+  - Clear call-to-action directing users to sign in to continue
 
 **Token-Based Authentication:**
 All endpoints support Bearer token authentication via the `Authorization` header:

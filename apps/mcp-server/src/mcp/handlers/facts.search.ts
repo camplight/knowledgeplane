@@ -14,7 +14,6 @@ export const factsSearchTool: Tool = {
         description:
           "Search query for hybrid search. Use '*' to search all facts.",
       },
-      team_id: { type: "string", description: "Team ID (optional, inferred from session if authenticated)" },
       k: {
         type: "number",
         description:

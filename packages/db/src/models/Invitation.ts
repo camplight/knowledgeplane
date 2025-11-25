@@ -250,6 +250,18 @@ export class Invitation {
     return results.length;
   }
 
+  static async delete(id: string): Promise<void> {
+    const key = this._extractKey(id);
+    try {
+      await collections.invitations.remove(key);
+    } catch (error: any) {
+      if (error.errorNum !== 1202) {
+        // 1202 is document not found, which is fine for delete
+        throw error;
+      }
+    }
+  }
+
   // Helper methods
   static _extractKey(id: string): string {
     // Handle both _key format and _id format
