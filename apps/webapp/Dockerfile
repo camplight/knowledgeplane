@@ -5,6 +5,9 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
+# Ensure devDependencies are installed (needed for build)
+ENV NODE_ENV=development
+
 # Copy root package files (defines workspaces)
 COPY package.json package-lock.json* ./
 
@@ -14,12 +17,15 @@ COPY packages ./packages
 # Copy webapp package.json (needed for workspace resolution)
 COPY apps/webapp/package.json ./apps/webapp/
 
-# Install all dependencies (including workspace linking)
+# Install all dependencies (including devDependencies for build)
 RUN npm ci
 
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
+
+# Ensure devDependencies are available during build
+ENV NODE_ENV=development
 
 # Copy node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
