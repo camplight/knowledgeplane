@@ -2,6 +2,64 @@
 
 Quick deployment guide for KnowledgePlane. Choose the easiest option for your needs.
 
+## 🐳 Docker Image Distribution (For Clients)
+
+KnowledgePlane is distributed as Docker images that clients can deploy with their own configuration.
+
+### For Clients: Quick Start
+
+1. **Get the distribution package** (provided by KnowledgePlane team)
+
+2. **Extract and configure**:
+   ```bash
+   tar -xzf knowledgeplane-distribution-latest.tar.gz
+   cd knowledgeplane-distribution-latest
+   cp env.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Deploy**:
+   ```bash
+   ./quick-start.sh
+   # Or manually:
+   docker compose up -d
+   ```
+
+### Client Configuration
+
+All configuration is done via the `.env` file. Required settings:
+- Database password (`ARANGO_PASSWORD`)
+- Session secret (`SESSION_SECRET`)
+- API keys (`API_KEYS`)
+- OAuth credentials (Google/GitHub)
+- AI provider API keys (OpenAI/Anthropic)
+- Your domain URLs (`OAUTH_REDIRECT_BASE_URL`, `NEXTAUTH_URL`, `MCP_SERVER_URL`)
+
+See `distribution/README.md` for complete configuration guide.
+
+### For Distributors: Building and Publishing Images
+
+1. **Build Docker images**:
+   ```bash
+   ./scripts/build-images.sh [version]
+   ```
+
+2. **Create distribution package**:
+   ```bash
+   ./scripts/create-distribution-package.sh [version]
+   ```
+
+3. **Publish images** (optional):
+   ```bash
+   docker push knowledgeplane/mcp-server:latest
+   docker push knowledgeplane/webapp:latest
+   docker push knowledgeplane/background-workers:latest
+   ```
+
+For detailed distribution instructions, see [distribution/README.md](./distribution/README.md).
+
+---
+
 ## Quick Deploy Options
 
 ### 🚀 Railway (Recommended - Easiest)

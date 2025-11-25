@@ -1,0 +1,130 @@
+version: '3.9'
+
+services:
+  db:
+    image: arangodb/arangodb:latest
+    command: --experimental-vector-index
+    environment:
+      ARANGO_ROOT_PASSWORD: ${ARANGO_PASSWORD:-root}
+    volumes:
+      - dbdata:/var/lib/arangodb3
+    restart: unless-stopped
+    networks:
+      - knowledgeplane
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8529/_api/version || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mcp-server:
+    # Published Docker Hub image (recommended)
+    image: ${DOCKER_REGISTRY:-knowledgeplane}/mcp-server:${IMAGE_VERSION:-latest}
+    
+    # Alternative: Build from source (uncomment below and comment image line above)
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile.mcp-server
+    
+    environment:
+      - NODE_ENV=production
+      - ARANGO_URL=http://db:8529
+      - ARANGO_DB_NAME=${ARANGO_DB_NAME:-knowledgeplane}
+      - ARANGO_USER=${ARANGO_USER:-root}
+      - ARANGO_PASSWORD=${ARANGO_PASSWORD:-root}
+      - PORT=${MCP_SERVER_PORT:-8080}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - API_KEYS=${API_KEYS}
+      - OAUTH_REDIRECT_BASE_URL=${OAUTH_REDIRECT_BASE_URL}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-3-5-sonnet-20241022}
+      - UPLOADS_DIR=${UPLOADS_DIR:-./uploads}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - knowledgeplane
+    ports:
+      - "${MCP_SERVER_PORT:-8080}:${MCP_SERVER_PORT:-8080}"
+
+  webapp:
+    # Published Docker Hub image (recommended)
+    image: ${DOCKER_REGISTRY:-knowledgeplane}/webapp:${IMAGE_VERSION:-latest}
+    
+    # Alternative: Build from source (uncomment below and comment image line above)
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile.webapp
+    
+    environment:
+      - NODE_ENV=production
+      - ARANGO_URL=http://db:8529
+      - ARANGO_DB_NAME=${ARANGO_DB_NAME:-knowledgeplane}
+      - ARANGO_USER=${ARANGO_USER:-root}
+      - ARANGO_PASSWORD=${ARANGO_PASSWORD:-root}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - MCP_SERVER_URL=${MCP_SERVER_URL}
+      - MCP_SERVER_API_KEY=${MCP_SERVER_API_KEY}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-3-5-sonnet-20241022}
+    depends_on:
+      db:
+        condition: service_healthy
+      mcp-server:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - knowledgeplane
+    ports:
+      - "${WEBAPP_PORT:-3000}:3000"
+
+  background-workers:
+    # Published Docker Hub image (recommended)
+    image: ${DOCKER_REGISTRY:-knowledgeplane}/background-workers:${IMAGE_VERSION:-latest}
+    
+    # Alternative: Build from source (uncomment below and comment image line above)
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile.background-workers
+    
+    environment:
+      - NODE_ENV=production
+      - ARANGO_URL=http://db:8529
+      - ARANGO_DB_NAME=${ARANGO_DB_NAME:-knowledgeplane}
+      - ARANGO_USER=${ARANGO_USER:-root}
+      - ARANGO_PASSWORD=${ARANGO_PASSWORD:-root}
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-3-5-sonnet-20241022}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - knowledgeplane
+
+volumes:
+  dbdata:
+
+networks:
+  knowledgeplane:
+    driver: bridge

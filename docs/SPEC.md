@@ -48,6 +48,8 @@ Session-based context – MCP sessions maintain user and knowledge context acros
 
 Docker-first deployment – one-command local or hosted setup.
 
+Docker image distribution – distribute KnowledgePlane as Docker images that clients can deploy with their own configuration via environment variables. Clients receive a docker-compose.yml and configure via .env file.
+
 🧩 Architecture Overview
 ```
 Web Dashboard (React + Next.js + tRPC)
@@ -1804,6 +1806,9 @@ Navigate to `/upload` in the web application (requires authentication).
 - ✅ Card viewing and details in editor
 - ✅ Worker logs page with manual worker triggering functionality
 - ✅ tRPC route for triggering workers (`workerLogs.trigger`)
+- ✅ Docker image distribution system for client deployments
+- ✅ Distribution package with docker-compose.yml and environment-based configuration
+- ✅ Scripts for building and packaging Docker images for distribution
 
 **Planned Features:**
 - 🔲 Advanced graph visualization in editor
@@ -1822,3 +1827,5 @@ Each application in the KnowledgePlane monorepo has its own README with detailed
 - `apps/mcp-server/README.md` - MCP server documentation
 - `apps/rest-api/README.md` - REST API documentation
 - `apps/webapp/README.md` - Web application documentation
+- `distribution/README.md` - Docker image distribution guide for clients
+- `DEPLOYMENT.md` - General deployment guide for Railway, Render, Docker Compose, and Docker image distribution
