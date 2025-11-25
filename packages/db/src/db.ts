@@ -1,13 +1,5 @@
 import { Database } from "arangojs";
-// Load dotenv/config if available (for local development)
-// In production, environment variables are set by the platform
-// Using dynamic import to avoid build errors if dotenv is not installed
-try {
-  await import("dotenv/config");
-} catch {
-  // dotenv not available - environment variables should be set externally
-  // This is expected in production builds where env vars come from the platform
-}
+import "dotenv/config";
 import { fetch as undiciFetch } from "undici";
 import type { BodyInit, RequestInfo, RequestInit, Response } from "undici";
 
@@ -26,24 +18,26 @@ const isServer = typeof window === "undefined";
 
 // Helper function to convert a body to a buffer/string for Content-Length calculation
 // This ensures undici.fetch can set Content-Length header instead of using chunked encoding
-async function normalizeBody(body: BodyInit | null): Promise<Buffer | string | null> {
+async function normalizeBody(
+  body: BodyInit | null,
+): Promise<Buffer | string | null> {
   if (body === null || body === undefined) {
     return null;
   }
-  
+
   // If it's already a string or Buffer, return as-is
-  if (typeof body === 'string') {
+  if (typeof body === "string") {
     return body;
   }
   if (body instanceof Buffer) {
     return body;
   }
-  
+
   // If it's a ReadableStream, read it fully and convert to Buffer
   if (body instanceof ReadableStream) {
     const reader = body.getReader();
     const chunks: Uint8Array[] = [];
-    
+
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -55,7 +49,7 @@ async function normalizeBody(body: BodyInit | null): Promise<Buffer | string | n
     } finally {
       reader.releaseLock();
     }
-    
+
     // Concatenate all chunks into a single buffer
     const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
     const result = new Uint8Array(totalLength);
@@ -64,10 +58,10 @@ async function normalizeBody(body: BodyInit | null): Promise<Buffer | string | n
       result.set(chunk, offset);
       offset += chunk.length;
     }
-    
+
     return Buffer.from(result);
   }
-  
+
   // If it's an ArrayBuffer or ArrayBufferView, convert to Buffer
   if (body instanceof ArrayBuffer) {
     return Buffer.from(body);
@@ -75,7 +69,7 @@ async function normalizeBody(body: BodyInit | null): Promise<Buffer | string | n
   if (ArrayBuffer.isView(body)) {
     return Buffer.from(body.buffer, body.byteOffset, body.byteLength);
   }
-  
+
   // For other types (FormData, Blob, etc.), pass through and let undici handle it
   // These should be rare for arangojs use cases
   return body as any;
@@ -86,11 +80,14 @@ async function normalizeBody(body: BodyInit | null): Promise<Buffer | string | n
 // so we extract the URL and options from Request objects before passing them to undici.fetch
 // We also normalize the body to ensure Content-Length headers are sent instead of chunked encoding
 const createUndiciFetchWrapper = () => {
-  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  return async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
     // If input is a Request object, extract URL and options
     if (input instanceof Request) {
       const url = input.url;
-      
+
       // Build options from Request object
       const options: RequestInit = {
         method: input.method,
@@ -98,7 +95,7 @@ const createUndiciFetchWrapper = () => {
         redirect: input.redirect,
         signal: input.signal,
       };
-      
+
       // Handle body - normalize to ensure Content-Length header is sent
       if (input.body !== null) {
         const normalizedBody = await normalizeBody(input.body);
@@ -106,7 +103,7 @@ const createUndiciFetchWrapper = () => {
           options.body = normalizedBody;
         }
       }
-      
+
       // Merge with init to allow overrides
       if (init) {
         // Normalize init body if present
@@ -119,10 +116,10 @@ const createUndiciFetchWrapper = () => {
         // Merge other init properties
         Object.assign(options, { ...init, body: options.body });
       }
-      
+
       return undiciFetch(url, options);
     }
-    
+
     // Otherwise, pass through to undici.fetch
     // Normalize body if present to ensure Content-Length header
     if (init && init.body !== null && init.body !== undefined) {
@@ -200,12 +197,12 @@ export async function init() {
     url: dbUrl,
     auth: { username: dbUser, password: dbPassword },
   };
-  
+
   // Use same configuration as main db to ensure undici.fetch is used
   if (isServer) {
     sysDbConfig.agentOptions = {};
   }
-  
+
   const sysDb = new Database(sysDbConfig);
 
   try {
@@ -304,12 +301,16 @@ export async function init() {
     try {
       // Try to get existing index
       const indexes = await collections.facts.indexes();
-      const existingIndex = indexes.find((idx: any) => idx.name === "idx_fact_content_fulltext");
-      
+      const existingIndex = indexes.find(
+        (idx: any) => idx.name === "idx_fact_content_fulltext",
+      );
+
       if (existingIndex) {
         // If index exists but is wrong type, drop it
         if (existingIndex.type !== "fulltext") {
-          console.log("Dropping old index idx_fact_content_fulltext (wrong type)");
+          console.log(
+            "Dropping old index idx_fact_content_fulltext (wrong type)",
+          );
           await collections.facts.dropIndex("idx_fact_content_fulltext");
         }
       }
@@ -317,7 +318,7 @@ export async function init() {
       // Index doesn't exist or error checking, continue to create
       console.log("Checking existing index:", error.message);
     }
-    
+
     // Create fulltext index
     try {
       await collections.facts.ensureIndex({
@@ -330,7 +331,10 @@ export async function init() {
     } catch (error: any) {
       if (error.errorNum !== 1710) {
         // 1710 = index already exists
-        console.warn("Fulltext index creation warning for facts:", error.message);
+        console.warn(
+          "Fulltext index creation warning for facts:",
+          error.message,
+        );
       }
     }
     // Vector index for facts embeddings (dimension 1536 for text-embedding-3-small)
@@ -441,7 +445,10 @@ export async function init() {
       console.log("Vector index for relations created");
     } catch (error: any) {
       if (error.errorNum !== 1710) {
-        console.warn("Vector index creation warning for relations:", error.message);
+        console.warn(
+          "Vector index creation warning for relations:",
+          error.message,
+        );
       }
     }
     await collections.worker_logs.ensureIndex({
@@ -524,7 +531,10 @@ export async function init() {
       console.log("Vector index for knowledge_cards created");
     } catch (error: any) {
       if (error.errorNum !== 1710) {
-        console.warn("Vector index creation warning for knowledge_cards:", error.message);
+        console.warn(
+          "Vector index creation warning for knowledge_cards:",
+          error.message,
+        );
       }
     }
   } catch (error: any) {
@@ -547,7 +557,7 @@ export async function init() {
       throw error;
     }
   }
-  
+
   initialized = true;
 }
 
@@ -556,11 +566,11 @@ export async function ensureInitialized() {
   if (initialized) {
     return;
   }
-  
+
   if (initPromise) {
     return initPromise;
   }
-  
+
   initPromise = init();
   await initPromise;
   initPromise = null;

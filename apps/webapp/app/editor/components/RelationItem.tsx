@@ -6,12 +6,12 @@ interface RelationItemProps {
   relation: {
     relation: {
       id: string;
-      _id?: string;
       _key?: string;
       type: string;
     };
     fact: {
       id: string;
+      _key?: string;
       content?: string;
     };
   };
@@ -44,16 +44,15 @@ export function RelationItem({
   onSelectFact,
   availableFacts = [],
 }: RelationItemProps) {
-  // Get fact ID - check multiple possible locations
-  let factId = relation.fact?.id || relation.fact?._id || "";
+  // Get fact ID - normalized facts always have 'id' field
+  const fact = relation.fact;
+  let factId = fact?.id || "";
   
   // Validate fact ID - ensure it's a fact ID, not a relation ID
   if (factId && (factId.startsWith("relations/") || factId.startsWith("fact_relations/"))) {
-    // This is a relation ID, not a fact ID - try to extract from _id or _key
-    if (relation.fact?._id && relation.fact._id.startsWith("facts/")) {
-      factId = relation.fact._id;
-    } else if (relation.fact?._key) {
-      factId = `facts/${relation.fact._key}`;
+    // This is a relation ID, not a fact ID - try to extract from _key
+    if (fact?._key) {
+      factId = `facts/${fact._key}`;
     } else {
       console.warn("RelationItem: Invalid fact ID detected (relation ID instead of fact ID)", {
         factId,
@@ -95,7 +94,7 @@ export function RelationItem({
     <div className="text-xs p-2 bg-slate-50 rounded border border-slate-200">
       {isEditing ? (
         <RelationEditForm
-          relationId={relation.relation.id || relation.relation._id || relation.relation._key || ""}
+          relationId={relation.relation.id || (relation.relation._key ? `fact_relations/${relation.relation._key}` : "")}
           currentType={editingType}
           currentFactId={editingFactId || factId}
           isPending={isUpdating}
