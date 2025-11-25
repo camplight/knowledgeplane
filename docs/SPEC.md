@@ -271,6 +271,7 @@ ArangoDB (graph database with full-text search)
 | `GET /health` | Health check endpoint |
 | `GET /docs` | Swagger UI documentation |
 | `GET /` | Landing page with features overview and authentication options |
+| `GET /use-cases` | Use cases page showcasing three main use cases for KnowledgePlane |
 | `GET /auth/google` | React login page for Google OAuth |
 | `GET /auth/google/redirect` | Redirects to Google OAuth authorization (internal) |
 | `GET /auth/google/callback` | Google OAuth callback endpoint (supports `?mcp=true` for MCP sessions) |
@@ -562,6 +563,11 @@ The web interface is built with React and Tailwind CSS, featuring:
 - Enhanced typography and visual hierarchy
 - Responsive design optimized for all screen sizes
 - Responsive login pages for OAuth authentication
+- Use cases page (`/use-cases`) showcasing three main use cases:
+  - Team Knowledge Base: Centralize team knowledge for AI assistants
+  - AI Agent Memory: Persistent memory across conversations
+  - Document Intelligence: Automatic knowledge extraction from documents
+  - Each use case includes benefits, descriptions, and branded visual design
 - User dashboard (`/dashboard`) with:
   - User profile information display
   - Statistics overview (total facts, knowledge cards, active facts, categories)
