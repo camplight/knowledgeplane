@@ -4,6 +4,7 @@ import cookie from "@fastify/cookie";
 import secureSession from "@fastify/secure-session";
 import swagger from "@fastify/swagger";
 import swaggerUI from "@fastify/swagger-ui";
+import { createHash, randomBytes } from "node:crypto";
 import { init as initDb } from "@knowledgeplane/db";
 import health from "./routes/health.js";
 import mcp from "./routes/mcp.js";
@@ -38,18 +39,41 @@ async function startServer() {
   app.register(cookie);
 
   // Register secure session plugin (required for OAuth state management)
-  // Generate a secret key for session encryption (32 bytes = 64 hex characters)
-  const sessionSecret =
-    process.env.SESSION_SECRET ||
-    "change-me-in-production-to-a-random-secret-key-at-least-32-chars";
-  if (sessionSecret.length < 32) {
+  // Generate a secret key for session encryption (32 bytes required)
+  const sessionSecret = process.env.SESSION_SECRET;
+  let sessionKey: Buffer;
+
+  if (sessionSecret) {
+    // Try to decode as hex (64 hex chars = 32 bytes)
+    if (/^[0-9a-fA-F]{64}$/.test(sessionSecret)) {
+      sessionKey = Buffer.from(sessionSecret, "hex");
+    }
+    // Try to decode as base64 (44 base64 chars = 32 bytes when decoded)
+    else if (sessionSecret.length >= 44) {
+      try {
+        sessionKey = Buffer.from(sessionSecret, "base64");
+        if (sessionKey.length !== 32) {
+          // If base64 decode doesn't give exactly 32 bytes, hash it
+          sessionKey = createHash("sha256").update(sessionSecret).digest();
+        }
+      } catch {
+        // If base64 decode fails, hash the string
+        sessionKey = createHash("sha256").update(sessionSecret).digest();
+      }
+    } else {
+      // Hash the string to get exactly 32 bytes
+      sessionKey = createHash("sha256").update(sessionSecret).digest();
+    }
+  } else {
+    // Generate a random 32-byte key for development
+    sessionKey = randomBytes(32);
     app.log.warn(
-      "SESSION_SECRET is too short. Please use at least 32 characters for production.",
+      "SESSION_SECRET not set. Using random key (sessions will not persist across restarts).",
     );
   }
 
   app.register(secureSession, {
-    key: Buffer.from(sessionSecret.padEnd(64, "0").slice(0, 64), "utf8"),
+    key: sessionKey,
     cookie: {
       path: "/",
       httpOnly: true,

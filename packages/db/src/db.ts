@@ -518,6 +518,31 @@ export async function init() {
     });
     // Vector index for knowledge_cards embeddings
     try {
+      // Count vectors with embeddings to determine appropriate nLists
+      // nLists must be <= number of vectors (clusters can't exceed training points)
+      const countQuery = `
+        LET count = LENGTH(
+          FOR card IN knowledge_cards
+            FILTER card.embedding != null
+            RETURN card
+        )
+        RETURN count
+      `;
+      const countCursor = await collections.knowledge_cards.database.query(
+        countQuery,
+      );
+      const vectorCount = (await countCursor.next()) || 0;
+
+      // nLists must be <= vectorCount (ArangoDB requirement)
+      // Use reasonable defaults:
+      // - Minimum: 16 (for small datasets, but only if we have at least 16 vectors)
+      // - Maximum: 100 (for large datasets)
+      // - If no vectors yet, use 16 (will work when vectors are added)
+      // - If vectors < 16, use vectorCount (or 1 if vectorCount is 0)
+      const nLists = vectorCount > 0
+        ? Math.min(Math.max(1, vectorCount), 100)
+        : 16;
+
       await collections.knowledge_cards.ensureIndex({
         type: "vector",
         fields: ["embedding"],
@@ -525,10 +550,12 @@ export async function init() {
         params: {
           metric: "cosine",
           dimension: 1536,
-          nLists: 100,
+          nLists: nLists,
         },
       } as any);
-      console.log("Vector index for knowledge_cards created");
+      console.log(
+        `Vector index for knowledge_cards created with nLists=${nLists} (${vectorCount} vectors with embeddings)`,
+      );
     } catch (error: any) {
       if (error.errorNum !== 1710) {
         console.warn(

@@ -659,7 +659,11 @@ For complete environment variable documentation and setup instructions, see:
 - `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
 - `GITHUB_CLIENT_ID` - GitHub OAuth client ID
 - `GITHUB_CLIENT_SECRET` - GitHub OAuth client secret
-- `SESSION_SECRET` - Secret key for session encryption (minimum 32 characters, defaults to insecure placeholder in development)
+- `SESSION_SECRET` - Secret key for session encryption. Can be provided as:
+  - Hex string (64 hex characters = 32 bytes, e.g., `openssl rand -hex 32`)
+  - Base64 string (44+ base64 characters, e.g., `openssl rand -base64 32`)
+  - Plain string (will be hashed with SHA-256 to produce 32 bytes)
+  - If not provided, a random 32-byte key is generated (sessions won't persist across restarts)
 - `API_KEYS` - Comma-separated list of valid API keys for API key authentication (optional)
 - `OAUTH_REDIRECT_BASE_URL` - Base URL for OAuth callbacks (default: `http://localhost:8080`, use ngrok URL for localhost development)
 - `OAUTH_SUCCESS_REDIRECT_URL` - URL to redirect after successful auth (default: `http://localhost:3000`)
@@ -1588,6 +1592,11 @@ Workers can be manually triggered through:
 **Vector Search:**
 - Uses ArangoDB's vector indexes with cosine similarity metric
 - **Requires ArangoDB to be started with `--experimental-vector-index` flag** (configured in docker-compose files)
+- Vector index `nLists` parameter is automatically configured based on the number of vectors with embeddings:
+  - Must be <= number of vectors (ArangoDB requirement)
+  - Automatically set to `min(vectorCount, 100)` when vectors exist
+  - Defaults to 16 when no vectors exist yet (will work when vectors are added)
+  - Prevents "Number of training points should be at least as large as number of clusters" errors
 - Manual cosine similarity calculation for vector search (compatible with all ArangoDB versions)
 - Hybrid search combines full-text (BM25) and vector (cosine similarity) results
 - Automatic query embedding generation when AI provider is available
