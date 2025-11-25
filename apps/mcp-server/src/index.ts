@@ -49,7 +49,7 @@ async function startServer() {
   }
 
   app.register(secureSession, {
-    secret: Buffer.from(sessionSecret.padEnd(64, "0").slice(0, 64), "utf8"),
+    key: Buffer.from(sessionSecret.padEnd(64, "0").slice(0, 64), "utf8"),
     cookie: {
       path: "/",
       httpOnly: true,

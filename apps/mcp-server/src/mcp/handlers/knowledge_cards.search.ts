@@ -17,6 +17,7 @@ function normalizeCardRecord(doc: any): KnowledgeCardRecord {
     summary: doc.summary,
     content: doc.content,
     fact_ids: doc.fact_ids || [],
+    team_id: doc.team_id,
     created_by: doc.created_by,
     last_updated_by: doc.last_updated_by,
     metadata: doc.metadata || {},
@@ -243,7 +244,7 @@ async function _vectorSearch(
     const allCards = await cursor.all();
 
     // Calculate cosine similarity for each card and sort by score
-    const resultsWithScores = allCards
+    const resultsWithScores: KnowledgeCardSearchResult[] = allCards
       .map((card: any) => {
         try {
           const score = cosineSimilarity(card.embedding, queryEmbedding);
@@ -259,8 +260,8 @@ async function _vectorSearch(
           return null;
         }
       })
-      .filter((r: any) => r !== null)
-      .sort((a: any, b: any) => b.score - a.score)
+      .filter((r): r is KnowledgeCardSearchResult => r !== null)
+      .sort((a, b) => b.score - a.score)
       .slice(offset, offset + limit);
 
     return resultsWithScores;

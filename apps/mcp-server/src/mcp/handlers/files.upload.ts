@@ -65,7 +65,6 @@ export async function handleFilesUpload(args: {
     uploadedBy: args.created_by,
     openaiApiKey: process.env.OPENAI_API_KEY,
     openaiModel: process.env.OPENAI_MODEL,
-    uploadsDir: process.env.UPLOADS_DIR,
   });
 
   return {
