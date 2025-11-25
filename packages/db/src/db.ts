@@ -20,7 +20,7 @@ const isServer = typeof window === "undefined";
 // This ensures undici.fetch can set Content-Length header instead of using chunked encoding
 async function normalizeBody(
   body: BodyInit | null,
-): Promise<Buffer | string | null> {
+): Promise<BodyInit | null> {
   if (body === null || body === undefined) {
     return null;
   }
@@ -98,7 +98,7 @@ const createUndiciFetchWrapper = () => {
 
       // Handle body - normalize to ensure Content-Length header is sent
       if (input.body !== null) {
-        const normalizedBody = await normalizeBody(input.body);
+        const normalizedBody = await normalizeBody(input.body as BodyInit);
         if (normalizedBody !== null) {
           options.body = normalizedBody;
         }

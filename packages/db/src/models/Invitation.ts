@@ -105,6 +105,24 @@ export class Invitation {
     return results.map((r: any) => this._normalizeRecord(r));
   }
 
+  static async findByAcceptedBy(userId: string): Promise<InvitationRecord[]> {
+    const aql = `
+      FOR inv IN invitations
+        FILTER inv.accepted_by == @userId
+        SORT inv.created_at DESC
+        RETURN inv
+    `;
+
+    const cursor = await collections.invitations.database.query(aql, { userId });
+    const results = await cursor.all();
+
+    if (!results) {
+      return [];
+    }
+
+    return results.map((r: any) => this._normalizeRecord(r));
+  }
+
   static async list(
     teamId?: string,
     limit: number = 50,

@@ -119,25 +119,20 @@ export const userRouter = router({
       const total = await User.count();
 
       // Enrich users with invitation status
+      // Note: We can only find accepted invitations by user ID since invitations
+      // are team-based tokens and don't store email addresses
       const enriched = await Promise.all(
         users.map(async (user) => {
-          const invitations = await Invitation.findByEmail(user.email);
-          const pendingInvitation = invitations.find(
-            (inv) => inv.status === "pending",
-          );
-          const acceptedInvitation = invitations.find(
+          const acceptedInvitations = await Invitation.findByAcceptedBy(user.id);
+          const acceptedInvitation = acceptedInvitations.find(
             (inv) => inv.status === "accepted",
           );
 
           return {
             ...user,
-            hasPendingInvitation: !!pendingInvitation,
+            hasPendingInvitation: false, // Can't determine pending invitations without email
             hasAcceptedInvitation: !!acceptedInvitation,
-            invitationStatus: pendingInvitation
-              ? "pending"
-              : acceptedInvitation
-                ? "accepted"
-                : "none",
+            invitationStatus: acceptedInvitation ? "accepted" : "none",
           };
         }),
       );
