@@ -70,28 +70,22 @@ export async function handleKnowledgeCardsUpdate(args: {
     throw new Error(`Knowledge card with id ${args.id} not found`);
   }
 
-  // Validate team_id if provided
-  if (args.team_id) {
-    if (existingCard.team_id !== args.team_id) {
-      throw new Error("Knowledge card does not belong to the specified team");
-    }
-    // Validate team membership
-    const member = await TeamMember.findByTeamAndUser(
-      args.team_id,
-      args.last_updated_by,
-    );
-    if (!member) {
-      throw new Error("You are not a member of this team");
-    }
-  } else {
-    // If team_id not provided, validate membership on the card's team
-    const member = await TeamMember.findByTeamAndUser(
-      existingCard.team_id,
-      args.last_updated_by,
-    );
-    if (!member) {
-      throw new Error("You are not a member of this team");
-    }
+  // Validate team_id (should be set from context)
+  if (!args.team_id) {
+    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  }
+  
+  if (existingCard.team_id !== args.team_id) {
+    throw new Error("Knowledge card does not belong to the specified team");
+  }
+  
+  // Validate team membership
+  const member = await TeamMember.findByTeamAndUser(
+    args.team_id,
+    args.last_updated_by,
+  );
+  if (!member) {
+    throw new Error("You are not a member of this team");
   }
 
   const card = await KnowledgeCard.update({

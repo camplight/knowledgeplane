@@ -27,7 +27,7 @@ export async function handleFilesSearch(args: {
 }) {
   let files = await File.findByFactId(args.fact_id);
 
-  // Filter by team_id if provided
+  // Filter by team_id (should be set from context)
   if (args.team_id) {
     files = files.filter((f) => f.team_id === args.team_id);
   }

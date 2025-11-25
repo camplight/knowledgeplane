@@ -35,11 +35,13 @@ export async function handleFilesGet(args: {
     throw new Error(`File with id ${args.id} not found`);
   }
 
-  // Validate team_id if provided
-  if (args.team_id) {
-    if (file.team_id !== args.team_id) {
-      throw new Error("File does not belong to the specified team");
-    }
+  // Validate team_id (should be set from context)
+  if (!args.team_id) {
+    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  }
+  
+  if (file.team_id !== args.team_id) {
+    throw new Error("File does not belong to the specified team");
   }
 
   // Validate team membership if user_id is provided

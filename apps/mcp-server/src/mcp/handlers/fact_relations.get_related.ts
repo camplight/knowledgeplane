@@ -36,8 +36,12 @@ export async function handleFactRelationsGetRelated(args: {
     throw new Error(`Fact with id ${args.fact_id} not found`);
   }
 
-  // If team_id is provided, validate it matches the fact's team
-  if (args.team_id && fact.team_id !== args.team_id) {
+  // Validate team_id (should be set from context)
+  if (!args.team_id) {
+    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  }
+  
+  if (fact.team_id !== args.team_id) {
     throw new Error("Fact does not belong to the specified team");
   }
 
@@ -46,8 +50,8 @@ export async function handleFactRelationsGetRelated(args: {
     args.relation_type,
   );
 
-  // Filter by team_id if provided (or use fact's team_id)
-  const teamId = args.team_id || fact.team_id;
+  // Filter by team_id
+  const teamId = args.team_id;
   const filteredResults = results.filter(
     (r) => r.relation.team_id === teamId && r.fact.team_id === teamId,
   );

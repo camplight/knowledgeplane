@@ -73,11 +73,13 @@ export async function handleFactRelationsCreate(args: {
 
   const factTeamId = fromFact.team_id;
 
-  // Validate team_id if provided
-  if (args.team_id) {
-    if (factTeamId !== args.team_id) {
-      throw new Error("Facts do not belong to the specified team");
-    }
+  // Validate team_id (should be set from context)
+  if (!args.team_id) {
+    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  }
+  
+  if (factTeamId !== args.team_id) {
+    throw new Error("Facts do not belong to the specified team");
   }
 
   // Validate team membership
