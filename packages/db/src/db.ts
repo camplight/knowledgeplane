@@ -1,5 +1,13 @@
 import { Database } from "arangojs";
-import "dotenv/config";
+// Load dotenv/config if available (for local development)
+// In production, environment variables are set by the platform
+// Using dynamic import to avoid build errors if dotenv is not installed
+try {
+  await import("dotenv/config");
+} catch {
+  // dotenv not available - environment variables should be set externally
+  // This is expected in production builds where env vars come from the platform
+}
 import { fetch as undiciFetch } from "undici";
 import type { BodyInit, RequestInfo, RequestInit, Response } from "undici";
 
