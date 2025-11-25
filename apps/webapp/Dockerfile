@@ -12,6 +12,11 @@ RUN npm ci
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+
+# Copy public directory explicitly (required for Next.js build)
+COPY public ./public
+
+# Copy remaining source files
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED 1
