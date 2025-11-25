@@ -1,5 +1,5 @@
 name: knowledgeplane
-region: nyc1
+region: fra
 
 # ArangoDB Configuration
 # Set these as environment variables in DigitalOcean App Platform
@@ -11,7 +11,7 @@ region: nyc1
 services:
   - name: mcp-server
     github:
-      repo: your-org/knowledgeplane
+      repo: camplight/knowledgeplane
       branch: main
       deploy_on_push: true
     source_dir: apps/mcp-server
@@ -81,7 +81,7 @@ services:
 
   - name: webapp
     github:
-      repo: your-org/knowledgeplane
+      repo: camplight/knowledgeplane
       branch: main
       deploy_on_push: true
     source_dir: apps/webapp
@@ -151,7 +151,7 @@ services:
 workers:
   - name: background-workers
     github:
-      repo: your-org/knowledgeplane
+      repo: camplight/knowledgeplane
       branch: main
       deploy_on_push: true
     source_dir: apps/background-workers
