@@ -43,6 +43,9 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nodejs
 
+# Install tsx globally for TypeScript execution (needed for workspace packages)
+RUN npm install -g tsx
+
 # Copy node_modules, workspace packages, and built output
 COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/packages ./packages
@@ -51,5 +54,5 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/rest-api/package.json ./pack
 
 USER nodejs
 
-CMD ["node", "dist/index.js"]
+CMD ["tsx", "dist/index.js"]
 

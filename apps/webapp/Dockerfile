@@ -49,6 +49,9 @@ ENV NEXT_TELEMETRY_DISABLED 1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Install tsx globally for TypeScript execution (needed for workspace packages)
+RUN npm install -g tsx
+
 # Copy public directory and Next.js build output from webapp directory
 COPY --from=builder /app/apps/webapp/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/webapp/.next/standalone ./
@@ -60,5 +63,5 @@ EXPOSE 3000
 
 ENV PORT 3000
 
-CMD ["node", "server.js"]
+CMD ["tsx", "apps/webapp/server.js"]
 
