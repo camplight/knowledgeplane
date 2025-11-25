@@ -1,0 +1,187 @@
+name: knowledgeplane
+region: nyc1
+
+# ArangoDB Configuration
+# Set these as environment variables in DigitalOcean App Platform
+# ARANGO_URL: http://your-droplet-ip:8529 (or use VPC endpoint)
+# ARANGO_DB_NAME: knowledgeplane
+# ARANGO_USER: root
+# ARANGO_PASSWORD: your-secure-password
+
+services:
+  - name: mcp-server
+    github:
+      repo: your-org/knowledgeplane
+      branch: main
+      deploy_on_push: true
+    source_dir: apps/mcp-server
+    build_command: npm install && npm run build
+    run_command: npm start
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 8080
+    routes:
+      - path: /mcp
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 10
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8080"
+      # ArangoDB connection - set these in App Platform dashboard or as secrets
+      - key: ARANGO_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: ARANGO_DB_NAME
+        value: knowledgeplane
+      - key: ARANGO_USER
+        value: root
+      - key: ARANGO_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      # OAuth and API configuration
+      - key: SESSION_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: API_KEYS
+        scope: RUN_TIME
+        type: SECRET
+      - key: OAUTH_REDIRECT_BASE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_CLIENT_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_CLIENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: GITHUB_CLIENT_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: GITHUB_CLIENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      # AI Provider configuration
+      - key: AI_PROVIDER
+        value: openai
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: OPENAI_MODEL
+        value: gpt-4o
+      - key: OPENAI_EMBEDDING_MODEL
+        value: text-embedding-3-small
+
+  - name: webapp
+    github:
+      repo: your-org/knowledgeplane
+      branch: main
+      deploy_on_push: true
+    source_dir: apps/webapp
+    build_command: npm install && npm run build
+    run_command: npm start
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 3000
+    routes:
+      - path: /
+    health_check:
+      http_path: /
+      initial_delay_seconds: 10
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: NEXTAUTH_URL
+        scope: RUN_TIME
+        type: SECRET
+      # ArangoDB connection
+      - key: ARANGO_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: ARANGO_DB_NAME
+        value: knowledgeplane
+      - key: ARANGO_USER
+        value: root
+      - key: ARANGO_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      # MCP Server configuration
+      - key: MCP_SERVER_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: MCP_SERVER_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      # OAuth configuration
+      - key: GOOGLE_CLIENT_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_CLIENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: GITHUB_CLIENT_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: GITHUB_CLIENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      # AI Provider configuration
+      - key: AI_PROVIDER
+        value: openai
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: OPENAI_MODEL
+        value: gpt-4o
+      - key: OPENAI_EMBEDDING_MODEL
+        value: text-embedding-3-small
+
+workers:
+  - name: background-workers
+    github:
+      repo: your-org/knowledgeplane
+      branch: main
+      deploy_on_push: true
+    source_dir: apps/background-workers
+    build_command: npm install && npm run build
+    run_command: npm start
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: NODE_ENV
+        value: production
+      # ArangoDB connection
+      - key: ARANGO_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: ARANGO_DB_NAME
+        value: knowledgeplane
+      - key: ARANGO_USER
+        value: root
+      - key: ARANGO_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      # AI Provider configuration
+      - key: AI_PROVIDER
+        value: openai
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: OPENAI_MODEL
+        value: gpt-4o
+      - key: OPENAI_EMBEDDING_MODEL
+        value: text-embedding-3-small
+

@@ -840,7 +840,7 @@ npm run dev:stop
 docker compose -f infra/docker-compose.yml up --build
 ```
 
-**For cloud deployment instructions (Digital Ocean, Railway, Render, etc.), see [DEPLOYMENT.md](../DEPLOYMENT.md)**
+**For cloud deployment instructions (DigitalOcean App Platform, Railway, Render, Docker Compose, etc.), see [DEPLOYMENT.md](../DEPLOYMENT.md)**
 
 The MCP server will start on `http://localhost:8080` and webapp on `http://localhost:3000`
 
@@ -1828,4 +1828,5 @@ Each application in the KnowledgePlane monorepo has its own README with detailed
 - `apps/rest-api/README.md` - REST API documentation
 - `apps/webapp/README.md` - Web application documentation
 - `distribution/README.md` - Docker image distribution guide for clients
-- `DEPLOYMENT.md` - General deployment guide for Railway, Render, Docker Compose, and Docker image distribution
+- `DEPLOYMENT.md` - General deployment guide for DigitalOcean App Platform, Railway, Render, Docker Compose, and Docker image distribution
+- `infra/digitalocean/README.md` - Detailed DigitalOcean deployment guide with ArangoDB setup on Droplet

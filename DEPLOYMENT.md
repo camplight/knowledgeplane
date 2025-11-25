@@ -188,6 +188,100 @@ Similar to Railway, but with more manual configuration.
 
 ---
 
+### 🌊 DigitalOcean App Platform (Recommended for DigitalOcean)
+
+Deploy KnowledgePlane on DigitalOcean App Platform with ArangoDB on a Droplet.
+
+**Steps:**
+
+1. **Deploy ArangoDB on Droplet:**
+   - Create a Droplet (Ubuntu 22.04, minimum 2GB RAM)
+   - SSH into the Droplet: `ssh root@your-droplet-ip`
+   - Run the setup script:
+     ```bash
+     curl -O https://raw.githubusercontent.com/your-org/knowledgeplane/main/infra/digitalocean/arangodb-setup.sh
+     chmod +x arangodb-setup.sh
+     ARANGO_PASSWORD=your-secure-password ./arangodb-setup.sh
+     ```
+   - Save the connection credentials displayed
+
+2. **Configure Networking (Recommended):**
+   - Create a VPC in DigitalOcean Dashboard
+   - Add Droplet to VPC (Settings → Networking → VPC)
+   - Note the private IP address for VPC connections
+
+3. **Deploy Apps on App Platform:**
+   
+   **Option A: Using App Spec (Recommended)**
+   - Update `infra/digitalocean/app-platform.yaml` with your GitHub repo
+   - Deploy via doctl:
+     ```bash
+     doctl apps create --spec infra/digitalocean/app-platform.yaml
+     ```
+   - Configure environment variables in App Platform dashboard
+   
+   **Option B: Manual Configuration**
+   - Go to App Platform → Create App → Connect GitHub repo
+   - Add three components:
+     - **Service:** `mcp-server` (Root: `apps/mcp-server`, Port: 8080, Route: `/mcp`)
+     - **Service:** `webapp` (Root: `apps/webapp`, Port: 3000, Route: `/`)
+     - **Worker:** `background-workers` (Root: `apps/background-workers`)
+
+4. **Set Environment Variables** (for each service):
+
+   **Common (All Services):**
+   ```
+   ARANGO_URL=http://your-droplet-ip:8529
+   # Or for VPC: http://10.x.x.x:8529
+   ARANGO_DB_NAME=knowledgeplane
+   ARANGO_USER=root
+   ARANGO_PASSWORD=your-secure-password
+   ```
+
+   **MCP Server:**
+   ```
+   NODE_ENV=production
+   PORT=8080
+   SESSION_SECRET=<generate-random-32-chars>
+   API_KEYS=<your-api-key>
+   OAUTH_REDIRECT_BASE_URL=https://your-mcp-server.ondigitalocean.app
+   GOOGLE_CLIENT_ID=<your-google-client-id>
+   GOOGLE_CLIENT_SECRET=<your-google-client-secret>
+   GITHUB_CLIENT_ID=<your-github-client-id>
+   GITHUB_CLIENT_SECRET=<your-github-client-secret>
+   OPENAI_API_KEY=<your-openai-key>
+   ```
+
+   **Webapp:**
+   ```
+   NODE_ENV=production
+   NEXTAUTH_URL=https://your-webapp.ondigitalocean.app
+   MCP_SERVER_URL=https://your-mcp-server.ondigitalocean.app/mcp
+   MCP_SERVER_API_KEY=<same-as-api-keys-above>
+   GOOGLE_CLIENT_ID=<your-google-client-id>
+   GOOGLE_CLIENT_SECRET=<your-google-client-secret>
+   GITHUB_CLIENT_ID=<your-github-client-id>
+   GITHUB_CLIENT_SECRET=<your-github-client-secret>
+   OPENAI_API_KEY=<your-openai-key>
+   ```
+
+   **Background Workers:**
+   ```
+   NODE_ENV=production
+   OPENAI_API_KEY=<your-openai-key>
+   AI_PROVIDER=openai
+   ```
+
+5. **Configure Firewall:**
+   - If using public IP: Allow port 8529 from App Platform IPs
+   - If using VPC: No firewall rules needed (private network)
+
+6. **Deploy**: App Platform auto-deploys on git push! 🎉
+
+**For detailed DigitalOcean deployment instructions, see [infra/digitalocean/README.md](./infra/digitalocean/README.md)**
+
+---
+
 ### 🐳 Docker Compose (VPS)
 
 For Digital Ocean, AWS EC2, or any VPS with Docker.
