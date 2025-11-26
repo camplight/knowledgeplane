@@ -2,7 +2,16 @@ FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+# Install build dependencies for native modules (sodium-native)
+RUN apk add --no-cache \
+    libc6-compat \
+    python3 \
+    make \
+    g++ \
+    libtool \
+    autoconf \
+    automake \
+    libsodium-dev
 WORKDIR /app
 
 # Copy root package files (defines workspaces)
@@ -39,6 +48,9 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+
+# Install runtime dependencies for native modules
+RUN apk add --no-cache libsodium
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nodejs
