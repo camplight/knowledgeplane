@@ -1,17 +1,14 @@
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 
 # Install dependencies only when needed
 FROM base AS deps
 # Install build dependencies for native modules (sodium-native)
-RUN apk add --no-cache \
-    libc6-compat \
+RUN apt-get update && apt-get install -y \
     python3 \
     make \
     g++ \
-    libtool \
-    autoconf \
-    automake \
-    libsodium-dev
+    libsodium-dev \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Copy root package files (defines workspaces)
@@ -51,15 +48,16 @@ ENV NODE_ENV=production
 
 # Install runtime and build dependencies for native modules
 # We need build tools temporarily to rebuild native modules for this platform
-RUN apk add --no-cache \
-    libsodium \
+RUN apt-get update && apt-get install -y \
+    libsodium23 \
     python3 \
     make \
     g++ \
-    libsodium-dev
+    libsodium-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nodejs
+RUN groupadd --system --gid 1001 nodejs
+RUN useradd --system --uid 1001 --gid nodejs nodejs
 
 # Install tsx globally for TypeScript execution (needed for workspace packages)
 RUN npm install -g tsx
@@ -70,11 +68,14 @@ COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/mcp-server/dist ./dist
 COPY --from=builder /app/apps/mcp-server/package.json ./package.json
 
-# Rebuild native modules for this platform to ensure compatibility
-RUN npm rebuild --build-from-source
+# Rebuild sodium-native specifically for this platform to ensure compatibility
+# Remove it first, then reinstall to force a fresh build
+RUN npm uninstall sodium-native || true
+RUN npm install sodium-native --build-from-source --no-save
 
 # Remove build dependencies to reduce image size (keep only runtime libsodium)
-RUN apk del python3 make g++ libsodium-dev
+RUN apt-get update && apt-get remove -y python3 make g++ libsodium-dev && \
+    apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 # Change ownership to nodejs user after rebuild
 RUN chown -R nodejs:nodejs /app
