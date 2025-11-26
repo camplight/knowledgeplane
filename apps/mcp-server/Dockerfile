@@ -2,13 +2,6 @@ FROM node:20-slim AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-# Install build dependencies for native modules (sodium-native)
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    libsodium-dev \
-    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Copy root package files (defines workspaces)
@@ -46,36 +39,17 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Install runtime and build dependencies for native modules
-# We need build tools temporarily to rebuild native modules for this platform
-RUN apt-get update && apt-get install -y \
-    libsodium23 \
-    python3 \
-    make \
-    g++ \
-    libsodium-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 RUN groupadd --system --gid 1001 nodejs
 RUN useradd --system --uid 1001 --gid nodejs nodejs
 
 # Install tsx globally for TypeScript execution (needed for workspace packages)
 RUN npm install -g tsx
 
-# Copy node_modules, workspace packages, and built output (as root for rebuild)
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/apps/mcp-server/dist ./dist
-COPY --from=builder /app/apps/mcp-server/package.json ./package.json
-
-# Rebuild sodium-native specifically for this platform to ensure compatibility
-# Remove it first, then reinstall to force a fresh build
-RUN npm uninstall sodium-native || true
-RUN npm install sodium-native --build-from-source --no-save
-
-# Remove build dependencies to reduce image size (keep only runtime libsodium)
-RUN apt-get update && apt-get remove -y python3 make g++ libsodium-dev && \
-    apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+# Copy node_modules, workspace packages, and built output
+COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/packages ./packages
+COPY --from=builder --chown=nodejs:nodejs /app/apps/mcp-server/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/apps/mcp-server/package.json ./package.json
 
 # Change ownership to nodejs user after rebuild
 RUN chown -R nodejs:nodejs /app

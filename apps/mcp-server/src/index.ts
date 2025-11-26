@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
-import secureSession from "@fastify/secure-session";
+import fastifySession from "@fastify/session";
 import swagger from "@fastify/swagger";
 import swaggerUI from "@fastify/swagger-ui";
 import { createHash, randomBytes } from "node:crypto";
@@ -38,42 +38,24 @@ async function startServer() {
   // Register cookie plugin (required for sessions)
   app.register(cookie);
 
-  // Register secure session plugin (required for OAuth state management)
-  // Generate a secret key for session encryption (32 bytes required)
+  // Register session plugin (required for OAuth state management)
+  // Generate a secret key for session signing
   const sessionSecret = process.env.SESSION_SECRET;
-  let sessionKey: Buffer;
+  let sessionKey: string;
 
   if (sessionSecret) {
-    // Try to decode as hex (64 hex chars = 32 bytes)
-    if (/^[0-9a-fA-F]{64}$/.test(sessionSecret)) {
-      sessionKey = Buffer.from(sessionSecret, "hex");
-    }
-    // Try to decode as base64 (44 base64 chars = 32 bytes when decoded)
-    else if (sessionSecret.length >= 44) {
-      try {
-        sessionKey = Buffer.from(sessionSecret, "base64");
-        if (sessionKey.length !== 32) {
-          // If base64 decode doesn't give exactly 32 bytes, hash it
-          sessionKey = createHash("sha256").update(sessionSecret).digest();
-        }
-      } catch {
-        // If base64 decode fails, hash the string
-        sessionKey = createHash("sha256").update(sessionSecret).digest();
-      }
-    } else {
-      // Hash the string to get exactly 32 bytes
-      sessionKey = createHash("sha256").update(sessionSecret).digest();
-    }
+    // Use the secret as-is (will be hashed internally if needed)
+    sessionKey = sessionSecret;
   } else {
-    // Generate a random 32-byte key for development
-    sessionKey = randomBytes(32);
+    // Generate a random key for development
+    sessionKey = randomBytes(32).toString("hex");
     app.log.warn(
       "SESSION_SECRET not set. Using random key (sessions will not persist across restarts).",
     );
   }
 
-  app.register(secureSession, {
-    key: sessionKey,
+  app.register(fastifySession, {
+    secret: sessionKey,
     cookie: {
       path: "/",
       httpOnly: true,
