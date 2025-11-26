@@ -3,6 +3,8 @@ import { httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
 import type { AppRouter } from "../server/trpc/routes";
 
+// Create trpc instance - createTRPCReact doesn't access React context at module load time
+// It only accesses context when hooks are called, so this should be safe
 export const trpc = createTRPCReact<AppRouter>();
 
 export const getBaseUrl = () => {
@@ -11,6 +13,8 @@ export const getBaseUrl = () => {
   return `http://localhost:${process.env.PORT ?? 3000}`;
 };
 
+// Create client - this is safe because createClient doesn't access React context
+// It only accesses context when the client is used in a Provider
 export const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({

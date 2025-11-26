@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:25-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -32,7 +32,8 @@ COPY packages ./packages
 COPY apps/webapp ./apps/webapp
 
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=development
+# Use production mode for build to prevent static page generation issues
+ENV NODE_ENV=production
 
 # Build from webapp directory
 WORKDIR /app/apps/webapp

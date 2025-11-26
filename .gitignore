@@ -6,3 +6,4 @@ packages/db/dist
 apps/mcp-server/dist
 coverage
 .next
+dist
