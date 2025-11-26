@@ -61,8 +61,9 @@ RUN adduser --system --uid 1001 nextjs
 # at apps/webapp/.next/standalone/ and the structure preserves monorepo paths
 # Copy the entire standalone directory structure
 COPY --from=builder --chown=nextjs:nodejs /app/apps/webapp/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/webapp/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/apps/webapp/public ./public
+# Copy static files to match the standalone structure (server runs from apps/webapp/server.js)
+COPY --from=builder --chown=nextjs:nodejs /app/apps/webapp/.next/static ./apps/webapp/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/webapp/public ./apps/webapp/public
 
 USER nextjs
 
