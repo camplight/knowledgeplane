@@ -58,8 +58,8 @@ RUN adduser --system --uid 1001 nextjs
 
 # Copy standalone output from builder
 # With outputFileTracingRoot set to ../.., Next.js creates standalone output
-# at apps/webapp/.next/standalone/ but traces files relative to the root
-# The standalone output includes everything needed: server.js, node_modules, and workspace packages
+# at apps/webapp/.next/standalone/ and the structure preserves monorepo paths
+# Copy the entire standalone directory structure
 COPY --from=builder --chown=nextjs:nodejs /app/apps/webapp/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/webapp/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/webapp/public ./public
@@ -71,6 +71,6 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Next.js standalone output has server.js at the root of the standalone directory
-CMD ["node", "server.js"]
+# With outputFileTracingRoot set to monorepo root, server.js is at apps/webapp/server.js
+CMD ["node", "apps/webapp/server.js"]
 
