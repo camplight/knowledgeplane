@@ -33,7 +33,7 @@ All configuration is done via the `.env` file. Required settings:
 - API keys (`API_KEYS`)
 - OAuth credentials (Google/GitHub)
 - AI provider API keys (OpenAI/Anthropic)
-- Your domain URLs (`OAUTH_REDIRECT_BASE_URL`, `NEXTAUTH_URL`, `MCP_SERVER_URL`)
+- Your domain URLs (`OAUTH_REDIRECT_BASE_URL`, `MCP_SERVER_URL`)
 
 See `distribution/README.md` for complete configuration guide.
 
@@ -117,8 +117,8 @@ Railway automatically detects and deploys your apps with zero configuration.
    **Webapp:**
    ```
    NODE_ENV=production
-   NEXTAUTH_URL=https://your-webapp.railway.app
-   MCP_SERVER_URL=https://your-mcp-server.railway.app/mcp
+   OAUTH_REDIRECT_BASE_URL=https://your-webapp.railway.app
+   MCP_SERVER_URL=https://your-mcp-server.railway.app
    MCP_SERVER_API_KEY=<same-as-api-keys-above>
    GOOGLE_CLIENT_ID=<your-google-client-id>
    GOOGLE_CLIENT_SECRET=<your-google-client-secret>
@@ -255,8 +255,8 @@ Deploy KnowledgePlane on DigitalOcean App Platform with ArangoDB on a Droplet.
    **Webapp:**
    ```
    NODE_ENV=production
-   NEXTAUTH_URL=https://your-webapp.ondigitalocean.app
-   MCP_SERVER_URL=https://your-mcp-server.ondigitalocean.app/mcp
+   OAUTH_REDIRECT_BASE_URL=https://your-webapp.ondigitalocean.app
+   MCP_SERVER_URL=https://your-mcp-server.ondigitalocean.app
    MCP_SERVER_API_KEY=<same-as-api-keys-above>
    GOOGLE_CLIENT_ID=<your-google-client-id>
    GOOGLE_CLIENT_SECRET=<your-google-client-secret>
@@ -338,8 +338,8 @@ SESSION_SECRET=${SESSION_SECRET}
 **apps/webapp/.env.production:**
 ```env
 NODE_ENV=production
-NEXTAUTH_URL=https://yourdomain.com
-MCP_SERVER_URL=https://yourdomain.com/mcp
+OAUTH_REDIRECT_BASE_URL=https://yourdomain.com
+MCP_SERVER_URL=https://yourdomain.com
 # ... add other variables
 ```
 
@@ -402,8 +402,8 @@ sudo certbot --nginx -d yourdomain.com
 - `OPENAI_API_KEY` (for AI features)
 
 ### Webapp Needs:
-- `NEXTAUTH_URL` - Your webapp public URL
-- `MCP_SERVER_URL` - Full URL to MCP server (e.g., `https://mcp.example.com/mcp`)
+- `OAUTH_REDIRECT_BASE_URL` - Your webapp public URL
+- `MCP_SERVER_URL` - MCP server domain root (e.g., `https://mcp.example.com`)
 - `MCP_SERVER_API_KEY` - Same as API_KEYS above
 - OAuth credentials (Google/GitHub)
 - `OPENAI_API_KEY` (for chat features)

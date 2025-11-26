@@ -1,12 +1,87 @@
 name: knowledgeplane
 region: fra
 
-# ArangoDB Configuration
-# Set these as environment variables in DigitalOcean App Platform
-# ARANGO_URL: http://your-droplet-ip:8529 (or use VPC endpoint)
-# ARANGO_DB_NAME: knowledgeplane
-# ARANGO_USER: root
-# ARANGO_PASSWORD: your-secure-password
+# Path-based routing configuration:
+# - webapp: accessible at / (root path)
+# - mcp-server: accessible at /mcp
+#
+# Both services share the same default domain: https://knowledgeplane-xxxxx.ondigitalocean.app
+# After deployment, find the domain in App Platform dashboard and use it for environment variables.
+#
+# Note: App Platform strips the route prefix by default, so when /mcp is routed to mcp-server,
+# the service receives / internally. The mcp-server is configured to handle / as the MCP endpoint.
+#
+# To use custom domains/subdomains later:
+# 1. Add your domain in App Platform dashboard (Settings → Domains)
+# 2. Configure DNS records as instructed by DigitalOcean
+# 3. Add domains and ingress sections (see commented example below)
+
+# Common environment variables shared across all services
+envs:
+  - key: NODE_ENV
+    value: production
+  # ArangoDB connection - set these in App Platform dashboard or as secrets
+  - key: ARANGO_URL
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: ARANGO_DB_NAME
+    value: knowledgeplane
+  - key: ARANGO_USER
+    value: root
+  - key: ARANGO_PASSWORD
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  # OAuth configuration (shared between webapp and mcp-server)
+  - key: GOOGLE_CLIENT_ID
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: GOOGLE_CLIENT_SECRET
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: GITHUB_CLIENT_ID
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: GITHUB_CLIENT_SECRET
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  # AI Provider configuration (shared across all services)
+  - key: AI_PROVIDER
+    value: openai
+  - key: OPENAI_API_KEY
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: OPENAI_MODEL
+    value: gpt-4o
+  - key: OPENAI_EMBEDDING_MODEL
+    value: text-embedding-3-small
+
+# Optional: Custom domain/subdomain routing configuration
+# Uncomment and update these sections if you want to use custom domains:
+#
+# domains:
+#   - domain: your-domain.com
+#     type: PRIMARY
+#     zone: your-domain.com
+#   - domain: mcp.your-domain.com
+#     type: PRIMARY
+#     zone: your-domain.com
+#
+# ingress:
+#   rules:
+#     - component:
+#         name: mcp-server
+#       match:
+#         authority:
+#           exact: mcp.your-domain.com
+#         path:
+#           prefix: /
+#     - component:
+#         name: webapp
+#       match:
+#         authority:
+#           exact: your-domain.com
+#         path:
+#           prefix: /
 
 services:
   - name: mcp-server
@@ -20,6 +95,8 @@ services:
     instance_size_slug: basic-xxs
     http_port: 8080
     routes:
+      # Path-based routing: mcp-server accessible at /mcp
+      # App Platform strips the /mcp prefix, so mcp-server receives / internally
       - path: /mcp
     health_check:
       http_path: /health
@@ -29,53 +106,17 @@ services:
       success_threshold: 1
       failure_threshold: 3
     envs:
-      - key: NODE_ENV
-        value: production
       - key: PORT
         value: "8080"
-      # ArangoDB connection - set these in App Platform dashboard or as secrets
-      - key: ARANGO_URL
-        scope: RUN_TIME
-        type: SECRET
-      - key: ARANGO_DB_NAME
-        value: knowledgeplane
-      - key: ARANGO_USER
-        value: root
-      - key: ARANGO_PASSWORD
-        scope: RUN_TIME
-        type: SECRET
-      # OAuth and API configuration
+      # OAuth and API configuration (MCP server specific)
       - key: SESSION_SECRET
-        scope: RUN_TIME
+        scope: RUN_AND_BUILD_TIME
         type: SECRET
       - key: API_KEYS
-        scope: RUN_TIME
+        scope: RUN_AND_BUILD_TIME
         type: SECRET
       - key: OAUTH_REDIRECT_BASE_URL
-        scope: RUN_TIME
-        type: SECRET
-      - key: GOOGLE_CLIENT_ID
-        scope: RUN_TIME
-        type: SECRET
-      - key: GOOGLE_CLIENT_SECRET
-        scope: RUN_TIME
-        type: SECRET
-      - key: GITHUB_CLIENT_ID
-        scope: RUN_TIME
-        type: SECRET
-      - key: GITHUB_CLIENT_SECRET
-        scope: RUN_TIME
-        type: SECRET
-      # AI Provider configuration
-      - key: AI_PROVIDER
-        value: openai
-      - key: OPENAI_API_KEY
-        scope: RUN_TIME
-        type: SECRET
-      - key: OPENAI_MODEL
-        value: gpt-4o
-      - key: OPENAI_EMBEDDING_MODEL
-        value: text-embedding-3-small
+        scope: RUN_AND_BUILD_TIME
 
   - name: webapp
     github:
@@ -97,52 +138,15 @@ services:
       success_threshold: 1
       failure_threshold: 3
     envs:
-      - key: NODE_ENV
-        value: production
-      - key: NEXTAUTH_URL
-        scope: RUN_TIME
-        type: SECRET
-      # ArangoDB connection
-      - key: ARANGO_URL
-        scope: RUN_TIME
-        type: SECRET
-      - key: ARANGO_DB_NAME
-        value: knowledgeplane
-      - key: ARANGO_USER
-        value: root
-      - key: ARANGO_PASSWORD
-        scope: RUN_TIME
-        type: SECRET
-      # MCP Server configuration
+      # OAuth redirect base URL (webapp specific)
+      - key: OAUTH_REDIRECT_BASE_URL
+        scope: RUN_AND_BUILD_TIME
+      # MCP Server configuration (webapp specific)
       - key: MCP_SERVER_URL
-        scope: RUN_TIME
-        type: SECRET
+        scope: RUN_AND_BUILD_TIME
       - key: MCP_SERVER_API_KEY
-        scope: RUN_TIME
+        scope: RUN_AND_BUILD_TIME
         type: SECRET
-      # OAuth configuration
-      - key: GOOGLE_CLIENT_ID
-        scope: RUN_TIME
-        type: SECRET
-      - key: GOOGLE_CLIENT_SECRET
-        scope: RUN_TIME
-        type: SECRET
-      - key: GITHUB_CLIENT_ID
-        scope: RUN_TIME
-        type: SECRET
-      - key: GITHUB_CLIENT_SECRET
-        scope: RUN_TIME
-        type: SECRET
-      # AI Provider configuration
-      - key: AI_PROVIDER
-        value: openai
-      - key: OPENAI_API_KEY
-        scope: RUN_TIME
-        type: SECRET
-      - key: OPENAI_MODEL
-        value: gpt-4o
-      - key: OPENAI_EMBEDDING_MODEL
-        value: text-embedding-3-small
 
 workers:
   - name: background-workers
@@ -154,28 +158,5 @@ workers:
     dockerfile_path: apps/background-workers/Dockerfile
     instance_count: 1
     instance_size_slug: basic-xxs
-    envs:
-      - key: NODE_ENV
-        value: production
-      # ArangoDB connection
-      - key: ARANGO_URL
-        scope: RUN_TIME
-        type: SECRET
-      - key: ARANGO_DB_NAME
-        value: knowledgeplane
-      - key: ARANGO_USER
-        value: root
-      - key: ARANGO_PASSWORD
-        scope: RUN_TIME
-        type: SECRET
-      # AI Provider configuration
-      - key: AI_PROVIDER
-        value: openai
-      - key: OPENAI_API_KEY
-        scope: RUN_TIME
-        type: SECRET
-      - key: OPENAI_MODEL
-        value: gpt-4o
-      - key: OPENAI_EMBEDDING_MODEL
-        value: text-embedding-3-small
+    envs: []
 

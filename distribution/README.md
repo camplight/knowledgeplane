@@ -68,8 +68,7 @@ All configuration is done via environment variables in the `.env` file. Copy `en
 4. **Your Domain URLs**
    ```bash
    OAUTH_REDIRECT_BASE_URL=https://knowledge.yourcompany.com
-   NEXTAUTH_URL=https://knowledge.yourcompany.com
-   MCP_SERVER_URL=https://knowledge.yourcompany.com/mcp
+   MCP_SERVER_URL=https://mcp.yourcompany.com
    ```
 
 5. **OAuth Credentials** (at least one provider required)

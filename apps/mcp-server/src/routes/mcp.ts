@@ -36,7 +36,17 @@ export default async function mcpRoutes(app: FastifyInstance) {
   );
 
   // Streamable HTTP endpoint for MCP protocol
-  app.all("/mcp", async (request, reply) => {
+  // Register at both /mcp and / to support different routing scenarios:
+  // - /mcp: for direct access or subdomain routing
+  // - /: for path-based routing where App Platform strips the /mcp prefix
+  const mcpHandler = async (request: any, reply: any) => {
+    // For / route, only handle MCP protocol requests to avoid conflicts with other routes
+    // Check if this looks like an MCP request (has mcp-session-id header or POST with JSON body)
+    if (request.url === "/" && !request.headers["mcp-session-id"] && request.method !== "POST") {
+      // Not an MCP request, let other routes handle it
+      return;
+    }
+
     app.log.debug(
       {
         method: request.method,
@@ -312,5 +322,12 @@ export default async function mcpRoutes(app: FastifyInstance) {
         reply.code(500).send({ error: error.message });
       }
     }
-  });
+  };
+
+  // Register handler at both /mcp and / to support different routing scenarios:
+  // - /mcp: for direct access or subdomain routing (e.g., https://mcp.domain.com/mcp)
+  // - /: for path-based routing where App Platform strips the /mcp prefix
+  //    (e.g., route /mcp → service receives /)
+  app.all("/mcp", mcpHandler);
+  app.all("/", mcpHandler);
 }

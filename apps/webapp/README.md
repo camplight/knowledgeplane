@@ -23,7 +23,6 @@ This is a Next.js 15 application that provides:
 
 ### Optional - Server Configuration
 
-- `NEXTAUTH_URL` - Base URL for the application (default: `http://localhost:3000`)
 - `NODE_ENV` - Environment mode (`development` or `production`)
 - `PORT` - Server port (default: `3000`)
 
@@ -39,7 +38,7 @@ This is a Next.js 15 application that provides:
 
 ### Optional - OAuth Configuration
 
-- `OAUTH_REDIRECT_BASE_URL` - Base URL for OAuth redirects (defaults to `NEXTAUTH_URL`)
+- `OAUTH_REDIRECT_BASE_URL` - Base URL for OAuth redirects (default: `http://localhost:3000`)
 
 ### Optional - AI/Embeddings
 
@@ -63,7 +62,7 @@ ARANGO_USER=root
 ARANGO_PASSWORD=root
 
 # Server
-NEXTAUTH_URL=http://localhost:3000
+OAUTH_REDIRECT_BASE_URL=http://localhost:3000
 NODE_ENV=development
 
 # OAuth (optional)
@@ -208,7 +207,7 @@ TypeScript type checking is performed during build. Use your IDE's TypeScript in
 
 For production, ensure:
 - `NODE_ENV=production`
-- `NEXTAUTH_URL` is set to your production URL
+- `OAUTH_REDIRECT_BASE_URL` is set to your production URL
 - OAuth redirect URIs are configured for your production domain
 - Database connection is secure and accessible
 

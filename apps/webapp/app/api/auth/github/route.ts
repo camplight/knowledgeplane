@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   cookieStore.set("oauthProvider", "github", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 600 });
   
   const redirectUri = encodeURIComponent(
-    `${process.env.NEXTAUTH_URL || process.env.OAUTH_REDIRECT_BASE_URL || "http://localhost:3000"}/api/auth/github/callback`
+    `${process.env.OAUTH_REDIRECT_BASE_URL || "http://localhost:3000"}/api/auth/github/callback`
   );
   const scope = encodeURIComponent("user:email");
   const clientId = process.env.GITHUB_CLIENT_ID!;

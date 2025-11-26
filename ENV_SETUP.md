@@ -65,8 +65,8 @@ See the example files (`.env.example`) in each directory for complete lists of r
 
 **Webapp (`apps/webapp/.env.local`):**
 - Database variables (same as root)
-- `NEXTAUTH_URL=http://localhost:3000`
-- `MCP_SERVER_URL` (use ngrok URL for localhost: `https://your-ngrok-url.ngrok.io/mcp`)
+- `OAUTH_REDIRECT_BASE_URL=http://localhost:3000`
+- `MCP_SERVER_URL` (use ngrok URL for localhost: `https://your-ngrok-url.ngrok.io`)
 
 **Background Workers (`apps/background-workers/.env.dev`):**
 - Database variables (same as root)

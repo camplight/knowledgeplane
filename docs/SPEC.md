@@ -695,7 +695,7 @@ For complete environment variable documentation and setup instructions, see:
 - `ARANGO_DB_NAME` - ArangoDB database name
 - `ARANGO_USER` - ArangoDB username
 - `ARANGO_PASSWORD` - ArangoDB password
-- `NEXTAUTH_URL` - Base URL for NextAuth (e.g., `http://localhost:3000`)
+- `OAUTH_REDIRECT_BASE_URL` - Base URL for OAuth redirects (e.g., `http://localhost:3000`)
 - `GOOGLE_CLIENT_ID` - Google OAuth client ID
 - `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
 - `GITHUB_CLIENT_ID` - GitHub OAuth client ID

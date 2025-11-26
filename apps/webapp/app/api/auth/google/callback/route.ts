@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
   cookieStore.delete("oauthState");
   cookieStore.delete("oauthProvider");
 
-  const redirectUri = `${process.env.NEXTAUTH_URL || process.env.OAUTH_REDIRECT_BASE_URL || "http://localhost:3000"}/api/auth/google/callback`;
+  const redirectUri = `${process.env.OAUTH_REDIRECT_BASE_URL || "http://localhost:3000"}/api/auth/google/callback`;
 
   try {
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {

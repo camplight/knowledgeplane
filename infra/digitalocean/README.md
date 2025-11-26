@@ -156,6 +156,36 @@ sudo ufw allow from 10.0.0.0/8 to any port 8529
    - Update region if needed
    - Set all SECRET environment variables in App Platform dashboard
 
+#### Path-Based Routing Setup (No Custom Domain Required)
+
+DigitalOcean assigns **one default domain** to your app (e.g., `https://knowledgeplane-xxxxx.ondigitalocean.app`). Both services share this domain but use different paths:
+- **webapp**: `https://knowledgeplane-xxxxx.ondigitalocean.app/` (root path)
+- **mcp-server**: `https://knowledgeplane-xxxxx.ondigitalocean.app/mcp`
+
+**How it works:**
+- App Platform routes `/mcp` to the mcp-server service
+- App Platform strips the `/mcp` prefix by default, so mcp-server receives `/` internally
+- The mcp-server is configured to handle both `/mcp` and `/` paths to support different routing scenarios
+
+**After deployment:**
+1. **Find your domain** in the App Platform dashboard:
+   - Go to your app → The domain is shown at the top (e.g., `knowledgeplane-abc123.ondigitalocean.app`)
+
+2. **Configure environment variables** using this domain:
+   - `OAUTH_REDIRECT_BASE_URL` for mcp-server: `https://knowledgeplane-xxxxx.ondigitalocean.app`
+   - `OAUTH_REDIRECT_BASE_URL` for webapp: `https://knowledgeplane-xxxxx.ondigitalocean.app`
+   - `MCP_SERVER_URL` for webapp: `https://knowledgeplane-xxxxx.ondigitalocean.app`
+
+**Note:** The MCP endpoint is accessible at `https://knowledgeplane-xxxxx.ondigitalocean.app/mcp`. The webapp will automatically append `/mcp` when making requests if you set `MCP_SERVER_URL` to the domain root.
+
+#### Optional: Custom Domain Setup (Later)
+
+If you want to use custom domains/subdomains later:
+1. Add your domain in App Platform dashboard (Settings → Domains)
+2. Configure DNS records as instructed by DigitalOcean
+3. Uncomment and update the `domains` and `ingress` sections in `app-platform.yaml`
+4. Update environment variables to use your custom domains
+
 2. **Deploy via doctl:**
    ```bash
    doctl apps create --spec infra/digitalocean/app-platform.yaml
@@ -181,7 +211,7 @@ sudo ufw allow from 10.0.0.0/8 to any port 8529
    - **Build Command:** `npm install && npm run build`
    - **Run Command:** `npm start`
    - **HTTP Port:** `8080`
-   - **Routes:** `/mcp`
+   - **Routes:** `/` (MCP server runs on a separate domain)
    - **Health Check:** `/health`
 
 3. **Add Webapp Service:**
@@ -204,81 +234,219 @@ sudo ufw allow from 10.0.0.0/8 to any port 8529
 
 ### Configure Environment Variables
 
-For each service, add these environment variables in App Platform dashboard:
+The `app-platform.yaml` file uses app-level environment variables for common configuration shared across all services. Configure these in the App Platform dashboard:
 
-#### Common (All Services)
+#### App-Level (Common to All Services)
+These are configured once at the app level and shared by all services:
+
 ```
+NODE_ENV=production
 ARANGO_URL=http://your-droplet-ip:8529
 # Or for VPC: http://10.x.x.x:8529
 
 ARANGO_DB_NAME=knowledgeplane
 ARANGO_USER=root
 ARANGO_PASSWORD=your-secure-password
+
+# OAuth (shared between webapp and mcp-server)
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+
+# AI Provider (shared across all services)
+AI_PROVIDER=openai
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4o
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
 #### MCP Server Specific
+These are configured only for the mcp-server service:
+
 ```
-NODE_ENV=production
 PORT=8080
 SESSION_SECRET=generate-with-openssl-rand-base64-32
 API_KEYS=your-api-key-here
 OAUTH_REDIRECT_BASE_URL=https://your-mcp-server-domain.com
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GITHUB_CLIENT_ID=your-github-client-id
-GITHUB_CLIENT_SECRET=your-github-client-secret
-AI_PROVIDER=openai
-OPENAI_API_KEY=your-openai-api-key
-OPENAI_MODEL=gpt-4o
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
+
+**Note:** With path-based routing, both services share the same domain. The MCP endpoint is accessible at `https://knowledgeplane-xxxxx.ondigitalocean.app/mcp`. Set `OAUTH_REDIRECT_BASE_URL` to the app's default domain (domain root, without `/mcp`).
 
 #### Webapp Specific
+These are configured only for the webapp service:
+
 ```
-NODE_ENV=production
-NEXTAUTH_URL=https://your-webapp-domain.com
-MCP_SERVER_URL=https://your-mcp-server-domain.com/mcp
+OAUTH_REDIRECT_BASE_URL=https://your-webapp-domain.com
+MCP_SERVER_URL=https://your-mcp-server-domain.com
 MCP_SERVER_API_KEY=your-api-key-here
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GITHUB_CLIENT_ID=your-github-client-id
-GITHUB_CLIENT_SECRET=your-github-client-secret
-AI_PROVIDER=openai
-OPENAI_API_KEY=your-openai-api-key
-OPENAI_MODEL=gpt-4o
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
+**Note:** `MCP_SERVER_URL` should be the app's default domain (e.g., `https://knowledgeplane-xxxxx.ondigitalocean.app`). Use the domain root (without `/mcp`). The webapp will automatically append `/mcp` when making requests to the MCP endpoint.
+
 #### Background Workers Specific
-```
-NODE_ENV=production
-AI_PROVIDER=openai
-OPENAI_API_KEY=your-openai-api-key
-OPENAI_MODEL=gpt-4o
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-```
+No service-specific environment variables needed (all inherited from app-level).
 
 ### Using DigitalOcean Secrets (Recommended)
 
-Instead of storing passwords in environment variables, use DigitalOcean App Platform Secrets:
+Instead of storing passwords in environment variables, use DigitalOcean App Platform Secrets. Your `app-platform.yaml` already references secrets with `type: SECRET`, so you just need to create them in the App Platform dashboard.
 
-1. Go to App Platform → Settings → App-Level Environment Variables
-2. Click "Create Secret"
-3. Add secrets for:
-   - `ARANGO_PASSWORD`
-   - `SESSION_SECRET`
-   - `API_KEYS`
-   - `OPENAI_API_KEY`
-   - OAuth credentials
-   - etc.
+#### Method 1: Via DigitalOcean Dashboard (Recommended)
 
-4. Reference secrets in your app spec:
-   ```yaml
-   envs:
-     - key: ARANGO_PASSWORD
-       scope: RUN_TIME
-       type: SECRET
-   ```
+1. **Navigate to your App:**
+   - Go to [DigitalOcean Dashboard](https://cloud.digitalocean.com/apps)
+   - Click on your KnowledgePlane app (or create it first using the app spec)
+
+2. **Access Settings:**
+   - Click on **Settings** tab in the left sidebar
+   - Scroll down to **App-Level Environment Variables** section
+
+3. **Create App-Level Secrets:**
+   Click **"Create Secret"** for each app-level secret variable. These are shared across all services:
+
+   **App-Level Secrets (Common to All Services):**
+
+   **Database Secrets:**
+   - `ARANGO_URL` - Your ArangoDB connection URL (e.g., `http://10.x.x.x:8529` for VPC or `http://your-droplet-ip:8529`)
+   - `ARANGO_PASSWORD` - Your ArangoDB root password
+
+   **OAuth Secrets (Shared between MCP Server & Webapp):**
+   - `GOOGLE_CLIENT_ID` - From Google Cloud Console
+   - `GOOGLE_CLIENT_SECRET` - From Google Cloud Console
+   - `GITHUB_CLIENT_ID` - From GitHub Developer Settings
+   - `GITHUB_CLIENT_SECRET` - From GitHub Developer Settings
+
+   **AI Provider Secrets (Shared across All Services):**
+   - `OPENAI_API_KEY` - Your OpenAI API key
+
+4. **Create Service-Level Secrets:**
+   Navigate to each service component and add service-specific secrets:
+
+   **MCP Server Service Secrets:**
+   - `SESSION_SECRET` - Generate with: `openssl rand -base64 32`
+   - `API_KEYS` - Generate with: `openssl rand -hex 16` (or comma-separated multiple keys)
+   - `OAUTH_REDIRECT_BASE_URL` - App's default domain (e.g., `https://knowledgeplane-xxxxx.ondigitalocean.app`). Find this in the App Platform dashboard after deployment.
+
+   **Webapp Service Secrets:**
+   - `OAUTH_REDIRECT_BASE_URL` - App's default domain (e.g., `https://knowledgeplane-xxxxx.ondigitalocean.app`). Same domain as mcp-server since they share the domain.
+   - `MCP_SERVER_URL` - App's default domain root (e.g., `https://knowledgeplane-xxxxx.ondigitalocean.app`). Use domain root without `/mcp`.
+   - `MCP_SERVER_API_KEY` - Same value as `API_KEYS` from MCP server service
+
+5. **For each secret:**
+   - Enter the **Variable Name** (exactly as shown above, case-sensitive)
+   - Enter the **Value**
+   - Click **"Save"**
+
+6. **Verify Secrets:**
+   - App-level secrets will appear in the **App-Level Environment Variables** list
+   - Service-level secrets will appear in each service's environment variables
+   - All secrets will be marked as **"Secret"** type
+   - You can edit or delete them later if needed
+
+#### Method 2: Via doctl CLI
+
+If you prefer using the command line:
+
+```bash
+# Install doctl if you haven't already
+# macOS: brew install doctl
+# Linux: See https://docs.digitalocean.com/reference/doctl/how-to/install/
+
+# Authenticate
+doctl auth init
+
+# Get your app ID
+doctl apps list
+
+# Create secrets (replace APP_ID with your actual app ID)
+doctl apps create-secret APP_ID \
+  --name ARANGO_PASSWORD \
+  --value "your-password-here"
+
+doctl apps create-secret APP_ID \
+  --name SESSION_SECRET \
+  --value "$(openssl rand -base64 32)"
+
+doctl apps create-secret APP_ID \
+  --name API_KEYS \
+  --value "$(openssl rand -hex 16)"
+
+# Repeat for all other secrets...
+```
+
+#### Generate Secure Values
+
+Before creating secrets, generate secure values:
+
+```bash
+# Session secret (32+ characters)
+openssl rand -base64 32
+
+# Database password
+openssl rand -base64 24
+
+# API key
+openssl rand -hex 16
+
+# Or use UUID for API keys
+uuidgen
+```
+
+#### Important Notes
+
+- **App-Level vs Component-Level:** Secrets created at the app level are available to all components (services and workers). This is recommended for shared secrets like `ARANGO_PASSWORD` and `OPENAI_API_KEY`.
+
+- **Component-Specific Secrets:** If you need different values for different components, you can create component-level secrets by going to each component's settings.
+
+- **Secret Names Must Match:** The secret names in the dashboard must exactly match the `key` values in your `app-platform.yaml` file (case-sensitive).
+
+- **After Creating Secrets:** Once you create the secrets, DigitalOcean will automatically use them when deploying. You may need to trigger a new deployment or wait for the next automatic deployment.
+
+- **Updating Secrets:** To update a secret value, go to Settings → App-Level Environment Variables, click on the secret, update the value, and save. This will trigger a new deployment.
+
+#### Reference in App Spec
+
+Your `app-platform.yaml` already references secrets correctly:
+```yaml
+envs:
+  - key: ARANGO_PASSWORD
+    scope: RUN_TIME
+    type: SECRET
+```
+
+The `type: SECRET` tells App Platform to look for a secret with that name. If the secret doesn't exist, the deployment will fail, so make sure to create all required secrets before deploying.
+
+#### Quick Reference: All Required Secrets Checklist
+
+Use this checklist to ensure you've created all required secrets:
+
+**✅ Database Secrets (All Services):**
+- [ ] `ARANGO_URL` - ArangoDB connection URL
+- [ ] `ARANGO_PASSWORD` - ArangoDB root password
+
+**✅ Security Secrets:**
+- [ ] `SESSION_SECRET` - Session encryption key (MCP Server only)
+- [ ] `API_KEYS` - API authentication keys (MCP Server only)
+
+**✅ OAuth Secrets (MCP Server & Webapp):**
+- [ ] `GOOGLE_CLIENT_ID` - Google OAuth client ID
+- [ ] `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
+- [ ] `GITHUB_CLIENT_ID` - GitHub OAuth client ID
+- [ ] `GITHUB_CLIENT_SECRET` - GitHub OAuth client secret
+
+**✅ MCP Server Service Specific:**
+- [ ] `SESSION_SECRET` - Session encryption secret
+- [ ] `API_KEYS` - API keys for authentication
+- [ ] `OAUTH_REDIRECT_BASE_URL` - MCP server domain for OAuth callbacks
+
+**✅ Webapp Service Specific:**
+- [ ] `OAUTH_REDIRECT_BASE_URL` - OAuth redirect base URL (webapp domain)
+- [ ] `MCP_SERVER_URL` - MCP server domain root (not `/mcp` path)
+- [ ] `MCP_SERVER_API_KEY` - API key for MCP server authentication (same as `API_KEYS`)
+
+**Total: 13 secrets** (9 app-level shared, 3 MCP server specific, 3 webapp specific)
+
+> **Tip:** After deployment, DigitalOcean assigns one default domain to your app. Find this domain in the App Platform dashboard. Both services share this domain but use different paths (webapp at `/`, mcp-server at `/mcp`). Use the app's default domain (without `/mcp` path) for `OAUTH_REDIRECT_BASE_URL` and `MCP_SERVER_URL`. The webapp will automatically append `/mcp` when making requests.
 
 ## Step 3: Configure Networking
 

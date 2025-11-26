@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   cookieStore.set("oauthProvider", "google", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 600 });
   
   const redirectUri = encodeURIComponent(
-    `${process.env.NEXTAUTH_URL || process.env.OAUTH_REDIRECT_BASE_URL || "http://localhost:3000"}/api/auth/google/callback`
+    `${process.env.OAUTH_REDIRECT_BASE_URL || "http://localhost:3000"}/api/auth/google/callback`
   );
   const scope = encodeURIComponent("openid email profile");
   const clientId = process.env.GOOGLE_CLIENT_ID!;
