@@ -557,6 +557,13 @@ KnowledgePlane implements OAuth 2.0 Authorization Server Metadata discovery per 
 2. After OAuth flow, callback returns JSON with access token instead of creating session cookie
 3. Token can be used in `Authorization: Bearer <token>` header for MCP API calls
 
+**Docker Deployment Notes:**
+When deploying in Docker containers behind reverse proxies (e.g., DigitalOcean App Platform), the webapp automatically handles base URL detection:
+- If `OAUTH_REDIRECT_BASE_URL` is set, it is used for all OAuth redirect URLs
+- If not set, the webapp extracts the base URL from `X-Forwarded-Host` and `X-Forwarded-Proto` headers (set by reverse proxies)
+- This prevents OAuth redirects from using `0.0.0.0` or internal Docker hostnames
+- **Recommended**: Always set `OAUTH_REDIRECT_BASE_URL` to your public domain in production deployments
+
 The web interface is built with React and Tailwind CSS, featuring:
 - A modern, polished landing page (`/`) with enhanced visual design inspired by top SaaS products
 - Clean, minimal design with animated gradient backgrounds, subtle grid patterns, and glassmorphism effects
@@ -695,7 +702,7 @@ For complete environment variable documentation and setup instructions, see:
 - `ARANGO_DB_NAME` - ArangoDB database name
 - `ARANGO_USER` - ArangoDB username
 - `ARANGO_PASSWORD` - ArangoDB password
-- `OAUTH_REDIRECT_BASE_URL` - Base URL for OAuth redirects (e.g., `http://localhost:3000`)
+- `OAUTH_REDIRECT_BASE_URL` - Base URL for OAuth redirects (e.g., `http://localhost:3000`). **Important for Docker deployments**: Must be set to the public domain (e.g., `https://yourdomain.com`). The webapp automatically handles reverse proxy environments by extracting the base URL from `X-Forwarded-Host` and `X-Forwarded-Proto` headers if `OAUTH_REDIRECT_BASE_URL` is not set, preventing redirects to `0.0.0.0` in Docker containers.
 - `GOOGLE_CLIENT_ID` - Google OAuth client ID
 - `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
 - `GITHUB_CLIENT_ID` - GitHub OAuth client ID

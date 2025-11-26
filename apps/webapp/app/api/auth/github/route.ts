@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "crypto";
+import { getBaseUrl } from "../utils";
 
 export async function GET(request: NextRequest) {
+  const baseUrl = getBaseUrl(request);
   const cookieStore = await cookies();
   const state = crypto.randomBytes(32).toString("base64url");
   
@@ -10,7 +12,7 @@ export async function GET(request: NextRequest) {
   cookieStore.set("oauthProvider", "github", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 600 });
   
   const redirectUri = encodeURIComponent(
-    `${process.env.OAUTH_REDIRECT_BASE_URL || "http://localhost:3000"}/api/auth/github/callback`
+    `${baseUrl}/api/auth/github/callback`
   );
   const scope = encodeURIComponent("user:email");
   const clientId = process.env.GITHUB_CLIENT_ID!;

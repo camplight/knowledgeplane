@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "crypto";
 import { User, Team, TeamMember } from "@knowledgeplane/db/next";
+import { getBaseUrl } from "../../utils";
 
 export async function GET(request: NextRequest) {
+  const baseUrl = getBaseUrl(request);
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
   const state = searchParams.get("state");
@@ -11,13 +13,13 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/auth/google?error=${error}`, request.url),
+      new URL(`/auth/google?error=${error}`, baseUrl),
     );
   }
 
   if (!code) {
     return NextResponse.redirect(
-      new URL("/auth/google?error=missing_code", request.url),
+      new URL("/auth/google?error=missing_code", baseUrl),
     );
   }
 
@@ -26,14 +28,14 @@ export async function GET(request: NextRequest) {
 
   if (!state || state !== storedState) {
     return NextResponse.redirect(
-      new URL("/auth/google?error=invalid_state", request.url),
+      new URL("/auth/google?error=invalid_state", baseUrl),
     );
   }
 
   cookieStore.delete("oauthState");
   cookieStore.delete("oauthProvider");
 
-  const redirectUri = `${process.env.OAUTH_REDIRECT_BASE_URL || "http://localhost:3000"}/api/auth/google/callback`;
+  const redirectUri = `${baseUrl}/api/auth/google/callback`;
 
   try {
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -52,7 +54,7 @@ export async function GET(request: NextRequest) {
 
     if (!tokenResponse.ok) {
       return NextResponse.redirect(
-        new URL("/auth/google?error=token_exchange_failed", request.url),
+        new URL("/auth/google?error=token_exchange_failed", baseUrl),
       );
     }
 
@@ -70,7 +72,7 @@ export async function GET(request: NextRequest) {
 
     if (!userInfoResponse.ok) {
       return NextResponse.redirect(
-        new URL("/auth/google?error=user_info_failed", request.url),
+        new URL("/auth/google?error=user_info_failed", baseUrl),
       );
     }
 
@@ -80,7 +82,7 @@ export async function GET(request: NextRequest) {
 
     if (!email || !username) {
       return NextResponse.redirect(
-        new URL("/auth/google?error=missing_user_info", request.url),
+        new URL("/auth/google?error=missing_user_info", baseUrl),
       );
     }
 
@@ -120,14 +122,14 @@ export async function GET(request: NextRequest) {
 
     // Redirect to onboarding if not completed
     if (!user.onboarding_completed) {
-      return NextResponse.redirect(new URL("/onboarding", request.url));
+      return NextResponse.redirect(new URL("/onboarding", baseUrl));
     }
 
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(new URL("/dashboard", baseUrl));
   } catch (error: any) {
     console.error("Google OAuth callback error:", error);
     return NextResponse.redirect(
-      new URL("/auth/google?error=internal_error", request.url),
+      new URL("/auth/google?error=internal_error", baseUrl),
     );
   }
 }

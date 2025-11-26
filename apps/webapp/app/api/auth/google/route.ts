@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "crypto";
 import { User } from "@knowledgeplane/db/next";
+import { getBaseUrl } from "../utils";
 
 export async function GET(request: NextRequest) {
+  const baseUrl = getBaseUrl(request);
   const cookieStore = await cookies();
   const state = crypto.randomBytes(32).toString("base64url");
   
@@ -11,7 +13,7 @@ export async function GET(request: NextRequest) {
   cookieStore.set("oauthProvider", "google", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 600 });
   
   const redirectUri = encodeURIComponent(
-    `${process.env.OAUTH_REDIRECT_BASE_URL || "http://localhost:3000"}/api/auth/google/callback`
+    `${baseUrl}/api/auth/google/callback`
   );
   const scope = encodeURIComponent("openid email profile");
   const clientId = process.env.GOOGLE_CLIENT_ID!;

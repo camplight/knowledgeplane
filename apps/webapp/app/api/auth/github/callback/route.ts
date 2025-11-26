@@ -2,32 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "crypto";
 import { User, Team, TeamMember } from "@knowledgeplane/db/next";
+import { getBaseUrl } from "../../utils";
 
 export async function GET(request: NextRequest) {
+  const baseUrl = getBaseUrl(request);
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(new URL(`/auth/github?error=${error}`, request.url));
+    return NextResponse.redirect(new URL(`/auth/github?error=${error}`, baseUrl));
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL("/auth/github?error=missing_code", request.url));
+    return NextResponse.redirect(new URL("/auth/github?error=missing_code", baseUrl));
   }
 
   const cookieStore = await cookies();
   const storedState = cookieStore.get("oauthState")?.value;
   
   if (!state || state !== storedState) {
-    return NextResponse.redirect(new URL("/auth/github?error=invalid_state", request.url));
+    return NextResponse.redirect(new URL("/auth/github?error=invalid_state", baseUrl));
   }
 
   cookieStore.delete("oauthState");
   cookieStore.delete("oauthProvider");
 
-  const redirectUri = `${process.env.OAUTH_REDIRECT_BASE_URL || "http://localhost:3000"}/api/auth/github/callback`;
+  const redirectUri = `${baseUrl}/api/auth/github/callback`;
   
   try {
     const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
@@ -45,14 +47,14 @@ export async function GET(request: NextRequest) {
     });
 
     if (!tokenResponse.ok) {
-      return NextResponse.redirect(new URL("/auth/github?error=token_exchange_failed", request.url));
+      return NextResponse.redirect(new URL("/auth/github?error=token_exchange_failed", baseUrl));
     }
 
     const tokenData = await tokenResponse.json();
     const accessToken = tokenData.access_token;
 
     if (!accessToken) {
-      return NextResponse.redirect(new URL("/auth/github?error=no_token", request.url));
+      return NextResponse.redirect(new URL("/auth/github?error=no_token", baseUrl));
     }
 
     const userInfoResponse = await fetch("https://api.github.com/user", {
@@ -63,7 +65,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!userInfoResponse.ok) {
-      return NextResponse.redirect(new URL("/auth/github?error=user_info_failed", request.url));
+      return NextResponse.redirect(new URL("/auth/github?error=user_info_failed", baseUrl));
     }
 
     const userInfo = await userInfoResponse.json();
@@ -84,7 +86,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!email) {
-      return NextResponse.redirect(new URL("/auth/github?error=no_email", request.url));
+      return NextResponse.redirect(new URL("/auth/github?error=no_email", baseUrl));
     }
 
     const username = userInfo.login || userInfo.id?.toString();
@@ -125,13 +127,13 @@ export async function GET(request: NextRequest) {
 
     // Redirect to onboarding if not completed
     if (!user.onboarding_completed) {
-      return NextResponse.redirect(new URL("/onboarding", request.url));
+      return NextResponse.redirect(new URL("/onboarding", baseUrl));
     }
 
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(new URL("/dashboard", baseUrl));
   } catch (error: any) {
     console.error("GitHub OAuth callback error:", error);
-    return NextResponse.redirect(new URL("/auth/github?error=internal_error", request.url));
+    return NextResponse.redirect(new URL("/auth/github?error=internal_error", baseUrl));
   }
 }
 
