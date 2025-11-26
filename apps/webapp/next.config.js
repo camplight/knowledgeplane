@@ -5,20 +5,11 @@ const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
   outputFileTracingRoot: path.resolve(__dirname, "../.."),
-  // Turbopack config for dev mode (Next.js 16 uses Turbopack by default)
+  // Turbopack is enabled by default in Next.js 16, but we need webpack config for externalization
+  // Adding empty turbopack config to silence the warning about having webpack config without turbopack
   turbopack: {},
-  // Disable static generation - webapp is fully dynamic
-  // Skip static generation for all routes
-  generateBuildId: async () => {
-    return "build-" + Date.now();
-  },
   // Skip static optimization - all pages are dynamic
   skipTrailingSlashRedirect: true,
-  experimental: {
-    serverActions: {
-      bodySizeLimit: "2mb",
-    },
-  },
   // Mark server-only packages as external to prevent client-side bundling
   // This ensures they use Node.js modules (including Node.js fetch) instead of browser polyfills
   // Note: In Next.js 15+, this option was renamed from serverComponentsExternalPackages
@@ -47,11 +38,6 @@ const nextConfig = {
         fs: false,
         net: false,
         tls: false,
-      };
-
-      // Ensure we don't alias fetch to a browser polyfill
-      config.resolve.alias = {
-        ...config.resolve.alias,
       };
     }
 
