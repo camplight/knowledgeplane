@@ -42,7 +42,7 @@ Team management – users can create teams, invite members, and manage team sett
 
 User onboarding – automatic onboarding flow for new users on first login, including default team creation.
 
-Team invitations – personal invitation links (shareable tokens) for inviting users to teams. Links can be copied and shared with friends.
+Team invitations – personal invitation links (shareable tokens) for inviting users to teams. Links can be copied and shared with friends. Invitation links can be accepted multiple times, allowing many users to register and join the team through the same link. All acceptances are tracked and stored.
 
 Session-based context – MCP sessions maintain user and knowledge context across requests.
 
@@ -332,7 +332,7 @@ KnowledgePlane supports team-based collaboration:
   - **Member**: Can create and manage content within the team
 - **Default Team**: New users automatically get a default team created on first login
 - **Team Scoping**: All domain data (facts, knowledge cards, files, relations, etc.) is scoped to teams
-- **Personal Invitation Links**: Team owners/admins can generate shareable invitation links (tokens) that can be copied and sent to friends. Invitations can be deleted by owners/admins. Invitation links are publicly accessible (no authentication required to view invitation details), but require authentication to accept.
+- **Personal Invitation Links**: Team owners/admins can generate shareable invitation links (tokens) that can be copied and sent to friends. Invitations can be deleted by owners/admins. Invitation links are publicly accessible (no authentication required to view invitation details), but require authentication to accept. Invitation links can be accepted multiple times, allowing many users to register and join the team through the same link. All acceptances are tracked in the `acceptances` array.
 - **Onboarding**: New users are redirected to onboarding flow on first login
 
 **Session Management:**
@@ -479,10 +479,13 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `team_id` (string): Reference to team ID
 - `invited_by` (string): Reference to user ID who sent the invitation
 - `token` (string): Unique invitation token (personal invitation link)
-- `status` (string): Invitation status - "pending", "accepted", or "expired"
+- `status` (string): Invitation status - "pending", "accepted", or "expired". Invitations remain "pending" even after acceptances, allowing multiple users to accept the same link.
 - `expires_at` (string): Expiration timestamp (ISO 8601)
-- `accepted_at` (string): Acceptance timestamp (ISO 8601, only set when status is "accepted")
-- `accepted_by` (string): Reference to user ID who accepted the invitation (only set when status is "accepted")
+- `acceptances` (array): Array of acceptance records, each containing:
+  - `user_id` (string): Reference to user ID who accepted the invitation
+  - `accepted_at` (string): ISO 8601 timestamp when the invitation was accepted by this user
+- `accepted_at` (string, deprecated): Acceptance timestamp (ISO 8601) - legacy field for backward compatibility
+- `accepted_by` (string, deprecated): Reference to user ID - legacy field for backward compatibility
 - `created_at` (string): Creation timestamp (ISO 8601)
 
 **ChatThread Collection:**

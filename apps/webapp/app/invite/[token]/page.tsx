@@ -86,41 +86,6 @@ export default function InviteAcceptPage() {
       );
     }
 
-    if (invitation.status === "accepted") {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-xl p-8 text-center">
-            <div className="mb-6">
-              <svg
-                className="w-16 h-16 text-green-500 mx-auto"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900 mb-2">
-              Already Accepted
-            </h1>
-            <p className="text-slate-600 mb-6">
-              This invitation has already been accepted.
-            </p>
-            <Link
-              href="/"
-              className="inline-block px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              Go to Home
-            </Link>
-          </div>
-        </div>
-      );
-    }
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -279,41 +244,6 @@ export default function InviteAcceptPage() {
     );
   }
 
-  if (invitation.status === "accepted") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-xl p-8 text-center">
-          <div className="mb-6">
-            <svg
-              className="w-16 h-16 text-green-500 mx-auto"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">
-            Already Accepted
-          </h1>
-          <p className="text-slate-600 mb-6">
-            This invitation has already been accepted.
-          </p>
-          <Link
-            href="/dashboard"
-            className="inline-block px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            Go to Dashboard
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">

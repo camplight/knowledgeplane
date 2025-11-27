@@ -1,6 +1,11 @@
 import { collections } from "../db";
 import crypto from "crypto";
 
+export interface InvitationAcceptance {
+  user_id: string; // User ID who accepted the invitation
+  accepted_at: string; // ISO 8601 timestamp
+}
+
 export interface InvitationRecord {
   _key?: string;
   _id?: string;
@@ -10,8 +15,10 @@ export interface InvitationRecord {
   token: string; // Unique invitation token (personal invitation link)
   status: "pending" | "accepted" | "expired";
   expires_at: string; // ISO 8601 timestamp
-  accepted_at?: string; // ISO 8601 timestamp
-  accepted_by?: string; // User ID who accepted the invitation
+  acceptances?: InvitationAcceptance[]; // Array of acceptances (multiple users can accept the same invitation)
+  // Legacy fields for backward compatibility (deprecated)
+  accepted_at?: string; // ISO 8601 timestamp (deprecated, use acceptances array)
+  accepted_by?: string; // User ID who accepted the invitation (deprecated, use acceptances array)
   created_at: string; // ISO 8601 timestamp
 }
 
@@ -106,9 +113,11 @@ export class Invitation {
   }
 
   static async findByAcceptedBy(userId: string): Promise<InvitationRecord[]> {
+    // Check both old format (accepted_by) and new format (acceptances array)
     const aql = `
       FOR inv IN invitations
-        FILTER inv.accepted_by == @userId
+        FILTER inv.accepted_by == @userId || 
+               (inv.acceptances != null && @userId IN inv.acceptances[*].user_id)
         SORT inv.created_at DESC
         RETURN inv
     `;
@@ -208,27 +217,58 @@ export class Invitation {
       throw new Error("Invitation not found");
     }
 
-    if (invitation.status !== "pending") {
-      throw new Error(`Invitation is already ${invitation.status}`);
-    }
-
+    // Check if invitation is expired (but don't prevent acceptance if status is expired)
     const expiresAt = new Date(invitation.expires_at);
     if (expiresAt < new Date()) {
-      // Mark as expired
-      const key = this._extractKey(invitation.id);
-      await collections.invitations.update(key, {
-        status: "expired",
-      });
+      // Mark as expired if not already
+      if (invitation.status !== "expired") {
+        const key = this._extractKey(invitation.id);
+        await collections.invitations.update(key, {
+          status: "expired",
+        });
+      }
       throw new Error("Invitation has expired");
     }
 
+    // Check if user has already accepted this invitation
+    const hasAccepted = invitation.acceptances?.some(
+      (acc) => acc.user_id === userId,
+    ) || invitation.accepted_by === userId; // Check legacy field too
+
+    if (hasAccepted) {
+      // User already accepted, but that's okay - just return the invitation
+      return invitation;
+    }
+
     const key = this._extractKey(invitation.id);
+    
+    // Get current acceptances array or initialize it
+    const currentDoc = await collections.invitations.document(key);
+    const currentAcceptances = currentDoc.acceptances || [];
+    
+    // If there's legacy accepted_by/accepted_at, migrate it to acceptances array
+    if (currentDoc.accepted_by && !currentAcceptances.some((acc: any) => acc.user_id === currentDoc.accepted_by)) {
+      currentAcceptances.push({
+        user_id: currentDoc.accepted_by,
+        accepted_at: currentDoc.accepted_at || new Date().toISOString(),
+      });
+    }
+
+    // Add new acceptance
+    const newAcceptance: InvitationAcceptance = {
+      user_id: userId,
+      accepted_at: new Date().toISOString(),
+    };
+    currentAcceptances.push(newAcceptance);
+
+    // Update invitation with new acceptance
+    // Keep status as "pending" so it can be accepted multiple times
     const result = await collections.invitations.update(
       key,
       {
-        status: "accepted",
-        accepted_at: new Date().toISOString(),
-        accepted_by: userId,
+        acceptances: currentAcceptances,
+        // Keep status as pending (or active) - don't mark as "accepted" since it can be reused
+        status: invitation.status === "expired" ? "expired" : "pending",
       },
       { returnNew: true },
     );
@@ -290,6 +330,18 @@ export class Invitation {
   }
 
   static _normalizeRecord(doc: any): InvitationRecord {
+    // Migrate legacy accepted_by/accepted_at to acceptances array if needed
+    let acceptances = doc.acceptances || [];
+    if (doc.accepted_by && !acceptances.some((acc: any) => acc.user_id === doc.accepted_by)) {
+      acceptances = [
+        ...acceptances,
+        {
+          user_id: doc.accepted_by,
+          accepted_at: doc.accepted_at || new Date().toISOString(),
+        },
+      ];
+    }
+
     return {
       id: doc._id || `invitations/${doc._key}`,
       _key: doc._key,
@@ -299,6 +351,8 @@ export class Invitation {
       token: doc.token,
       status: doc.status,
       expires_at: doc.expires_at,
+      acceptances: acceptances.length > 0 ? acceptances : undefined,
+      // Keep legacy fields for backward compatibility
       accepted_at: doc.accepted_at,
       accepted_by: doc.accepted_by,
       created_at: doc.created_at,
