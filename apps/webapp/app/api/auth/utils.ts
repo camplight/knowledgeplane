@@ -2,13 +2,12 @@ import { NextRequest } from "next/server";
 
 /**
  * Gets the base URL for redirects, handling Docker/reverse proxy environments.
- * Prioritizes OAUTH_REDIRECT_BASE_URL, then extracts from forwarded headers,
- * then falls back to request URL.
+ * Uses APP_URL if set, otherwise extracts from forwarded headers or request URL.
  */
 export function getBaseUrl(request: NextRequest): string {
-  // First, check if OAUTH_REDIRECT_BASE_URL is explicitly set
-  if (process.env.OAUTH_REDIRECT_BASE_URL) {
-    return process.env.OAUTH_REDIRECT_BASE_URL;
+  // First, check if APP_URL is explicitly set (e.g., from DigitalOcean App Platform)
+  if (process.env.APP_URL) {
+    return process.env.APP_URL;
   }
 
   // Extract from forwarded headers (set by reverse proxies like DigitalOcean App Platform)

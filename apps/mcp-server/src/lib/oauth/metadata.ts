@@ -3,18 +3,21 @@ import { getAvailableProviders } from "./providers.js";
 
 /**
  * Gets the authorization base URL from request or environment
+ * Uses APP_URL (e.g., from DigitalOcean App Platform) or constructs from request
  */
 export function getAuthorizationBaseUrl(request: FastifyRequest): string {
-  if (process.env.OAUTH_REDIRECT_BASE_URL) {
-    const urlObj = new URL(process.env.OAUTH_REDIRECT_BASE_URL);
+  // Use APP_URL if set
+  if (process.env.APP_URL) {
+    const urlObj = new URL(process.env.APP_URL);
     return `${urlObj.protocol}//${urlObj.host}`;
-  } else {
-    const protocol = request.protocol || "http";
-    const host =
-      request.headers.host ||
-      `${request.hostname || "localhost"}:${process.env.PORT || 8080}`;
-    return `${protocol}://${host}`;
   }
+  
+  // Fallback: construct from request
+  const protocol = request.protocol || "http";
+  const host =
+    request.headers.host ||
+    `${request.hostname || "localhost"}:${process.env.PORT || 8080}`;
+  return `${protocol}://${host}`;
 }
 
 /**

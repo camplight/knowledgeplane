@@ -17,6 +17,8 @@ region: fra
 # 3. Add domains and ingress sections (see commented example below)
 
 # Common environment variables shared across all services
+# Note: APP_URL is automatically provided by DigitalOcean App Platform as ${APP_URL}
+# and is available to all services. The codebase uses APP_URL where suitable.
 envs:
   - key: NODE_ENV
     value: production
@@ -115,8 +117,6 @@ services:
       - key: API_KEYS
         scope: RUN_AND_BUILD_TIME
         type: SECRET
-      - key: OAUTH_REDIRECT_BASE_URL
-        scope: RUN_AND_BUILD_TIME
 
   - name: webapp
     github:
@@ -138,9 +138,6 @@ services:
       success_threshold: 1
       failure_threshold: 3
     envs:
-      # OAuth redirect base URL (webapp specific)
-      - key: OAUTH_REDIRECT_BASE_URL
-        scope: RUN_AND_BUILD_TIME
       # MCP Server configuration (webapp specific)
       - key: MCP_SERVER_URL
         scope: RUN_AND_BUILD_TIME

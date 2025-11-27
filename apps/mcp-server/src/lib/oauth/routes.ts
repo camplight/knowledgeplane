@@ -24,8 +24,8 @@ export function registerProviderRoutes(
   config: OAuthProviderConfig,
 ): void {
   const providerName = config.name;
-  const baseUrl =
-    process.env.OAUTH_REDIRECT_BASE_URL || "http://localhost:8080";
+  // Use APP_URL (e.g., from DigitalOcean App Platform) or fallback to localhost for development
+  const baseUrl = process.env.APP_URL || "http://localhost:8080";
 
   // Register fastify-oauth2 plugin
   app.register(fastifyOauth2, {

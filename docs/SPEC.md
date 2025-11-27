@@ -559,10 +559,10 @@ KnowledgePlane implements OAuth 2.0 Authorization Server Metadata discovery per 
 
 **Docker Deployment Notes:**
 When deploying in Docker containers behind reverse proxies (e.g., DigitalOcean App Platform), the webapp automatically handles base URL detection:
-- If `OAUTH_REDIRECT_BASE_URL` is set, it is used for all OAuth redirect URLs
-- If not set, the webapp extracts the base URL from `X-Forwarded-Host` and `X-Forwarded-Proto` headers (set by reverse proxies)
+- `APP_URL` is used if set (automatically provided by DigitalOcean App Platform as `${APP_URL}`)
+- If `APP_URL` is not set, the webapp extracts the base URL from `X-Forwarded-Host` and `X-Forwarded-Proto` headers (set by reverse proxies)
 - This prevents OAuth redirects from using `0.0.0.0` or internal Docker hostnames
-- **Recommended**: Always set `OAUTH_REDIRECT_BASE_URL` to your public domain in production deployments
+- **Recommended**: Use `APP_URL` when available (e.g., DigitalOcean App Platform), or ensure proper reverse proxy headers are set
 
 The web interface is built with React and Tailwind CSS, featuring:
 - A modern, polished landing page (`/`) with enhanced visual design inspired by top SaaS products
@@ -672,7 +672,7 @@ For complete environment variable documentation and setup instructions, see:
   - Plain string (will be hashed with SHA-256 to produce 32 bytes)
   - If not provided, a random 32-byte key is generated (sessions won't persist across restarts)
 - `API_KEYS` - Comma-separated list of valid API keys for API key authentication (optional)
-- `OAUTH_REDIRECT_BASE_URL` - Base URL for OAuth callbacks (default: `http://localhost:8080`, use ngrok URL for localhost development)
+- `APP_URL` - Top-level URL for the application. Used for OAuth callbacks, API endpoints, etc. Automatically provided by DigitalOcean App Platform as `${APP_URL}`. Defaults to `http://localhost:8080` in development if not set.
 - `OAUTH_SUCCESS_REDIRECT_URL` - URL to redirect after successful auth (default: `http://localhost:3000`)
 - `OAUTH_PROVIDER` - Force a specific provider: `google` or `github` (optional)
 - `JWKS_URI` - JWKS endpoint for custom OAuth providers (optional)
@@ -702,7 +702,7 @@ For complete environment variable documentation and setup instructions, see:
 - `ARANGO_DB_NAME` - ArangoDB database name
 - `ARANGO_USER` - ArangoDB username
 - `ARANGO_PASSWORD` - ArangoDB password
-- `OAUTH_REDIRECT_BASE_URL` - Base URL for OAuth redirects (e.g., `http://localhost:3000`). **Important for Docker deployments**: Must be set to the public domain (e.g., `https://yourdomain.com`). The webapp automatically handles reverse proxy environments by extracting the base URL from `X-Forwarded-Host` and `X-Forwarded-Proto` headers if `OAUTH_REDIRECT_BASE_URL` is not set, preventing redirects to `0.0.0.0` in Docker containers.
+- `APP_URL` - Top-level URL for the application. Used for OAuth redirects, API endpoints, etc. Automatically provided by DigitalOcean App Platform as `${APP_URL}`. If not set, extracts from `X-Forwarded-Host` and `X-Forwarded-Proto` headers in reverse proxy environments, or defaults to `http://localhost:3000` in development.
 - `GOOGLE_CLIENT_ID` - Google OAuth client ID
 - `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
 - `GITHUB_CLIENT_ID` - GitHub OAuth client ID
