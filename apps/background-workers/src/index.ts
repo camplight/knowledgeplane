@@ -2,6 +2,7 @@ import "dotenv/config";
 import { init } from "@knowledgeplane/db";
 import { CardConsolidator } from "./workers/card-consolidator.js";
 import { EmbeddingsGenerator } from "./workers/embeddings-generator.js";
+import { DexcomFetcher } from "./workers/dexcom-fetcher.js";
 
 async function main() {
   console.log("Starting KnowledgePlane Background Workers...");
@@ -18,6 +19,10 @@ async function main() {
   const embeddingsGenerator = new EmbeddingsGenerator();
   embeddingsGenerator.start();
 
+  // Start Dexcom fetcher worker
+  const dexcomFetcher = new DexcomFetcher();
+  dexcomFetcher.start();
+
   console.log("All workers started");
 
   // Graceful shutdown
@@ -25,6 +30,7 @@ async function main() {
     console.log("SIGTERM received, shutting down gracefully...");
     cardConsolidator.stop();
     embeddingsGenerator.stop();
+    dexcomFetcher.stop();
     process.exit(0);
   });
 
@@ -32,6 +38,7 @@ async function main() {
     console.log("SIGINT received, shutting down gracefully...");
     cardConsolidator.stop();
     embeddingsGenerator.stop();
+    dexcomFetcher.stop();
     process.exit(0);
   });
 }

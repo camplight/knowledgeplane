@@ -99,6 +99,12 @@ ArangoDB (graph database with full-text search)
 | `fact_relations.get_related` | Get facts related to a given fact via outgoing relations. Returns relations and the related facts. Optionally filter by relation type |
 | `fact_relations.get_incoming` | Get facts that have relations pointing to a given fact (incoming relations). Returns relations and the source facts. Optionally filter by relation type |
 | `workers.trigger` | Trigger a background worker to run (card-consolidator or embeddings-generator) |
+| `dexcom.getAuthUrl` | Get the Dexcom OAuth 2.0 authorization URL for user authentication. Users need to visit this URL to authorize access to their Dexcom CGM data |
+| `dexcom.fetch` | Fetch all data from Dexcom API and convert it into facts. Requires OAuth 2.0 authentication with Dexcom. Fetches EGVs (glucose values), calibrations, alerts, devices, events, and data range, then uses AI to extract meaningful facts |
+| `dexcom.integration.create` | Create a Dexcom integration for automatic data fetching. Stores OAuth tokens and configuration for periodic background fetching |
+| `dexcom.integration.update` | Update a Dexcom integration (enable/disable, change fetch interval, update tokens) |
+| `dexcom.integration.list` | List Dexcom integrations for a team |
+| `dexcom.integration.delete` | Delete a Dexcom integration |
 
 **facts.write Parameters:**
 - `content` (required): The content of the fact
@@ -140,6 +146,25 @@ ArangoDB (graph database with full-text search)
 
 **workers.trigger Parameters:**
 - `worker` (required): The name of the worker to trigger ("card-consolidator" or "embeddings-generator")
+
+**dexcom.getAuthUrl Parameters:**
+- `client_id` (optional): Dexcom API client ID. If not provided, will use DEXCOM_CLIENT_ID from environment
+- `redirect_uri` (optional): OAuth redirect URI. If not provided, will use DEXCOM_REDIRECT_URI from environment
+- `scopes` (optional): OAuth scopes to request. Defaults to ["egv", "calibrations", "events", "devices"]
+- `state` (optional): Optional state parameter for OAuth flow security
+- `base_url` (optional): Dexcom API base URL. Defaults to sandbox (https://sandbox-api.dexcom.com). Use https://api.dexcom.com for production
+
+**dexcom.fetch Parameters:**
+- `access_token` (optional): Dexcom OAuth 2.0 access token. If not provided, will use DEXCOM_ACCESS_TOKEN from environment
+- `client_id` (optional): Dexcom API client ID. If not provided, will use DEXCOM_CLIENT_ID from environment
+- `client_secret` (optional): Dexcom API client secret. If not provided, will use DEXCOM_CLIENT_SECRET from environment
+- `redirect_uri` (optional): OAuth redirect URI. If not provided, will use DEXCOM_REDIRECT_URI from environment
+- `base_url` (optional): Dexcom API base URL. Defaults to sandbox (https://sandbox-api.dexcom.com). Use https://api.dexcom.com for production
+- `start_date` (optional): Start date for data range (ISO 8601 format, e.g., "2024-01-01T00:00:00"). If not provided, uses available data range
+- `end_date` (optional): End date for data range (ISO 8601 format, e.g., "2024-01-31T23:59:59"). If not provided, uses available data range
+- `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
+
+**Note:** `team_id` is NOT accepted as a parameter. It is automatically set from the authenticated session context. Any `team_id` provided in tool arguments will be ignored and replaced with the team ID from the session context.
 
 **facts.trash Parameters:**
 - `id` (required): The ID of the fact to trash
@@ -687,6 +712,11 @@ For complete environment variable documentation and setup instructions, see:
 - `ANTHROPIC_API_KEY` - Anthropic API key (required if using Anthropic provider)
 - `ANTHROPIC_MODEL` - Anthropic model to use (default: `claude-3-5-sonnet-20241022`)
 - `UPLOADS_DIR` - Directory for storing uploaded files (default: `./uploads`)
+- `DEXCOM_CLIENT_ID` - Dexcom API client ID (required for Dexcom integration)
+- `DEXCOM_CLIENT_SECRET` - Dexcom API client secret (required for Dexcom integration)
+- `DEXCOM_REDIRECT_URI` - OAuth redirect URI for Dexcom API (required for Dexcom integration)
+- `DEXCOM_ACCESS_TOKEN` - Dexcom OAuth 2.0 access token (optional, can be provided via tool arguments)
+- `DEXCOM_BASE_URL` - Dexcom API base URL (default: `https://sandbox-api.dexcom.com` for sandbox, use `https://api.dexcom.com` for production)
 
 **Background Worker (`apps/background-workers/.env.dev`):**
 - `ARANGO_URL` - ArangoDB connection URL
@@ -1106,6 +1136,52 @@ The response will include:
 - Number of facts created
 - Number of relations created
 - List of extracted facts with their IDs and content
+
+**Example: Get Dexcom OAuth authorization URL**
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":29,
+    "method":"tools/call",
+    "params":{
+      "name":"dexcom.getAuthUrl",
+      "arguments":{
+        "client_id":"your-dexcom-client-id",
+        "redirect_uri":"https://your-app.com/oauth/callback",
+        "scopes":["egv", "calibrations", "events", "devices"]
+      }
+    }
+  }'
+```
+
+**Example: Fetch Dexcom data and convert to facts**
+```bash
+curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: test-session-123" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":30,
+    "method":"tools/call",
+    "params":{
+      "name":"dexcom.fetch",
+      "arguments":{
+        "access_token":"your-dexcom-access-token",
+        "start_date":"2024-01-01T00:00:00",
+        "end_date":"2024-01-31T23:59:59"
+      }
+    }
+  }'
+```
+
+The response will include:
+- Summary of Dexcom data fetched (EGVs count, calibrations count, alerts count, devices count, events count, data range)
+- Number of facts created
+- Number of relations created
+- List of created facts with IDs and content preview
 
 **Example: Consolidate facts into a knowledge card**
 ```bash
@@ -1586,6 +1662,17 @@ KnowledgePlane includes background workers that automatically maintain and organ
 - Stores embeddings directly in ArangoDB documents
 - Can be manually triggered via the worker logs page or tRPC API
 
+**Dexcom Fetcher:**
+- Runs every 15 minutes
+- Automatically fetches data from Dexcom API for enabled integrations
+- Processes integrations that are due for fetching based on their configured interval (default: 60 minutes)
+- Automatically refreshes OAuth tokens when they expire
+- Fetches EGVs (glucose values), calibrations, alerts, devices, events, and data range
+- Uses AI to extract meaningful facts and relations from the Dexcom data
+- Creates facts and relations in the knowledge base scoped to the integration's team
+- Tracks last fetch time and only fetches new data since last fetch
+- Creates worker logs for each fetch operation
+
 **Manual Worker Triggering:**
 Workers can be manually triggered through:
 - **Web UI**: Navigate to `/worker-logs` page and click the "Trigger Card Consolidator" or "Trigger Embeddings Generator" buttons
@@ -1822,6 +1909,8 @@ Navigate to `/upload` in the web application (requires authentication).
 - ✅ Webhook support
 - ✅ REST API endpoints
 - ✅ Knowledge base editor page with facts, cards, and graph views
+- ✅ Dexcom API integration for fetching CGM data and converting to facts
+- ✅ Dexcom auto-fetch background worker for periodic data synchronization
 - ✅ Card viewing and details in editor
 - ✅ Worker logs page with manual worker triggering functionality
 - ✅ tRPC route for triggering workers (`workerLogs.trigger`)

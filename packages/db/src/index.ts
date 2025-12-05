@@ -11,5 +11,7 @@ export * from "./models/WorkerLog";
 export * from "./models/ChatThread";
 export * from "./models/Team";
 export * from "./models/TeamMember";
+export * from "./models/DexcomIntegration";
 export * from "./lib/webhook-trigger";
 export * from "./lib/vector-search";
+export * from "./lib/dexcom-client";

@@ -82,6 +82,14 @@ import {
   factsConsolidateTool,
   handleFactsConsolidate,
 } from "./handlers/facts.consolidate.js";
+import {
+  dexcomFetchTool,
+  handleDexcomFetch,
+} from "./handlers/dexcom.fetch.js";
+import {
+  dexcomGetAuthUrlTool,
+  handleDexcomGetAuthUrl,
+} from "./handlers/dexcom.getAuthUrl.js";
 
 export interface McpContext {
   userId?: string;
@@ -220,6 +228,8 @@ const tools = [
   knowledgeCardsListTool,
   knowledgeCardsSplitTool,
   knowledgeCardsCombineTool,
+  dexcomFetchTool,
+  dexcomGetAuthUrlTool,
 ];
 
 export function createMcpServer(
@@ -403,6 +413,14 @@ export function createMcpServer(
         setLastUpdatedBy: true,
       });
       handler = handleKnowledgeCardsCombine;
+    } else if (name === "dexcom.fetch") {
+      handlerArgs = prepareHandlerArgs(args, context, {
+        setCreatedBy: true,
+      });
+      handler = handleDexcomFetch;
+    } else if (name === "dexcom.getAuthUrl") {
+      handlerArgs = { ...args } as any;
+      handler = handleDexcomGetAuthUrl;
     } else {
       const error = `Unknown tool: ${name}`;
       if (logger) {

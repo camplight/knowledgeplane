@@ -182,6 +182,7 @@ export const collections = {
   chat_messages: db.collection("chat_messages"),
   teams: db.collection("teams"),
   team_members: db.collection("team_members"),
+  dexcom_integrations: db.collection("dexcom_integrations"),
 };
 
 // Graph for relations
@@ -231,6 +232,7 @@ export async function init() {
     "chat_messages",
     "teams",
     "team_members",
+    "dexcom_integrations",
   ];
 
   for (const name of documentCollectionNames) {
