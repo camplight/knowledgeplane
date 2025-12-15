@@ -541,8 +541,18 @@ KnowledgePlane implements OAuth 2.0 Authorization Server Metadata discovery per 
 4. User is redirected to the OAuth provider's login page
 5. After successful authentication, user is redirected to the callback endpoint
 6. System creates or retrieves user account based on OAuth provider data
-7. A session cookie is created and user is redirected to `/dashboard`
+7. A session cookie is created and user is redirected:
+   - If a redirect parameter was provided (e.g., from an invite link), user is redirected to that path
+   - Otherwise, if onboarding is not completed, user is redirected to `/onboarding`
+   - Otherwise, user is redirected to `/dashboard`
 8. Dashboard provides instructions for using MCP URL with agents
+
+**Redirect Parameter Handling:**
+- The home page (`/`) accepts an optional `redirect` query parameter (e.g., `/?redirect=/invite/token123`)
+- When present, this parameter is passed to OAuth routes (`/api/auth/google?redirect=...` or `/api/auth/github?redirect=...`)
+- OAuth routes store the redirect parameter in a secure cookie during the OAuth flow
+- After successful authentication, the callback handler retrieves the redirect parameter and redirects the user accordingly
+- This ensures users are returned to their intended destination (e.g., invite acceptance page) after first-time sign-up
 
 **MCP Session Authentication (for AI agents):**
 1. MCP client (e.g., ChatGPT) discovers OAuth configuration via `/.well-known/oauth-authorization-server`
@@ -626,6 +636,7 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Shows team and inviter information
   - Handles expired and invalid invitations
   - Clear call-to-action directing users to sign in to continue
+  - Redirect parameter preservation: When users click "Sign In to Continue" from an invite page, the redirect parameter (`/invite/:token`) is preserved through the OAuth flow. After successful authentication (including first-time sign-up), users are automatically redirected back to the invite page to complete the invitation acceptance
 
 **Token-Based Authentication:**
 All endpoints support Bearer token authentication via the `Authorization` header:

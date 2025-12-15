@@ -1,6 +1,18 @@
 import Link from "next/link";
 
-export default function HomePage() {
+export default function HomePage({
+  searchParams,
+}: {
+  searchParams?: { redirect?: string };
+}) {
+  const redirectParam = searchParams?.redirect;
+  const googleAuthUrl = redirectParam
+    ? `/api/auth/google?redirect=${encodeURIComponent(redirectParam)}`
+    : "/api/auth/google";
+  const githubAuthUrl = redirectParam
+    ? `/api/auth/github?redirect=${encodeURIComponent(redirectParam)}`
+    : "/api/auth/github";
+
   return (
     <div className="min-h-screen bg-white relative overflow-hidden">
       {/* Navigation */}
@@ -44,7 +56,7 @@ export default function HomePage() {
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-20">
             <Link
-              href="/api/auth/google"
+              href={googleAuthUrl}
               className="group relative flex items-center justify-center gap-3 w-full sm:w-auto px-8 py-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl shadow-slate-900/25 hover:shadow-slate-900/40 transform hover:scale-[1.02] active:scale-[0.98]"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
@@ -56,7 +68,7 @@ export default function HomePage() {
               <span>Continue with Google</span>
             </Link>
             <Link
-              href="/api/auth/github"
+              href={githubAuthUrl}
               className="group relative flex items-center justify-center gap-3 w-full sm:w-auto px-8 py-4 bg-white hover:bg-slate-50 text-slate-900 font-semibold rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl shadow-slate-200/50 hover:shadow-slate-300/50 border border-slate-200 hover:border-slate-300 transform hover:scale-[1.02] active:scale-[0.98]"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">

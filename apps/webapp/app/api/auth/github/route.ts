@@ -8,6 +8,17 @@ export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
   const state = crypto.randomBytes(32).toString("base64url");
 
+  // Store redirect parameter if present (e.g., from invite link)
+  const redirectParam = request.nextUrl.searchParams.get("redirect");
+  if (redirectParam) {
+    cookieStore.set("oauthRedirect", redirectParam, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 600,
+    });
+  }
+
   cookieStore.set("oauthState", state, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

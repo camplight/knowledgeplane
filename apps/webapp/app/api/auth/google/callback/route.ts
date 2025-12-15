@@ -32,10 +32,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  cookieStore.delete("oauthState");
-  cookieStore.delete("oauthProvider");
+    cookieStore.delete("oauthState");
+    cookieStore.delete("oauthProvider");
+    
+    // Get redirect parameter if stored (e.g., from invite link)
+    const redirectPath = cookieStore.get("oauthRedirect")?.value;
+    if (redirectPath) {
+      cookieStore.delete("oauthRedirect");
+    }
 
-  const redirectUri = `${baseUrl}/api/auth/google/callback`;
+    const redirectUri = `${baseUrl}/api/auth/google/callback`;
 
   try {
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -119,6 +125,11 @@ export async function GET(request: NextRequest) {
       sameSite: "lax",
       maxAge: 60 * 60 * 24 * 7,
     });
+
+    // Use stored redirect path if available (e.g., invite link)
+    if (redirectPath) {
+      return NextResponse.redirect(new URL(redirectPath, baseUrl));
+    }
 
     // Redirect to onboarding if not completed
     if (!user.onboarding_completed) {
