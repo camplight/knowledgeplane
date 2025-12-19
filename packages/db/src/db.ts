@@ -324,6 +324,7 @@ export const collections = {
   chat_messages: db.collection("chat_messages"),
   workspaces: db.collection("workspaces"),
   workspace_members: db.collection("workspace_members"),
+  data_sources: db.collection("data_sources"),
 };
 
 // Graph for relations
@@ -373,6 +374,7 @@ export async function init() {
     "chat_messages",
     "workspaces",
     "workspace_members",
+    "data_sources",
   ];
 
   for (const name of documentCollectionNames) {
@@ -657,6 +659,16 @@ export async function init() {
       type: "persistent",
       fields: ["tool_call_id"],
       name: "idx_chat_message_tool_call_id",
+    });
+    await collections.data_sources.ensureIndex({
+      type: "persistent",
+      fields: ["workspace_id"],
+      name: "idx_data_source_workspace_id",
+    });
+    await collections.data_sources.ensureIndex({
+      type: "persistent",
+      fields: ["enabled", "next_run_at"],
+      name: "idx_data_source_enabled_next_run",
     });
     // Vector index for knowledge_cards embeddings
     try {

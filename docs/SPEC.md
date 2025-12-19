@@ -31,6 +31,7 @@ AQL queries – support for ArangoDB Query Language (AQL) for advanced graph que
 
 KnowledgeCard consolidation – background worker automatically creates FactRelations between unconsolidated facts using AI analysis, then consolidates related facts and their FactRelations into summary knowledge cards using OpenAI agents. The worker uses graph traversal to find related facts via FactRelations.
 
+DataSource automation – automated data sources that gather knowledge from external sources (APIs, websites, databases, etc.) and store facts into the Knowledge Plane. Data sources are defined via markdown files or zip archives containing instructions and code, scheduled to run at intervals or cron expressions, and executed by a background worker that uses AI models with code interpretation capabilities and MCP tools to store gathered knowledge.
 
 Webhooks – register webhooks to receive notifications on fact/card events.
 
@@ -62,7 +63,7 @@ Clients (Claude Desktop, VS Code, Cursor)
    ↓
 [MCP Server over HTTP]  [REST API]
    ↓
-Background Workers (Card Consolidation, Embeddings Generation)
+Background Workers (Card Consolidation, Embeddings Generation, Data Source Runner)
    ↓
 ArangoDB (graph database with full-text search)
 ```
@@ -297,6 +298,7 @@ ArangoDB (graph database with full-text search)
 | `GET /profile` | User profile and management page (protected, requires session) |
 | `GET /onboarding` | Onboarding page for new users (protected, requires session) - create first workspace and complete onboarding |
 | `GET /workspaces` | Workspace management page (protected, requires session) - create workspaces, manage members, and invitations |
+| `GET /data-sources` | Data sources management page (protected, requires session) - create, manage, and trigger automated data sources |
 | `GET /invite/:token` | Public invitation acceptance page - view invitation details (public), accept workspace invitations via personal links (requires authentication) |
 
 **REST API Endpoints (Port 8081):**
@@ -469,9 +471,27 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `workspace_id` (string): Reference to workspace ID
 - `uploaded_by` (string): Reference to user ID
 - `metadata` (object): Additional metadata
+  - For data source definition files: `content` (text for .md/.txt files) or `zip_content` (base64 for .zip files)
+  - For zip files: `is_zip` (boolean), `files` (array of extracted files with filename and content)
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
 - `fact_ids` (array): Array of fact IDs extracted from this file
+
+**DataSource Collection:**
+- `_id` (ArangoDB document ID): Primary key
+- `_key` (string): Document key
+- `name` (string): Data source name
+- `workspace_id` (string): Reference to workspace ID
+- `description` (string, optional): Data source description
+- `schedule` (string): Schedule expression (e.g., "every 6 hours", "0 */6 * * *" for cron)
+- `definition_file_id` (string): Reference to File record containing the definition (.md, .txt, or .zip)
+- `enabled` (boolean): Whether the data source is enabled and should run automatically
+- `created_by` (string): Reference to user ID who created the data source
+- `last_run_at` (string, optional): Timestamp of last execution (ISO 8601)
+- `next_run_at` (string, optional): Timestamp of next scheduled execution (ISO 8601)
+- `metadata` (object): Additional metadata for the data source
+- `created_at` (string): Creation timestamp (ISO 8601)
+- `updated_at` (string): Last update timestamp (ISO 8601)
 
 **Invitation Collection:**
 - `_id` (ArangoDB document ID): Primary key
@@ -624,6 +644,17 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Tabbed interface for workspace settings, members, and invitations
   - Toast notifications for user feedback (copy link, delete invitation)
   - Expiration days input with label and help text showing default value (7 days)
+- Data sources management page (`/data-sources`) with:
+  - Data source listing with status indicators (enabled/disabled)
+  - Create data source form with file upload (.md, .txt, or .zip)
+  - Schedule configuration (interval-based or cron expressions)
+  - Enable/disable toggle for each data source
+  - Manual trigger button ("Run Now") for immediate execution
+  - View and edit data source details (name, description, schedule, enabled status)
+  - View definition file information
+  - Last run and next run timestamps display
+  - Pagination support for large lists
+  - Toast notifications for user feedback
 - Onboarding page (`/onboarding`) for new users:
   - First-time user flow to create initial workspace
   - Onboarding completion tracking
@@ -800,7 +831,7 @@ curl -X POST http://localhost:8080/mcp \
 This project uses npm workspaces with multiple packages:
 - `apps/mcp-server` - Backend MCP server (Fastify + TypeScript)
 - `apps/webapp` - Frontend web application (Next.js + React + TypeScript)
-- `apps/background-workers` - Background workers for card consolidation and embeddings
+- `apps/background-workers` - Background workers for card consolidation, embeddings generation, and data source execution
 - `apps/rest-api` - REST API server (optional)
 - `packages/db` - Shared database package
 - `packages/file-processor` - File processing utilities
@@ -1595,10 +1626,35 @@ KnowledgePlane includes background workers that automatically maintain and organ
 - Stores embeddings directly in ArangoDB documents
 - Can be manually triggered via the worker logs page or tRPC API
 
+**Data Source Runner:**
+- Checks for enabled data sources ready to run every minute
+- Executes data source definitions (markdown files or zip archives containing instructions and code)
+- Uses AI models (OpenAI GPT-4o by default) with code interpretation capabilities
+- Configures MCP tools to allow the AI model to store facts into the Knowledge Plane
+- Supports flexible scheduling:
+  - Interval-based: "every X minutes/hours/days" (e.g., "every 6 hours")
+  - Cron expressions: standard cron format (e.g., "0 */6 * * *")
+- Extracts definition content from:
+  - `.md` or `.txt` files: stored as text instructions
+  - `.zip` files: extracts markdown files (instructions) and code files
+- Updates `last_run_at` and calculates `next_run_at` based on schedule
+- Logs execution results to `WorkerLog` collection
+- Can be manually triggered via the data sources UI or tRPC API
+- Each data source execution:
+  1. Loads definition file content
+  2. Builds system prompt with instructions and available code files
+  3. Calls AI model with MCP tools configured
+  4. AI model executes code, gathers data, and stores facts via MCP tools
+  5. Updates data source metadata with execution results
+
 **Manual Worker Triggering:**
 Workers can be manually triggered through:
-- **Web UI**: Navigate to `/worker-logs` page and click the "Trigger Card Consolidator" or "Trigger Embeddings Generator" buttons
-- **tRPC API**: Call `workerLogs.trigger` mutation with `worker` parameter ("card-consolidator" or "embeddings-generator")
+- **Web UI**: 
+  - Navigate to `/worker-logs` page and click the "Trigger Card Consolidator" or "Trigger Embeddings Generator" buttons
+  - Navigate to `/data-sources` page and click "Run Now" button for a specific data source
+- **tRPC API**: 
+  - Call `workerLogs.trigger` mutation with `worker` parameter ("card-consolidator" or "embeddings-generator")
+  - Call `dataSources.trigger` mutation with `id` parameter (data source ID)
 - **Trigger Mechanism**: 
   - Creates a trigger record in the `worker_triggers` collection with status "pending"
   - Workers check for pending triggers every 30 seconds
@@ -1834,6 +1890,9 @@ Navigate to `/upload` in the web application (requires authentication).
 - ✅ Card viewing and details in editor
 - ✅ Worker logs page with manual worker triggering functionality
 - ✅ tRPC route for triggering workers (`workerLogs.trigger`)
+- ✅ Data sources management page with create, edit, delete, and trigger functionality
+- ✅ Data source runner worker that executes scheduled data sources with AI and MCP tools
+- ✅ Support for markdown and zip file definitions for data sources
 - ✅ Docker image distribution system for client deployments
 - ✅ Distribution package with docker-compose.yml and environment-based configuration
 - ✅ Scripts for building and packaging Docker images for distribution

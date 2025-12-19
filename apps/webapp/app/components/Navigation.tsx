@@ -59,9 +59,9 @@ export function Navigation() {
             <span className="text-xl font-bold bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 bg-clip-text text-transparent">
               KnowledgePlane
             </span>
+            <WorkspaceSelector />
           </div>
           <div className="flex items-center gap-4">
-            <WorkspaceSelector />
             <Link
               href="/dashboard"
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
@@ -121,6 +121,16 @@ export function Navigation() {
               }`}
             >
               Worker Logs
+            </Link>
+            <Link
+              href="/data-sources"
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                isActive("/data-sources")
+                  ? "bg-blue-600 text-white hover:bg-blue-700"
+                  : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+            >
+              Data Sources
             </Link>
             
             {/* User Menu with Dropdown */}

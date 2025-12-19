@@ -11,5 +11,6 @@ export * from "./models/WorkerLog";
 export * from "./models/ChatThread";
 export * from "./models/Workspace";
 export * from "./models/WorkspaceMember";
+export * from "./models/DataSource";
 export * from "./lib/webhook-trigger";
 export * from "./lib/vector-search";

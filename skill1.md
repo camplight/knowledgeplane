@@ -1,0 +1,1 @@
+Ping https://camplight.net and record as a fact is it online or not
