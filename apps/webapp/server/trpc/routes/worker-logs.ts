@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { WorkerLog, TeamMember } from "@knowledgeplane/db/next";
+import { WorkerLog, WorkspaceMember } from "@knowledgeplane/db/next";
 import { collections } from "@knowledgeplane/db";
 import { z } from "zod";
 
@@ -16,22 +16,31 @@ export const workerLogsRouter = router({
         .optional(),
     )
     .query(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       const limit = input?.limit || 50;
       const offset = input?.offset || 0;
       const worker_name = input?.worker_name;
       const status = input?.status;
-      const logs = await WorkerLog.list(ctx.teamId, limit, offset, worker_name, status);
-      const total = await WorkerLog.count(ctx.teamId, worker_name, status);
+      const logs = await WorkerLog.list(
+        ctx.workspaceId,
+        limit,
+        offset,
+        worker_name,
+        status,
+      );
+      const total = await WorkerLog.count(ctx.workspaceId, worker_name, status);
       return { logs, total, limit, offset };
     }),
   trigger: protectedProcedure
@@ -72,7 +81,7 @@ export const workerLogsRouter = router({
         await WorkerLog.create({
           worker_name: input.worker,
           task_type: "manual-trigger",
-          team_id: ctx.teamId || undefined,
+          workspace_id: ctx.workspaceId || undefined,
           status: "running",
           message: `Manual trigger requested for ${input.worker}`,
         });

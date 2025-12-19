@@ -10,8 +10,8 @@ import {
   type ChatCompletionOptions,
 } from "@knowledgeplane/aimodel";
 
-// Build MCP server URL with API key and team_id
-function getMcpServerUrl(teamId?: string | null): string | undefined {
+// Build MCP server URL with API key and workspace_id
+function getMcpServerUrl(workspaceId?: string | null): string | undefined {
   // Prefer full URL if provided
   let baseUrl: string;
   if (process.env.MCP_SERVER_URL) {
@@ -31,9 +31,9 @@ function getMcpServerUrl(teamId?: string | null): string | undefined {
     url.searchParams.set("api_key", process.env.MCP_SERVER_API_KEY);
   }
   
-  // Add team_id as query parameter if provided
-  if (teamId) {
-    url.searchParams.set("team_id", teamId);
+  // Add workspace_id as query parameter if provided
+  if (workspaceId) {
+    url.searchParams.set("workspace_id", workspaceId);
   }
 
   return url.toString();
@@ -50,22 +50,22 @@ export const chatRouter = router({
       // Ensure database is initialized (applies fetch patch)
       await ensureInitialized();
 
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
       const { message } = input;
       const userId = ctx.user.userId;
 
-      // Validate team membership
-      const { TeamMember } = await import("@knowledgeplane/db/next");
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, userId);
+      // Validate workspace membership
+      const { WorkspaceMember } = await import("@knowledgeplane/db/next");
+      const member = await WorkspaceMember.findByWorkspaceAndUser(ctx.workspaceId, userId);
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
-      // Get or create thread for user and team
-      const thread = await ChatThread.getOrCreate(userId, ctx.teamId);
+      // Get or create thread for user and workspace
+      const thread = await ChatThread.getOrCreate(userId, ctx.workspaceId);
 
       // Store user message
       await ChatThread.addMessage({
@@ -80,8 +80,8 @@ export const chatRouter = router({
         process.env.OPENAI_API_KEY,
       );
 
-      // Get MCP server URL with team_id
-      const mcpServerUrl = getMcpServerUrl(ctx.teamId);
+      // Get MCP server URL with workspace_id
+      const mcpServerUrl = getMcpServerUrl(ctx.workspaceId);
 
       // Build system prompt with instructions for JSON response
       const systemPrompt = `You are a helpful assistant with access to a knowledge base through MCP tools.

@@ -34,7 +34,7 @@ export async function handleFactsBulkWrite(args: {
   facts: Array<{
     content: string;
     metadata?: Record<string, string>;
-    team_id?: string;
+    workspace_id?: string;
     created_by?: string;
     last_updated_by?: string;
   }>;
@@ -44,20 +44,20 @@ export async function handleFactsBulkWrite(args: {
     throw new Error("At least one fact is required");
   }
 
-  // Validate that user IDs and team_id are provided (should be merged from context by server.ts)
+  // Validate that user IDs and workspace_id are provided (should be merged from context by server.ts)
   const hasUserIds = args.facts.every(
     (fact) => fact.created_by && fact.last_updated_by,
   );
-  const hasTeamIds = args.facts.every((fact) => fact.team_id);
+  const hasWorkspaceIds = args.facts.every((fact) => fact.workspace_id);
 
   if (!hasUserIds) {
     throw new Error(
       "User ID is required for all facts. Either provide created_by and last_updated_by for each fact, or authenticate via session.",
     );
   }
-  if (!hasTeamIds) {
+  if (!hasWorkspaceIds) {
     throw new Error(
-      "Team ID is required for all facts. Team ID should be automatically inferred from authenticated session context.",
+      "Workspace ID is required for all facts. Workspace ID should be automatically inferred from authenticated session context.",
     );
   }
 
@@ -65,7 +65,7 @@ export async function handleFactsBulkWrite(args: {
   const factInputs = args.facts.map((fact) => ({
     content: fact.content,
     metadata: fact.metadata,
-    team_id: fact.team_id!,
+    workspace_id: fact.workspace_id!,
     created_by: fact.created_by!,
     last_updated_by: fact.last_updated_by!,
   }));

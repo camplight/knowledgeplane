@@ -6,7 +6,7 @@ export interface FileInput {
   mime_type: string;
   size: number;
   storage_path: string; // Path where file is stored
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   uploaded_by: string; // User ID
   metadata?: Record<string, any>;
 }
@@ -20,7 +20,7 @@ export interface FileRecord {
   mime_type: string;
   size: number;
   storage_path: string;
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   uploaded_by: string;
   metadata: Record<string, any>;
   created_at: string;
@@ -43,7 +43,7 @@ export class File {
       mime_type: input.mime_type,
       size: input.size,
       storage_path: input.storage_path,
-      team_id: input.team_id,
+      workspace_id: input.workspace_id,
       uploaded_by: input.uploaded_by,
       metadata: input.metadata || {},
       fact_ids: [],
@@ -89,16 +89,16 @@ export class File {
   }
 
   static async list(
-    teamId?: string,
+    workspaceId?: string,
     limit: number = 50,
     offset: number = 0,
   ): Promise<FileRecord[]> {
     const filters: string[] = [];
     const bindVars: any = { limit, offset };
     
-    if (teamId) {
-      filters.push(`file.team_id == @teamId`);
-      bindVars.teamId = teamId;
+    if (workspaceId) {
+      filters.push(`file.workspace_id == @workspaceId`);
+      bindVars.workspaceId = workspaceId;
     }
     
     const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
@@ -141,7 +141,7 @@ export class File {
       mime_type: doc.mime_type,
       size: doc.size,
       storage_path: doc.storage_path,
-      team_id: doc.team_id,
+      workspace_id: doc.workspace_id,
       uploaded_by: doc.uploaded_by,
       metadata: doc.metadata || {},
       created_at: doc.created_at,

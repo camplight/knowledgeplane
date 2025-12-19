@@ -1,4 +1,4 @@
-🧠 KnowledgePlane — Shared Team Memory for AI Agents (MCP Server)
+🧠 KnowledgePlane — Shared Workspace Memory for AI Agents (MCP Server)
 
 KnowledgePlane is an open-core Model Context Protocol (MCP) server that gives AI agents and teams a shared, persistent memory layer — secure, queryable, and self-maintaining.
 
@@ -38,11 +38,11 @@ REST API – comprehensive REST API for programmatic access.
 
 User management – automatic user creation and tracking via username/email.
 
-Team management – users can create teams, invite members, and manage team settings. All domain data (facts, cards, files, etc.) is scoped to teams.
+Workspace management – users can create workspaces, invite members, and manage workspace settings. All domain data (facts, cards, files, etc.) is scoped to workspaces.
 
-User onboarding – automatic onboarding flow for new users on first login, including default team creation.
+User onboarding – automatic onboarding flow for new users on first login, including default workspace creation.
 
-Team invitations – personal invitation links (shareable tokens) for inviting users to teams. Links can be copied and shared with friends. Invitation links can be accepted multiple times, allowing many users to register and join the team through the same link. All acceptances are tracked and stored.
+Workspace invitations – personal invitation links (shareable tokens) for inviting users to workspaces. Links can be copied and shared with friends. Invitation links can be accepted multiple times, allowing many users to register and join the workspace through the same link. All acceptances are tracked and stored.
 
 Session-based context – MCP sessions maintain user and knowledge context across requests.
 
@@ -106,7 +106,7 @@ ArangoDB (graph database with full-text search)
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 
-**Note:** `team_id` is NOT accepted as a parameter. It is automatically set from the authenticated session context. Any `team_id` provided in tool arguments will be ignored and replaced with the team ID from the session context.
+**Note:** `workspace_id` is NOT accepted as a parameter. It is automatically set from the authenticated session context. Any `workspace_id` provided in tool arguments will be ignored and replaced with the workspace ID from the session context.
 
 **facts.bulkwrite Parameters:**
 - `facts` (required): Array of fact objects to write. Each fact object has the same parameters as `facts.write`:
@@ -115,7 +115,7 @@ ArangoDB (graph database with full-text search)
   - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
   - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 
-**Note:** `team_id` is NOT accepted as a parameter in any fact object. It is automatically set from the authenticated session context for all facts. Any `team_id` provided in tool arguments will be ignored and replaced with the team ID from the session context.
+**Note:** `workspace_id` is NOT accepted as a parameter in any fact object. It is automatically set from the authenticated session context for all facts. Any `workspace_id` provided in tool arguments will be ignored and replaced with the workspace ID from the session context.
 
 **facts.search Parameters:**
 - `query` (required): Search query for hybrid search (combines full-text and vector search). Use '*' to search all facts
@@ -123,7 +123,7 @@ ArangoDB (graph database with full-text search)
 - `offset` (optional): Offset for pagination (default: 0)
 - `include_trashed` (optional): If true, includes trashed facts in search results (default: false)
 
-**Note:** `team_id` is NOT accepted as a parameter. It is automatically set from the authenticated session context. Any `team_id` provided in tool arguments will be ignored and replaced with the team ID from the session context.
+**Note:** `workspace_id` is NOT accepted as a parameter. It is automatically set from the authenticated session context. Any `workspace_id` provided in tool arguments will be ignored and replaced with the workspace ID from the session context.
 
 **facts.search Response Optimization:**
 - Content is automatically truncated to 500 characters to prevent context window issues
@@ -156,7 +156,7 @@ ArangoDB (graph database with full-text search)
 - `summary` (required): Brief summary of the knowledge card
 - `content` (required): Full content of the knowledge card
 - `fact_ids` (required): Array of fact IDs that are consolidated into this card
-- `team_id` (optional): Team ID. If not provided, inferred from authenticated session (uses user's first team)
+- `workspace_id` (optional): Workspace ID. If not provided, inferred from authenticated session (uses user's first workspace)
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 - `metadata` (optional): Key-value pairs of metadata
@@ -175,13 +175,13 @@ ArangoDB (graph database with full-text search)
 
 **knowledge_cards.search Parameters:**
 - `query` (required): Search query for hybrid search. Use '*' to search all cards
-- `team_id` (optional): Team ID for filtering. If not provided, inferred from authenticated session (uses user's first team)
+- `workspace_id` (optional): Workspace ID for filtering. If not provided, inferred from authenticated session (uses user's first workspace)
 - `k` (optional): Limit for number of results (default: 5)
 - `offset` (optional): Offset for pagination (default: 0)
 - `use_vector_search` (optional): If true, use vector search only; if false, use full-text only; if undefined, use hybrid
 
 **knowledge_cards.list Parameters:**
-- `team_id` (optional): Team ID for filtering. If not provided, inferred from authenticated session (uses user's first team)
+- `workspace_id` (optional): Workspace ID for filtering. If not provided, inferred from authenticated session (uses user's first workspace)
 - `limit` (optional): Maximum number of cards to return (default: 50)
 - `offset` (optional): Offset for pagination (default: 0)
 
@@ -207,11 +207,11 @@ ArangoDB (graph database with full-text search)
 - `filename` (required): Original filename of the file being uploaded
 - `mimeType` (required): MIME type of the file (e.g., 'text/plain', 'application/json')
 - `data` (required): Base64-encoded file content
-- `team_id` (optional): Team ID. If not provided, inferred from authenticated session (uses user's first team)
+- `workspace_id` (optional): Workspace ID. If not provided, inferred from authenticated session (uses user's first workspace)
 - `created_by` (optional): User ID of the uploader. If not provided, inferred from authenticated session (OAuth token or API key)
 
 **files.list Parameters:**
-- `team_id` (optional): Team ID for filtering. If not provided, inferred from authenticated session (uses user's first team)
+- `workspace_id` (optional): Workspace ID for filtering. If not provided, inferred from authenticated session (uses user's first workspace)
 - `limit` (optional): Maximum number of files to return (default: 50)
 - `offset` (optional): Offset for pagination (default: 0)
 
@@ -233,7 +233,7 @@ ArangoDB (graph database with full-text search)
 - `from_fact` (required): Source fact ID
 - `to_fact` (required): Target fact ID
 - `type` (required): Relation type (e.g., 'references', 'depends_on', 'related_to', 'part_of')
-- `team_id` (optional): Team ID. If not provided, inferred from authenticated session (uses user's first team)
+- `workspace_id` (optional): Workspace ID. If not provided, inferred from authenticated session (uses user's first workspace)
 - `metadata` (optional): Additional relation metadata
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 
@@ -246,7 +246,7 @@ ArangoDB (graph database with full-text search)
 - `id` (required): The ID of the relation to delete
 
 **fact_relations.search Parameters:**
-- `team_id` (optional): Team ID for filtering. If not provided, inferred from authenticated session (uses user's first team)
+- `workspace_id` (optional): Workspace ID for filtering. If not provided, inferred from authenticated session (uses user's first workspace)
 - `from_fact` (optional): Filter by source fact ID
 - `to_fact` (optional): Filter by target fact ID
 - `type` (optional): Filter by relation type
@@ -295,9 +295,9 @@ ArangoDB (graph database with full-text search)
 | `GET /upload` | File upload page with AI-powered fact extraction (protected, requires session) |
 | `GET /facts` | Browse facts page (protected, requires session) |
 | `GET /profile` | User profile and management page (protected, requires session) |
-| `GET /onboarding` | Onboarding page for new users (protected, requires session) - create first team and complete onboarding |
-| `GET /teams` | Team management page (protected, requires session) - create teams, manage members, and invitations |
-| `GET /invite/:token` | Public invitation acceptance page - view invitation details (public), accept team invitations via personal links (requires authentication) |
+| `GET /onboarding` | Onboarding page for new users (protected, requires session) - create first workspace and complete onboarding |
+| `GET /workspaces` | Workspace management page (protected, requires session) - create workspaces, manage members, and invitations |
+| `GET /invite/:token` | Public invitation acceptance page - view invitation details (public), accept workspace invitations via personal links (requires authentication) |
 
 **REST API Endpoints (Port 8081):**
 | Endpoint | Description |
@@ -321,18 +321,18 @@ ArangoDB (graph database with full-text search)
 | `PUT /api/webhooks/:id` | Update a webhook |
 | `DELETE /api/webhooks/:id` | Delete a webhook |
 
-**Team Management:**
+**Workspace Management:**
 
-KnowledgePlane supports team-based collaboration:
+KnowledgePlane supports workspace-based collaboration:
 
-- **Teams**: Users can create multiple teams, each with its own isolated knowledge base
-- **Team Members**: Users can be members of multiple teams with different roles:
-  - **Owner**: Full control, can delete team, manage all members
-  - **Admin**: Can manage members and team settings (except deletion)
-  - **Member**: Can create and manage content within the team
-- **Default Team**: New users automatically get a default team created on first login
-- **Team Scoping**: All domain data (facts, knowledge cards, files, relations, etc.) is scoped to teams
-- **Personal Invitation Links**: Team owners/admins can generate shareable invitation links (tokens) that can be copied and sent to friends. Invitations can be deleted by owners/admins. Invitation links are publicly accessible (no authentication required to view invitation details), but require authentication to accept. Invitation links can be accepted multiple times, allowing many users to register and join the team through the same link. All acceptances are tracked in the `acceptances` array.
+- **Workspaces**: Users can create multiple workspaces, each with its own isolated knowledge base
+- **Workspace Members**: Users can be members of multiple workspaces with different roles:
+  - **Owner**: Full control, can delete workspace, manage all members
+  - **Admin**: Can manage members and workspace settings (except deletion)
+  - **Member**: Can create and manage content within the workspace
+- **Default Workspace**: New users automatically get a default workspace created on first login
+- **Workspace Scoping**: All domain data (facts, knowledge cards, files, relations, etc.) is scoped to workspaces
+- **Personal Invitation Links**: Workspace owners/admins can generate shareable invitation links (tokens) that can be copied and sent to friends. Invitations can be deleted by owners/admins. Invitation links are publicly accessible (no authentication required to view invitation details), but require authentication to accept. Invitation links can be accepted multiple times, allowing many users to register and join the workspace through the same link. All acceptances are tracked in the `acceptances` array.
 - **Onboarding**: New users are redirected to onboarding flow on first login
 
 **Session Management:**
@@ -364,15 +364,15 @@ KnowledgePlane supports three types of authentication:
 **MCP Session Management:**
 - Sessions are identified by `mcp-session-id` header
 - User context is automatically inferred from authenticated session (OAuth token or API key)
-- Team context is automatically inferred from authenticated user's first team, or can be provided via query params: `?team_id=teams/123`
+- Workspace context is automatically inferred from authenticated user's first workspace, or can be provided via query params: `?workspace_id=workspaces/123`
 - User context can also be provided via query params: `?username=user&email=user@example.com` (fallback if not authenticated)
 - Authentication via `Authorization: Bearer <token>` header (OAuth), `knowledgeplane-key` header (API key), or `api_key` query parameter (for internal use)
-- **Team ID Auto-Inference**: All MCP tool handlers automatically infer `team_id` from the authenticated user's session context. Tools do NOT accept `team_id` as a parameter - it is automatically set from the user's team context. If a user is authenticated, their `team_id` is automatically inferred from their first team or from the `team_id` query parameter.
-- **Team ID Not Accepted in Args**: `team_id` is NOT accepted in tool handler arguments. Any `team_id` provided in tool arguments will be automatically removed and replaced with the team ID from the authenticated session context. This ensures that authenticated users always operate within their authorized team context, preventing incorrect team_id values (e.g., team names instead of IDs) from being used.
-- For `facts.write` and other creation operations, `created_by`, `last_updated_by`, and `team_id` are automatically set from the authenticated session if not explicitly provided
-- All MCP operations are scoped to the team context (either from query param or user's first team)
+- **Workspace ID Auto-Inference**: All MCP tool handlers automatically infer `workspace_id` from the authenticated user's session context. Tools do NOT accept `workspace_id` as a parameter - it is automatically set from the user's workspace context. If a user is authenticated, their `workspace_id` is automatically inferred from their first workspace or from the `workspace_id` query parameter.
+- **Workspace ID Not Accepted in Args**: `workspace_id` is NOT accepted in tool handler arguments. Any `workspace_id` provided in tool arguments will be automatically removed and replaced with the workspace ID from the authenticated session context. This ensures that authenticated users always operate within their authorized workspace context, preventing incorrect workspace_id values (e.g., workspace names instead of IDs) from being used.
+- For `facts.write` and other creation operations, `created_by`, `last_updated_by`, and `workspace_id` are automatically set from the authenticated session if not explicitly provided
+- All MCP operations are scoped to the workspace context (either from query param or user's first workspace)
 - **Personal MCP URL**: Users can generate and copy their personal MCP server URL with their API key included via the profile page. This URL includes the API key as a query parameter and can be used to connect AI agents and tools.
-- **Team-Aware Chat**: The chat interface is team-aware and automatically passes the current team's `team_id` to the MCP server URL. When users switch teams, the chat automatically uses the correct team context for MCP operations.
+- **Workspace-Aware Chat**: The chat interface is workspace-aware and automatically passes the current workspace's `workspace_id` to the MCP server URL. When users switch workspaces, the chat automatically uses the correct workspace context for MCP operations.
 - **Server Restart Handling**: When the server restarts, in-memory session state is lost. Clients reconnecting with an existing `mcp-session-id` will have a new transport created. The MCP protocol requires clients to send an `initialize` request before any other requests. If a client sends a non-initialize request after a server restart, it will receive a 400 error and should reinitialize the session.
 
 🗄️ Data Model
@@ -386,22 +386,22 @@ KnowledgePlane supports three types of authentication:
 - `onboarding_completed` (boolean): Whether the user has completed onboarding (default: false)
 - `created_at` (string): Creation timestamp (ISO 8601)
 
-**Team Collection:**
+**Workspace Collection:**
 - `_id` (ArangoDB document ID): Primary key
 - `_key` (string): Document key
-- `name` (string): Team name
-- `slug` (string): URL-friendly team identifier (unique)
-- `description` (string): Optional team description
-- `created_by` (string): Reference to user ID who created the team
+- `name` (string): Workspace name
+- `slug` (string): URL-friendly workspace identifier (unique)
+- `description` (string): Optional workspace description
+- `created_by` (string): Reference to user ID who created the workspace
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
 
-**TeamMember Collection:**
+**WorkspaceMember Collection:**
 - `_id` (ArangoDB document ID): Primary key
 - `_key` (string): Document key
-- `team_id` (string): Reference to team ID
+- `workspace_id` (string): Reference to workspace ID
 - `user_id` (string): Reference to user ID
-- `role` (string): Team member role - "owner", "admin", or "member"
+- `role` (string): Workspace member role - "owner", "admin", or "member"
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
 
@@ -410,7 +410,7 @@ KnowledgePlane supports three types of authentication:
 - `_key` (string): Document key
 - `content` (string): Fact content
 - `metadata` (object): Key-value metadata
-- `team_id` (string): Reference to team ID
+- `workspace_id` (string): Reference to workspace ID
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
 - `created_by` (string): Reference to user ID
@@ -425,7 +425,7 @@ KnowledgePlane supports three types of authentication:
 - `from_fact` (string): Source fact ID (normalized)
 - `to_fact` (string): Target fact ID (normalized)
 - `type` (string): Relation type (e.g., "references", "depends_on", "related_to", "part_of")
-- `team_id` (string): Reference to team ID
+- `workspace_id` (string): Reference to workspace ID
 - `metadata` (object): Additional relation metadata
 - `created_by` (string): Reference to user ID
 - `created_at` (string): Creation timestamp (ISO 8601)
@@ -439,7 +439,7 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `summary` (string): Brief summary
 - `content` (string): Full consolidated content
 - `fact_ids` (array): Array of fact IDs that were consolidated
-- `team_id` (string): Reference to team ID
+- `workspace_id` (string): Reference to workspace ID
 - `created_by` (string): Reference to user ID
 - `last_updated_by` (string): Reference to user ID
 - `metadata` (object): Key-value metadata
@@ -451,7 +451,7 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `_key` (string): Document key
 - `url` (string): Webhook URL
 - `events` (array): Array of event names to subscribe to (e.g., ["fact.created", "card.updated"])
-- `team_id` (string): Reference to team ID
+- `workspace_id` (string): Reference to workspace ID
 - `secret` (string): Optional secret for webhook signature
 - `active` (boolean): Whether the webhook is active
 - `created_by` (string): Reference to user ID
@@ -466,7 +466,7 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `mime_type` (string): MIME type of the file
 - `size` (number): File size in bytes
 - `storage_path` (string): Path where file is stored on disk
-- `team_id` (string): Reference to team ID
+- `workspace_id` (string): Reference to workspace ID
 - `uploaded_by` (string): Reference to user ID
 - `metadata` (object): Additional metadata
 - `created_at` (string): Creation timestamp (ISO 8601)
@@ -476,7 +476,7 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 **Invitation Collection:**
 - `_id` (ArangoDB document ID): Primary key
 - `_key` (string): Document key
-- `team_id` (string): Reference to team ID
+- `workspace_id` (string): Reference to workspace ID
 - `invited_by` (string): Reference to user ID who sent the invitation
 - `token` (string): Unique invitation token (personal invitation link)
 - `status` (string): Invitation status - "pending", "accepted", or "expired". Invitations remain "pending" even after acceptances, allowing multiple users to accept the same link.
@@ -484,15 +484,13 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `acceptances` (array): Array of acceptance records, each containing:
   - `user_id` (string): Reference to user ID who accepted the invitation
   - `accepted_at` (string): ISO 8601 timestamp when the invitation was accepted by this user
-- `accepted_at` (string, deprecated): Acceptance timestamp (ISO 8601) - legacy field for backward compatibility
-- `accepted_by` (string, deprecated): Reference to user ID - legacy field for backward compatibility
 - `created_at` (string): Creation timestamp (ISO 8601)
 
 **ChatThread Collection:**
 - `_id` (ArangoDB document ID): Primary key
 - `_key` (string): Document key
 - `user_id` (string): Reference to user ID
-- `team_id` (string): Reference to team ID
+- `workspace_id` (string): Reference to workspace ID
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
 
@@ -586,7 +584,7 @@ The web interface is built with React and Tailwind CSS, featuring:
 - Responsive design optimized for all screen sizes
 - Responsive login pages for OAuth authentication
 - Use cases page (`/use-cases`) showcasing three main use cases:
-  - Team Knowledge Base: Centralize team knowledge for AI assistants
+  - Workspace Knowledge Base: Centralize workspace knowledge for AI assistants
   - AI Agent Memory: Persistent memory across conversations
   - Document Intelligence: Automatic knowledge extraction from documents
   - Each use case includes benefits, descriptions, and branded visual design
@@ -617,23 +615,23 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Search functionality for facts with server-side semantic search
   - Real-time client-side filtering that filters visible facts, cards, and files as you type, searching through content, title, summary, and filename fields
 - Facts browsing page (`/facts`) with pagination, filtering, and detailed fact display
-- Team management page (`/teams`) with:
-  - Team listing and creation
-  - Team settings (name, description)
-  - Team member management (add, update roles, remove members)
+- Workspace management page (`/workspaces`) with:
+  - Workspace listing and creation
+  - Workspace settings (name, description)
+  - Workspace member management (add, update roles, remove members)
   - Invitation management (create invitation links, view, copy links, track status, delete invitations)
   - Role-based access control (owner/admin/member permissions)
-  - Tabbed interface for team settings, members, and invitations
+  - Tabbed interface for workspace settings, members, and invitations
   - Toast notifications for user feedback (copy link, delete invitation)
   - Expiration days input with label and help text showing default value (7 days)
 - Onboarding page (`/onboarding`) for new users:
-  - First-time user flow to create initial team
+  - First-time user flow to create initial workspace
   - Onboarding completion tracking
 - Invitation acceptance page (`/invite/:token`) for public invitation links:
   - Public access - unauthenticated users can view invitation details
-  - Welcome page for unauthenticated users with team information and sign-in prompt
-  - Accept team invitations via personal links (requires authentication)
-  - Shows team and inviter information
+  - Welcome page for unauthenticated users with workspace information and sign-in prompt
+  - Accept workspace invitations via personal links (requires authentication)
+  - Shows workspace and inviter information
   - Handles expired and invalid invitations
   - Clear call-to-action directing users to sign in to continue
   - Redirect parameter preservation: When users click "Sign In to Continue" from an invite page, the redirect parameter (`/invite/:token`) is preserved through the OAuth flow. After successful authentication (including first-time sign-up), users are automatically redirected back to the invite page to complete the invitation acceptance
@@ -1678,40 +1676,40 @@ KnowledgePlane includes an AI chat interface that combines OpenAI's language mod
 
 **Features:**
 - Real-time chat interface with conversation history
-- **Thread-based conversation storage** - All messages are saved in persistent threads, scoped per user and team
-- **Automatic thread management** - Each user has a thread per team that maintains conversation context
-- **Team-aware** - Chat automatically uses the current team's context when connecting to the MCP server
+- **Thread-based conversation storage** - All messages are saved in persistent threads, scoped per user and workspace
+- **Automatic thread management** - Each user has a thread per workspace that maintains conversation context
+- **Workspace-aware** - Chat automatically uses the current workspace's context when connecting to the MCP server
 - **Smart truncation** - When threads exceed 20 human messages, older messages are truncated
 - Automatic fact retrieval from knowledge base based on user queries
-- Context-aware responses using relevant facts from the current team's knowledge base
-- Knowledge context filtering scoped to the current team
+- Context-aware responses using relevant facts from the current workspace's knowledge base
+- Knowledge context filtering scoped to the current workspace
 - Visual indication of which facts were used in responses
 
 **How it works:**
 1. User sends a message in the chat interface
-2. System retrieves or creates a thread for the user and current team
+2. System retrieves or creates a thread for the user and current workspace
 3. User message is stored in the thread
 4. System retrieves thread messages (with smart truncation if needed)
-5. System configures OpenAI with MCP tools to access the knowledge base, passing the current team's `team_id` in the MCP server URL
-6. AI model uses MCP tools (e.g., `facts.search`) to retrieve relevant facts from the current team's knowledge base as needed
+5. System configures OpenAI with MCP tools to access the knowledge base, passing the current workspace's `workspace_id` in the MCP server URL
+6. AI model uses MCP tools (e.g., `facts.search`) to retrieve relevant facts from the current workspace's knowledge base as needed
 7. AI generates a response using both its training and the knowledge base facts accessed via MCP tools
 8. AI returns JSON response with `content` (the response text) and `usedFacts` (array of fact IDs actually used)
 9. System parses the JSON response and fetches the actual fact objects by IDs
 10. Assistant response content is stored in the thread
 11. Response is displayed with information about which facts were actually used to construct the response
-12. When the user switches teams, the chat automatically uses the new team's context for subsequent MCP operations
+12. When the user switches workspaces, the chat automatically uses the new workspace's context for subsequent MCP operations
 
 **Thread Management:**
-- Each user automatically gets a thread per team that persists across sessions
+- Each user automatically gets a thread per workspace that persists across sessions
 - All messages (user, assistant, system) are stored in the thread
 - When a thread has more than 20 human messages (user + assistant messages with content), older messages are truncated
 - This ensures conversation context is maintained while preventing excessive token usage
-- Threads are scoped to teams, so switching teams creates/uses a different thread
+- Threads are scoped to workspaces, so switching workspaces creates/uses a different thread
 
 **Thread Data Model:**
 - `ChatThread` collection stores thread metadata:
   - `user_id` - User who owns the thread
-  - `team_id` - Team that the thread belongs to
+  - `workspace_id` - Workspace that the thread belongs to
   - `created_at` - Thread creation timestamp
   - `updated_at` - Last update timestamp
 - `ChatMessage` collection stores individual messages with:

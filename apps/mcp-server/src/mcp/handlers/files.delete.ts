@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { collections, File, TeamMember } from "@knowledgeplane/db";
+import { collections, File, WorkspaceMember } from "@knowledgeplane/db";
 
 export const filesDeleteTool: Tool = {
   name: "files.delete",
@@ -11,13 +11,9 @@ export const filesDeleteTool: Tool = {
         type: "string",
         description: "The ID of the file to delete",
       },
-      team_id: {
-        type: "string",
-        description: "Team ID for validation (optional, inferred from session if authenticated)",
-      },
       user_id: {
         type: "string",
-        description: "User ID for team membership validation (optional, inferred from session if authenticated)",
+        description: "User ID for workspace membership validation (optional, inferred from session if authenticated)",
       },
     },
     required: ["id"],
@@ -26,29 +22,29 @@ export const filesDeleteTool: Tool = {
 
 export async function handleFilesDelete(args: { 
   id: string;
-  team_id?: string;
+  workspace_id?: string;
   user_id?: string;
 }) {
-  // Get the file first to check its team_id
+  // Get the file first to check its workspace_id
   const file = await File.findById(args.id);
   if (!file) {
     throw new Error(`File with id ${args.id} not found`);
   }
 
-  // Validate team_id (should be set from context)
-  if (!args.team_id) {
-    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  // Validate workspace_id (should be set from context) - map to workspace_id
+  if (!args.workspace_id) {
+    throw new Error("Workspace ID is required. Workspace ID should be automatically inferred from authenticated session context.");
   }
   
-  if (file.team_id !== args.team_id) {
-    throw new Error("File does not belong to the specified team");
+  if (file.workspace_id !== args.workspace_id) {
+    throw new Error("File does not belong to the specified workspace");
   }
 
-  // Validate team membership if user_id is provided
+  // Validate workspace membership if user_id is provided
   if (args.user_id) {
-    const member = await TeamMember.findByTeamAndUser(file.team_id, args.user_id);
+    const member = await WorkspaceMember.findByWorkspaceAndUser(file.workspace_id, args.user_id);
     if (!member) {
-      throw new Error("You are not a member of this team");
+      throw new Error("You are not a member of this workspace");
     }
   }
 

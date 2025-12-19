@@ -17,7 +17,7 @@ function normalizeCardRecord(doc: any): KnowledgeCardRecord {
     summary: doc.summary,
     content: doc.content,
     fact_ids: doc.fact_ids || [],
-    team_id: doc.team_id,
+    workspace_id: doc.workspace_id,
     created_by: doc.created_by,
     last_updated_by: doc.last_updated_by,
     metadata: doc.metadata || {},
@@ -37,7 +37,8 @@ export const knowledgeCardsSearchTool: Tool = {
     properties: {
       query: {
         type: "string",
-        description: "Search query for hybrid search. Use '*' to search all cards.",
+        description:
+          "Search query for hybrid search. Use '*' to search all cards.",
       },
       k: {
         type: "number",
@@ -49,7 +50,8 @@ export const knowledgeCardsSearchTool: Tool = {
       },
       use_vector_search: {
         type: "boolean",
-        description: "If true, use vector search only; if false, use full-text only; if undefined, use hybrid",
+        description:
+          "If true, use vector search only; if false, use full-text only; if undefined, use hybrid",
       },
     },
     required: ["query"],
@@ -63,7 +65,7 @@ interface KnowledgeCardSearchResult {
 
 export async function handleKnowledgeCardsSearch(args: {
   query: string;
-  team_id?: string;
+  workspace_id?: string;
   k?: number;
   offset?: number;
   use_vector_search?: boolean;
@@ -82,7 +84,12 @@ export async function handleKnowledgeCardsSearch(args: {
 
   // If vector search is explicitly disabled or query is wildcard, use full-text only
   if (useVectorSearch === false || isWildcard) {
-    const results = await _fullTextSearch(args.query, args.team_id, limit, offset);
+    const results = await _fullTextSearch(
+      args.query,
+      args.workspace_id,
+      limit,
+      offset,
+    );
     return {
       content: [
         {
@@ -95,7 +102,13 @@ export async function handleKnowledgeCardsSearch(args: {
 
   // If vector search is explicitly enabled, use vector search only
   if (useVectorSearch === true) {
-    const results = await _vectorSearch(args.query, args.team_id, limit, offset, provider);
+    const results = await _vectorSearch(
+      args.query,
+      args.workspace_id,
+      limit,
+      offset,
+      provider,
+    );
     return {
       content: [
         {
@@ -107,7 +120,13 @@ export async function handleKnowledgeCardsSearch(args: {
   }
 
   // Otherwise, use hybrid search (default)
-  const results = await _hybridSearch(args.query, args.team_id, limit, offset, provider);
+  const results = await _hybridSearch(
+    args.query,
+    args.workspace_id,
+    limit,
+    offset,
+    provider,
+  );
   return {
     content: [
       {
@@ -120,7 +139,7 @@ export async function handleKnowledgeCardsSearch(args: {
 
 async function _fullTextSearch(
   query: string,
-  teamId: string | undefined,
+  workspaceId: string | undefined,
   limit: number,
   offset: number,
 ): Promise<KnowledgeCardSearchResult[]> {
@@ -134,11 +153,12 @@ async function _fullTextSearch(
   };
 
   const filters: string[] = [];
-  if (teamId) {
-    filters.push(`card.team_id == @teamId`);
-    bindVars.teamId = teamId;
+  if (workspaceId) {
+    filters.push(`card.workspace_id == @workspaceId`);
+    bindVars.workspaceId = workspaceId;
   }
-  const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
+  const filterClause =
+    filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
 
   if (isWildcard) {
     aql = `
@@ -161,7 +181,10 @@ async function _fullTextSearch(
   }
 
   try {
-    const cursor = await collections.knowledge_cards.database.query(aql, bindVars);
+    const cursor = await collections.knowledge_cards.database.query(
+      aql,
+      bindVars,
+    );
     const results = await cursor.all();
 
     return results.map((r: any) => ({
@@ -174,14 +197,17 @@ async function _fullTextSearch(
       console.warn("Fulltext index not found, falling back to LIKE search");
 
       const fallbackFilters: string[] = [];
-      if (teamId) {
-        fallbackFilters.push(`card.team_id == @teamId`);
+      if (workspaceId) {
+        fallbackFilters.push(`card.workspace_id == @workspaceId`);
       }
       fallbackFilters.push(`(LOWER(card.title) LIKE LOWER(CONCAT("%", @query, "%"))
              OR LOWER(card.summary) LIKE LOWER(CONCAT("%", @query, "%"))
              OR LOWER(card.content) LIKE LOWER(CONCAT("%", @query, "%")))`);
-      const fallbackFilterClause = fallbackFilters.length > 0 ? `FILTER ${fallbackFilters.join(" && ")}` : "";
-      
+      const fallbackFilterClause =
+        fallbackFilters.length > 0
+          ? `FILTER ${fallbackFilters.join(" && ")}`
+          : "";
+
       const fallbackAql = `
         FOR card IN knowledge_cards
           ${fallbackFilterClause}
@@ -208,7 +234,7 @@ async function _fullTextSearch(
 
 async function _vectorSearch(
   query: string,
-  teamId: string | undefined,
+  workspaceId: string | undefined,
   limit: number,
   offset: number,
   provider: any,
@@ -219,7 +245,7 @@ async function _vectorSearch(
     console.warn(
       "Vector search requires embedding provider. Falling back to full-text search.",
     );
-    return _fullTextSearch(query, teamId, limit, offset);
+    return _fullTextSearch(query, workspaceId, limit, offset);
   }
 
   try {
@@ -229,18 +255,21 @@ async function _vectorSearch(
     // Get all cards with embeddings and calculate cosine similarity manually
     const filters: string[] = [`card.embedding != null`];
     const bindVars: any = {};
-    if (teamId) {
-      filters.push(`card.team_id == @teamId`);
-      bindVars.teamId = teamId;
+    if (workspaceId) {
+      filters.push(`card.workspace_id == @workspaceId`);
+      bindVars.workspaceId = workspaceId;
     }
-    
+
     const aql = `
       FOR card IN knowledge_cards
         FILTER ${filters.join(" && ")}
         RETURN card
     `;
 
-    const cursor = await collections.knowledge_cards.database.query(aql, bindVars);
+    const cursor = await collections.knowledge_cards.database.query(
+      aql,
+      bindVars,
+    );
     const allCards = await cursor.all();
 
     // Calculate cosine similarity for each card and sort by score
@@ -267,34 +296,31 @@ async function _vectorSearch(
     return resultsWithScores;
   } catch (error: any) {
     console.error("Vector search error:", error.message);
-    return _fullTextSearch(query, teamId, limit, offset);
+    return _fullTextSearch(query, workspaceId, limit, offset);
   }
 }
 
 async function _hybridSearch(
   query: string,
-  teamId: string | undefined,
+  workspaceId: string | undefined,
   limit: number,
   offset: number,
   provider: any,
 ): Promise<KnowledgeCardSearchResult[]> {
   // If no provider, use full-text only
   if (!provider) {
-    return _fullTextSearch(query, teamId, limit, offset);
+    return _fullTextSearch(query, workspaceId, limit, offset);
   }
 
   try {
     // Get results from both full-text and vector search
     const [fullTextResults, vectorResults] = await Promise.all([
-      _fullTextSearch(query, teamId, limit * 2, 0), // Get more results to merge
-      _vectorSearch(query, teamId, limit * 2, 0, provider),
+      _fullTextSearch(query, workspaceId, limit * 2, 0), // Get more results to merge
+      _vectorSearch(query, workspaceId, limit * 2, 0, provider),
     ]);
 
     // Create a map to deduplicate and combine scores
-    const resultMap = new Map<
-      string,
-      { card: any; scores: number[] }
-    >();
+    const resultMap = new Map<string, { card: any; scores: number[] }>();
 
     // Add full-text results (normalize score to 0-1 range)
     for (const result of fullTextResults) {
@@ -336,7 +362,6 @@ async function _hybridSearch(
     return combinedResults.slice(offset, offset + limit);
   } catch (error: any) {
     console.error("Hybrid search error:", error.message);
-    return _fullTextSearch(query, teamId, limit, offset);
+    return _fullTextSearch(query, workspaceId, limit, offset);
   }
 }
-

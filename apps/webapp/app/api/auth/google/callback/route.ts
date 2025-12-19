@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "crypto";
-import { User, Team, TeamMember } from "@knowledgeplane/db/next";
+import { User, Workspace, WorkspaceMember } from "@knowledgeplane/db/next";
 import { getBaseUrl } from "../../utils";
 
 export async function GET(request: NextRequest) {
@@ -98,16 +98,16 @@ export async function GET(request: NextRequest) {
       email,
     });
 
-    // Create default team for new users
+    // Create default workspace for new users
     if (isNewUser) {
-      const defaultTeam = await Team.create({
-        name: `${user.username}'s Team`,
-        description: "Default team",
+      const defaultWorkspace = await Workspace.create({
+        name: `${user.username}'s Workspace`,
+        description: "Default workspace",
         created_by: user.id,
       });
 
-      await TeamMember.create({
-        team_id: defaultTeam.id,
+      await WorkspaceMember.create({
+        workspace_id: defaultWorkspace.id,
         user_id: user.id,
         role: "owner",
       });

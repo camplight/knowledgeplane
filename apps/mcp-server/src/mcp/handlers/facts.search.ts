@@ -35,7 +35,7 @@ export const factsSearchTool: Tool = {
 
 export async function handleFactsSearch(args: {
   query: string;
-  team_id?: string;
+  workspace_id?: string;
   k?: number;
   offset?: number;
   include_trashed?: boolean;
@@ -53,7 +53,7 @@ export async function handleFactsSearch(args: {
 
   const hits = await Fact.search({
     query: args.query,
-    team_id: args.team_id,
+    workspace_id: args.workspace_id,
     k: limit,
     offset: args.offset,
     include_trashed: args.include_trashed,

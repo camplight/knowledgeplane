@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { FactRelation, Fact, TeamMember } from "@knowledgeplane/db";
+import { FactRelation, Fact, WorkspaceMember } from "@knowledgeplane/db";
 
 export const factRelationsCreateTool: Tool = {
   name: "fact_relations.create",
@@ -31,10 +31,6 @@ export const factRelationsCreateTool: Tool = {
         description:
           "User ID of the creator (optional, inferred from session if authenticated)",
       },
-      team_id: {
-        type: "string",
-        description: "Team ID (optional, inferred from session if authenticated)",
-      },
     },
     required: ["from_fact", "to_fact", "type"],
   },
@@ -46,7 +42,7 @@ export async function handleFactRelationsCreate(args: {
   type: string;
   metadata?: Record<string, any>;
   created_by?: string;
-  team_id?: string;
+  workspace_id?: string;
 }) {
   // Validate that user ID is provided
   if (!args.created_by) {
@@ -55,7 +51,7 @@ export async function handleFactRelationsCreate(args: {
     );
   }
 
-  // Get both facts to validate they belong to the same team
+  // Get both facts to validate they belong to the same workspace
   const fromFact = await Fact.findById(args.from_fact);
   const toFact = await Fact.findById(args.to_fact);
 
@@ -66,33 +62,33 @@ export async function handleFactRelationsCreate(args: {
     throw new Error(`Target fact with id ${args.to_fact} not found`);
   }
 
-  // Validate that both facts belong to the same team
-  if (fromFact.team_id !== toFact.team_id) {
-    throw new Error("Both facts must belong to the same team");
+  // Validate that both facts belong to the same workspace
+  if (fromFact.workspace_id !== toFact.workspace_id) {
+    throw new Error("Both facts must belong to the same workspace");
   }
 
-  const factTeamId = fromFact.team_id;
+  const factWorkspaceId = fromFact.workspace_id;
 
-  // Validate team_id (should be set from context)
-  if (!args.team_id) {
-    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  // Validate workspace_id (should be set from context) - map to workspace_id
+  if (!args.workspace_id) {
+    throw new Error("Workspace ID is required. Workspace ID should be automatically inferred from authenticated session context.");
   }
   
-  if (factTeamId !== args.team_id) {
-    throw new Error("Facts do not belong to the specified team");
+  if (factWorkspaceId !== args.workspace_id) {
+    throw new Error("Facts do not belong to the specified workspace");
   }
 
-  // Validate team membership
-  const member = await TeamMember.findByTeamAndUser(factTeamId, args.created_by);
+  // Validate workspace membership
+  const member = await WorkspaceMember.findByWorkspaceAndUser(factWorkspaceId, args.created_by);
   if (!member) {
-    throw new Error("You are not a member of this team");
+    throw new Error("You are not a member of this workspace");
   }
 
   const relation = await FactRelation.create({
     from_fact: args.from_fact,
     to_fact: args.to_fact,
     type: args.type,
-    team_id: factTeamId,
+    workspace_id: factWorkspaceId,
     metadata: args.metadata,
     created_by: args.created_by,
   });

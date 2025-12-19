@@ -6,7 +6,7 @@ import type { AIModelProvider } from "@knowledgeplane/aimodel";
 export interface FactInput {
   content: string;
   metadata?: Record<string, string>;
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   created_by: string; // User ID
   last_updated_by: string; // User ID
 }
@@ -17,7 +17,7 @@ export interface FactRecord {
   id: string;
   content: string;
   metadata: Record<string, string>;
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   created_at: string;
   updated_at: string;
   created_by: string;
@@ -33,7 +33,7 @@ export interface FactSearchResult extends FactRecord {
 
 export interface FactSearchParams {
   query: string;
-  team_id?: string; // Team ID for filtering
+  workspace_id?: string; // Workspace ID for filtering
   k?: number;
   offset?: number;
   include_trashed?: boolean;
@@ -54,7 +54,7 @@ export class Fact {
     const doc = {
       content: input.content,
       metadata: input.metadata || {},
-      team_id: input.team_id,
+      workspace_id: input.workspace_id,
       created_by: input.created_by,
       last_updated_by: input.last_updated_by,
       trashed: false,
@@ -82,7 +82,7 @@ export class Fact {
     const docs = inputs.map((input) => ({
       content: input.content,
       metadata: input.metadata || {},
-      team_id: input.team_id,
+      workspace_id: input.workspace_id,
       created_by: input.created_by,
       last_updated_by: input.last_updated_by,
       trashed: false,
@@ -207,9 +207,9 @@ export class Fact {
     };
 
     const filters: string[] = [];
-    if (params.team_id) {
-      filters.push(`fact.team_id == @teamId`);
-      bindVars.teamId = params.team_id;
+    if (params.workspace_id) {
+      filters.push(`fact.workspace_id == @workspaceId`);
+      bindVars.workspaceId = params.workspace_id;
     }
     filters.push(`(fact.trashed == false || @includeTrashed == true)`);
     const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
@@ -254,8 +254,8 @@ export class Fact {
 
         // Fallback to LIKE search (case-insensitive)
         const fallbackFilters: string[] = [];
-        if (params.team_id) {
-          fallbackFilters.push(`fact.team_id == @teamId`);
+        if (params.workspace_id) {
+          fallbackFilters.push(`fact.workspace_id == @workspaceId`);
         }
         fallbackFilters.push(`(fact.trashed == false || @includeTrashed == true)`);
         fallbackFilters.push(`LOWER(fact.content) LIKE LOWER(CONCAT("%", @query, "%"))`);
@@ -315,9 +315,9 @@ export class Fact {
         includeTrashed,
       };
       
-      if (params.team_id) {
-        filters.push(`fact.team_id == @teamId`);
-        bindVars.teamId = params.team_id;
+      if (params.workspace_id) {
+        filters.push(`fact.workspace_id == @workspaceId`);
+        bindVars.workspaceId = params.workspace_id;
       }
       
       const aql = `
@@ -432,7 +432,7 @@ export class Fact {
   }
 
   static async list(
-    teamId?: string,
+    workspaceId?: string,
     limit: number = 50,
     offset: number = 0,
     includeTrashed: boolean = false,
@@ -448,9 +448,9 @@ export class Fact {
       includeTrashed,
     };
     
-    if (teamId) {
-      filters.push(`fact.team_id == @teamId`);
-      bindVars.teamId = teamId;
+    if (workspaceId) {
+      filters.push(`fact.workspace_id == @workspaceId`);
+      bindVars.workspaceId = workspaceId;
     }
     
     const aql = `
@@ -467,15 +467,15 @@ export class Fact {
     return results.map((r: any) => this._normalizeRecord(r));
   }
 
-  static async count(teamId?: string, includeTrashed: boolean = false): Promise<number> {
+  static async count(workspaceId?: string, includeTrashed: boolean = false): Promise<number> {
     const filters: string[] = [`(fact.trashed == false || @includeTrashed == true)`];
     const bindVars: any = {
       includeTrashed,
     };
     
-    if (teamId) {
-      filters.push(`fact.team_id == @teamId`);
-      bindVars.teamId = teamId;
+    if (workspaceId) {
+      filters.push(`fact.workspace_id == @workspaceId`);
+      bindVars.workspaceId = workspaceId;
     }
     
     const aql = `
@@ -531,7 +531,7 @@ export class Fact {
       _id: doc._id,
       content: doc.content || "", // Ensure content is never undefined
       metadata: doc.metadata || {},
-      team_id: doc.team_id,
+      workspace_id: doc.workspace_id,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
       created_by: doc.created_by,

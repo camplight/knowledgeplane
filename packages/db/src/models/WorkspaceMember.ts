@@ -1,38 +1,38 @@
 import { collections } from "../db";
 
-export type TeamMemberRole = "owner" | "admin" | "member";
+export type WorkspaceMemberRole = "owner" | "admin" | "member";
 
-export interface TeamMemberRecord {
+export interface WorkspaceMemberRecord {
   _key?: string;
   _id?: string;
   id: string;
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   user_id: string; // User ID
-  role: TeamMemberRole;
+  role: WorkspaceMemberRole;
   created_at: string;
   updated_at: string;
 }
 
-export interface TeamMemberInput {
-  team_id: string;
+export interface WorkspaceMemberInput {
+  workspace_id: string;
   user_id: string;
-  role: TeamMemberRole;
+  role: WorkspaceMemberRole;
 }
 
-export class TeamMember {
-  static async create(input: TeamMemberInput): Promise<TeamMemberRecord> {
+export class WorkspaceMember {
+  static async create(input: WorkspaceMemberInput): Promise<WorkspaceMemberRecord> {
     // Check if member already exists
-    const existing = await this.findByTeamAndUser(
-      input.team_id,
+    const existing = await this.findByWorkspaceAndUser(
+      input.workspace_id,
       input.user_id,
     );
     if (existing) {
-      throw new Error("User is already a member of this team");
+      throw new Error("User is already a member of this workspace");
     }
 
     const now = new Date().toISOString();
     const doc = {
-      team_id: input.team_id,
+      workspace_id: input.workspace_id,
       user_id: input.user_id,
       role: input.role,
       created_at: now,
@@ -40,7 +40,7 @@ export class TeamMember {
     };
 
     try {
-      const result = await collections.team_members.save(doc, {
+      const result = await collections.workspace_members.save(doc, {
         returnNew: true,
       });
       return this._normalizeRecord(result.new!);
@@ -49,10 +49,10 @@ export class TeamMember {
     }
   }
 
-  static async findById(id: string): Promise<TeamMemberRecord | null> {
+  static async findById(id: string): Promise<WorkspaceMemberRecord | null> {
     const key = this._extractKey(id);
     try {
-      const doc = await collections.team_members.document(key);
+      const doc = await collections.workspace_members.document(key);
       return this._normalizeRecord(doc);
     } catch (error: any) {
       if (error.errorNum === 1202) {
@@ -62,20 +62,20 @@ export class TeamMember {
     }
   }
 
-  static async findByTeamAndUser(
-    teamId: string,
+  static async findByWorkspaceAndUser(
+    workspaceId: string,
     userId: string,
-  ): Promise<TeamMemberRecord | null> {
+  ): Promise<WorkspaceMemberRecord | null> {
     const aql = `
-      FOR member IN team_members
-        FILTER member.team_id == @teamId
+      FOR member IN workspace_members
+        FILTER member.workspace_id == @workspaceId
         FILTER member.user_id == @userId
         LIMIT 1
         RETURN member
     `;
 
-    const cursor = await collections.team_members.database.query(aql, {
-      teamId,
+    const cursor = await collections.workspace_members.database.query(aql, {
+      workspaceId,
       userId,
     });
     const results = await cursor.all();
@@ -87,21 +87,21 @@ export class TeamMember {
     return this._normalizeRecord(results[0]);
   }
 
-  static async findByTeam(
-    teamId: string,
+  static async findByWorkspace(
+    workspaceId: string,
     limit: number = 50,
     offset: number = 0,
-  ): Promise<TeamMemberRecord[]> {
+  ): Promise<WorkspaceMemberRecord[]> {
     const aql = `
-      FOR member IN team_members
-        FILTER member.team_id == @teamId
+      FOR member IN workspace_members
+        FILTER member.workspace_id == @workspaceId
         SORT member.created_at ASC
         LIMIT @offset, @limit
         RETURN member
     `;
 
-    const cursor = await collections.team_members.database.query(aql, {
-      teamId,
+    const cursor = await collections.workspace_members.database.query(aql, {
+      workspaceId,
       limit,
       offset,
     });
@@ -118,16 +118,16 @@ export class TeamMember {
     userId: string,
     limit: number = 50,
     offset: number = 0,
-  ): Promise<TeamMemberRecord[]> {
+  ): Promise<WorkspaceMemberRecord[]> {
     const aql = `
-      FOR member IN team_members
+      FOR member IN workspace_members
         FILTER member.user_id == @userId
         SORT member.created_at ASC
         LIMIT @offset, @limit
         RETURN member
     `;
 
-    const cursor = await collections.team_members.database.query(aql, {
+    const cursor = await collections.workspace_members.database.query(aql, {
       userId,
       limit,
       offset,
@@ -143,8 +143,8 @@ export class TeamMember {
 
   static async update(
     id: string,
-    updates: Partial<Pick<TeamMemberRecord, "role">>,
-  ): Promise<TeamMemberRecord> {
+    updates: Partial<Pick<WorkspaceMemberRecord, "role">>,
+  ): Promise<WorkspaceMemberRecord> {
     const key = this._extractKey(id);
     const updateDoc: any = {
       updated_at: new Date().toISOString(),
@@ -154,7 +154,7 @@ export class TeamMember {
       updateDoc.role = updates.role;
     }
 
-    const result = await collections.team_members.update(key, updateDoc, {
+    const result = await collections.workspace_members.update(key, updateDoc, {
       returnNew: true,
     });
     return this._normalizeRecord(result.new!);
@@ -163,7 +163,7 @@ export class TeamMember {
   static async delete(id: string): Promise<void> {
     const key = this._extractKey(id);
     try {
-      await collections.team_members.remove(key);
+      await collections.workspace_members.remove(key);
     } catch (error: any) {
       if (error.errorNum !== 1202) {
         throw error;
@@ -171,28 +171,28 @@ export class TeamMember {
     }
   }
 
-  static async deleteByTeamAndUser(
-    teamId: string,
+  static async deleteByWorkspaceAndUser(
+    workspaceId: string,
     userId: string,
   ): Promise<void> {
-    const member = await this.findByTeamAndUser(teamId, userId);
+    const member = await this.findByWorkspaceAndUser(workspaceId, userId);
     if (member) {
       await this.delete(member.id);
     }
   }
 
-  static async countByTeam(teamId: string): Promise<number> {
+  static async countByWorkspace(workspaceId: string): Promise<number> {
     const aql = `
       LET count = LENGTH(
-        FOR member IN team_members
-          FILTER member.team_id == @teamId
+        FOR member IN workspace_members
+          FILTER member.workspace_id == @workspaceId
           RETURN member
       )
       RETURN count
     `;
 
-    const cursor = await collections.team_members.database.query(aql, {
-      teamId,
+    const cursor = await collections.workspace_members.database.query(aql, {
+      workspaceId,
     });
     const result = await cursor.next();
 
@@ -202,14 +202,14 @@ export class TeamMember {
   static async countByUser(userId: string): Promise<number> {
     const aql = `
       LET count = LENGTH(
-        FOR member IN team_members
+        FOR member IN workspace_members
           FILTER member.user_id == @userId
           RETURN member
       )
       RETURN count
     `;
 
-    const cursor = await collections.team_members.database.query(aql, {
+    const cursor = await collections.workspace_members.database.query(aql, {
       userId,
     });
     const result = await cursor.next();
@@ -225,12 +225,12 @@ export class TeamMember {
     return id;
   }
 
-  static _normalizeRecord(doc: any): TeamMemberRecord {
+  static _normalizeRecord(doc: any): WorkspaceMemberRecord {
     return {
-      id: doc._id || `team_members/${doc._key}`,
+      id: doc._id || `workspace_members/${doc._key}`,
       _key: doc._key,
       _id: doc._id,
-      team_id: doc.team_id,
+      workspace_id: doc.workspace_id,
       user_id: doc.user_id,
       role: doc.role,
       created_at: doc.created_at,

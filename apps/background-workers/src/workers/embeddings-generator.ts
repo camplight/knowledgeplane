@@ -1,4 +1,4 @@
-import { Fact, FactRelation, KnowledgeCard, WorkerLog, Team, collections } from "@knowledgeplane/db";
+import { Fact, FactRelation, KnowledgeCard, WorkerLog, Workspace, collections } from "@knowledgeplane/db";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
 
 export class EmbeddingsGenerator {
@@ -148,24 +148,24 @@ export class EmbeddingsGenerator {
     try {
       const provider = this.aiClient.getProvider();
 
-      // Get all teams to process embeddings per team
-      const teams = await Team.list(1000, 0);
-      console.log(`Processing embeddings for ${teams.length} teams`);
+      // Get all workspaces to process embeddings per workspace
+      const workspaces = await Workspace.list(1000, 0);
+      console.log(`Processing embeddings for ${workspaces.length} workspaces`);
 
-      for (const team of teams) {
-        const teamStartTime = Date.now();
-        let teamFactsUpdated = 0;
-        let teamRelationsUpdated = 0;
-        let teamCardsUpdated = 0;
+      for (const workspace of workspaces) {
+        const workspaceStartTime = Date.now();
+        let workspaceFactsUpdated = 0;
+        let workspaceRelationsUpdated = 0;
+        let workspaceCardsUpdated = 0;
 
         try {
-          // Process facts without embeddings or with outdated embeddings for this team
-          const facts = await Fact.list(team.id, 100, 0, false);
+          // Process facts without embeddings or with outdated embeddings for this workspace
+          const facts = await Fact.list(workspace.id, 100, 0, false);
           const factsNeedingEmbeddings = facts.filter(
             (f) => !f.embedding || f.embedding_model !== this.embeddingModel,
           );
 
-          console.log(`Processing ${factsNeedingEmbeddings.length} facts for team ${team.id}`);
+          console.log(`Processing ${factsNeedingEmbeddings.length} facts for workspace ${workspace.id}`);
 
           // Process facts in batches
           for (let i = 0; i < factsNeedingEmbeddings.length; i += 10) {
@@ -184,20 +184,20 @@ export class EmbeddingsGenerator {
                   embedding,
                   embedding_model: this.embeddingModel,
                 });
-                teamFactsUpdated++;
+                workspaceFactsUpdated++;
               }
             } catch (err: any) {
               console.error(`Error processing fact batch ${i}-${i + batch.length}:`, err.message);
             }
           }
 
-          // Process fact relations for this team
-          const relations = await FactRelation.query({ team_id: team.id, limit: 100, offset: 0 });
+          // Process fact relations for this workspace
+          const relations = await FactRelation.query({ workspace_id: workspace.id, limit: 100, offset: 0 });
           const relationsNeedingEmbeddings = relations.filter(
             (r) => !r.embedding || r.embedding_model !== this.embeddingModel,
           );
 
-          console.log(`Processing ${relationsNeedingEmbeddings.length} relations for team ${team.id}`);
+          console.log(`Processing ${relationsNeedingEmbeddings.length} relations for workspace ${workspace.id}`);
 
           // Process relations in batches
           for (let i = 0; i < relationsNeedingEmbeddings.length; i += 10) {
@@ -220,20 +220,20 @@ export class EmbeddingsGenerator {
                   embedding,
                   embedding_model: this.embeddingModel,
                 });
-                teamRelationsUpdated++;
+                workspaceRelationsUpdated++;
               }
             } catch (err: any) {
               console.error(`Error processing relation batch ${i}-${i + batch.length}:`, err.message);
             }
           }
 
-          // Process knowledge cards for this team
-          const cards = await KnowledgeCard.list(team.id, 100, 0);
+          // Process knowledge cards for this workspace
+          const cards = await KnowledgeCard.list(workspace.id, 100, 0);
           const cardsNeedingEmbeddings = cards.filter(
             (c) => !c.embedding || c.embedding_model !== this.embeddingModel,
           );
 
-          console.log(`Processing ${cardsNeedingEmbeddings.length} cards for team ${team.id}`);
+          console.log(`Processing ${cardsNeedingEmbeddings.length} cards for workspace ${workspace.id}`);
 
           // Process cards in batches
           for (let i = 0; i < cardsNeedingEmbeddings.length; i += 10) {
@@ -253,46 +253,46 @@ export class EmbeddingsGenerator {
                   embedding,
                   embedding_model: this.embeddingModel,
                 });
-                teamCardsUpdated++;
+                workspaceCardsUpdated++;
               }
             } catch (err: any) {
               console.error(`Error processing card batch ${i}-${i + batch.length}:`, err.message);
             }
           }
 
-          // Create log entry for this team
-          const teamExecutionTime = Date.now() - teamStartTime;
+          // Create log entry for this workspace
+          const workspaceExecutionTime = Date.now() - workspaceStartTime;
           await WorkerLog.create({
             worker_name: "embeddings-generator",
             task_type: "embeddings",
-            team_id: team.id,
+            workspace_id: workspace.id,
             status: "success",
-            message: `Generated embeddings for ${teamFactsUpdated} facts, ${teamRelationsUpdated} relations, ${teamCardsUpdated} cards`,
-            execution_time_ms: teamExecutionTime,
+            message: `Generated embeddings for ${workspaceFactsUpdated} facts, ${workspaceRelationsUpdated} relations, ${workspaceCardsUpdated} cards`,
+            execution_time_ms: workspaceExecutionTime,
             items_processed: factsNeedingEmbeddings.length + relationsNeedingEmbeddings.length + cardsNeedingEmbeddings.length,
             items_created: 0,
-            items_updated: teamFactsUpdated + teamRelationsUpdated + teamCardsUpdated,
+            items_updated: workspaceFactsUpdated + workspaceRelationsUpdated + workspaceCardsUpdated,
           });
 
-          totalFactsUpdated += teamFactsUpdated;
-          totalRelationsUpdated += teamRelationsUpdated;
-          totalCardsUpdated += teamCardsUpdated;
+          totalFactsUpdated += workspaceFactsUpdated;
+          totalRelationsUpdated += workspaceRelationsUpdated;
+          totalCardsUpdated += workspaceCardsUpdated;
 
           console.log(
-            `Team ${team.id}: Updated embeddings for ${teamFactsUpdated} facts, ${teamRelationsUpdated} relations, ${teamCardsUpdated} cards`,
+            `Workspace ${workspace.id}: Updated embeddings for ${workspaceFactsUpdated} facts, ${workspaceRelationsUpdated} relations, ${workspaceCardsUpdated} cards`,
           );
-        } catch (teamError: any) {
-          console.error(`Error processing team ${team.id}:`, teamError);
-          // Create error log for this team
-          const teamExecutionTime = Date.now() - teamStartTime;
+        } catch (workspaceError: any) {
+          console.error(`Error processing workspace ${workspace.id}:`, workspaceError);
+          // Create error log for this workspace
+          const workspaceExecutionTime = Date.now() - workspaceStartTime;
           await WorkerLog.create({
             worker_name: "embeddings-generator",
             task_type: "embeddings",
-            team_id: team.id,
+            workspace_id: workspace.id,
             status: "error",
-            message: "Embeddings generation failed for team",
-            execution_time_ms: teamExecutionTime,
-            error: teamError.message || String(teamError),
+            message: "Embeddings generation failed for workspace",
+            execution_time_ms: workspaceExecutionTime,
+            error: workspaceError.message || String(workspaceError),
           });
         }
       }

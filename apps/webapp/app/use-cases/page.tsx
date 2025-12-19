@@ -3,10 +3,10 @@ import Link from "next/link";
 export default function UseCasesPage() {
   const useCases = [
     {
-      title: "Team Knowledge Base",
-      description: "Centralize your team's collective knowledge and make it accessible to all your AI assistants. Perfect for organizations that want to maintain consistency across multiple AI tools and team members.",
+      title: "Workspace Knowledge Base",
+      description: "Centralize your workspace's collective knowledge and make it accessible to all your AI assistants. Perfect for organizations that want to maintain consistency across multiple AI tools and workspace members.",
       benefits: [
-        "Single source of truth for all team knowledge",
+        "Single source of truth for all workspace knowledge",
         "Seamless integration with multiple AI platforms",
         "Real-time collaboration and updates",
         "Version control and audit trails"
@@ -82,7 +82,7 @@ export default function UseCasesPage() {
             </span>
           </h1>
           <p className="text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Discover how KnowledgePlane can transform the way your team and AI agents work with knowledge
+            Discover how KnowledgePlane can transform the way your workspace and AI agents work with knowledge
           </p>
         </div>
 
@@ -134,7 +134,7 @@ export default function UseCasesPage() {
             Ready to get started?
           </h2>
           <p className="text-lg text-slate-600 mb-8">
-            Join teams already using KnowledgePlane to power their AI workflows
+            Join workspaces already using KnowledgePlane to power their AI workflows
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Link

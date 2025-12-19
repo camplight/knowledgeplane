@@ -6,7 +6,7 @@ export interface ProcessFileOptions {
   buffer: Buffer;
   filename: string;
   mimeType: string;
-  teamId: string;
+  workspaceId: string;
   uploadedBy: string;
   openaiApiKey?: string;
   openaiModel?: string;
@@ -40,7 +40,7 @@ export async function processFileUpload(
     buffer,
     filename,
     mimeType,
-    teamId,
+    workspaceId,
     uploadedBy,
     openaiApiKey,
     openaiModel,
@@ -55,7 +55,7 @@ export async function processFileUpload(
     mime_type: mimeType,
     size: buffer.length,
     storage_path: "", // No local storage path
-    team_id: teamId,
+    workspace_id: workspaceId,
     uploaded_by: uploadedBy,
     metadata: {
       original_filename: filename,
@@ -85,7 +85,7 @@ export async function processFileUpload(
           source_file: fileRecord.id,
           source_filename: filename,
         },
-        team_id: teamId,
+        workspace_id: workspaceId,
         created_by: uploadedBy,
         last_updated_by: uploadedBy,
       }),
@@ -107,7 +107,7 @@ export async function processFileUpload(
           from_fact: fromFact.id,
           to_fact: toFact.id,
           type: relation.type,
-          team_id: teamId,
+          workspace_id: workspaceId,
           metadata: {
             ...relation.metadata,
             source_file: fileRecord.id,

@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { Fact, KnowledgeCard, FactRelation, TeamMember } from "@knowledgeplane/db";
+import { Fact, KnowledgeCard, FactRelation, WorkspaceMember } from "@knowledgeplane/db";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
 import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
 
@@ -28,10 +28,6 @@ export const factsConsolidateTool: Tool = {
         type: "string",
         description: "User ID of the last updater (optional, inferred from session if authenticated)",
       },
-      team_id: {
-        type: "string",
-        description: "Team ID for validation (optional, inferred from session if authenticated)",
-      },
     },
     required: ["fact_ids"],
   },
@@ -42,7 +38,7 @@ export async function handleFactsConsolidate(args: {
   include_related?: boolean;
   created_by?: string;
   last_updated_by?: string;
-  team_id?: string;
+  workspace_id?: string;
 }) {
   if (!args.created_by || !args.last_updated_by) {
     throw new Error(
@@ -64,27 +60,27 @@ export async function handleFactsConsolidate(args: {
     throw new Error("No valid facts found");
   }
 
-  // Validate that all facts belong to the same team
-  const teamIds = new Set(validSeedFacts.map((f) => f.team_id));
-  if (teamIds.size > 1) {
-    throw new Error("All facts must belong to the same team");
+  // Validate that all facts belong to the same workspace
+  const workspaceIds = new Set(validSeedFacts.map((f) => f.workspace_id));
+  if (workspaceIds.size > 1) {
+    throw new Error("All facts must belong to the same workspace");
   }
 
-  const factTeamId = validSeedFacts[0].team_id;
+  const factWorkspaceId = validSeedFacts[0].workspace_id;
 
-  // Validate team_id (should be set from context)
-  if (!args.team_id) {
-    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  // Validate workspace_id (should be set from context) - map to workspace_id
+  if (!args.workspace_id) {
+    throw new Error("Workspace ID is required. Workspace ID should be automatically inferred from authenticated session context.");
   }
   
-  if (factTeamId !== args.team_id) {
-    throw new Error("Facts do not belong to the specified team");
+  if (factWorkspaceId !== args.workspace_id) {
+    throw new Error("Facts do not belong to the specified workspace");
   }
 
-  // Validate team membership
-  const member = await TeamMember.findByTeamAndUser(factTeamId, args.last_updated_by);
+  // Validate workspace membership
+  const member = await WorkspaceMember.findByWorkspaceAndUser(factWorkspaceId, args.last_updated_by);
   if (!member) {
-    throw new Error("You are not a member of this team");
+    throw new Error("You are not a member of this workspace");
   }
 
   // Get related facts if requested
@@ -159,7 +155,7 @@ Consider the relationships between these facts when consolidating. Provide your 
     summary: parsed.summary || "",
     content: parsed.content || "",
     fact_ids: allFacts.map((f) => f.id),
-    team_id: factTeamId,
+    workspace_id: factWorkspaceId,
     created_by: args.created_by!,
     last_updated_by: args.last_updated_by!,
     metadata: {

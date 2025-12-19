@@ -23,22 +23,22 @@ export const factsWriteTool: Tool = {
 export async function handleFactsWrite(args: {
   content: string;
   metadata?: Record<string, string>;
-  team_id?: string;
+  workspace_id?: string;
   created_by?: string;
   last_updated_by?: string;
 }) {
-  // Validate that user IDs and team_id are provided (should be merged from context by server.ts)
+  // Validate that user IDs and workspace_id are provided (should be merged from context by server.ts)
   if (!args.created_by || !args.last_updated_by) {
     throw new Error("User ID is required. Either provide created_by and last_updated_by, or authenticate via session.");
   }
-  if (!args.team_id) {
-    throw new Error("Team ID is required. Either provide team_id, or authenticate via session with team context.");
+  if (!args.workspace_id) {
+    throw new Error("Workspace ID is required. Either provide workspace_id, or authenticate via session with workspace context.");
   }
 
   const fact = await Fact.write({
     content: args.content,
     metadata: args.metadata,
-    team_id: args.team_id,
+    workspace_id: args.workspace_id,
     created_by: args.created_by,
     last_updated_by: args.last_updated_by,
   });

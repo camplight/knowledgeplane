@@ -20,14 +20,14 @@ export const filesListTool: Tool = {
 };
 
 export async function handleFilesList(args: {
-  team_id?: string;
+  workspace_id?: string;
   limit?: number;
   offset?: number;
 }) {
   const limit = args.limit || 50;
   const offset = args.offset || 0;
 
-  const files = await File.list(args.team_id, limit, offset);
+  const files = await File.list(args.workspace_id, limit, offset); // workspace_id maps to workspaceId
 
   return {
     content: [

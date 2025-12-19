@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { KnowledgeCard, TeamMember } from "@knowledgeplane/db/next";
+import { KnowledgeCard, WorkspaceMember } from "@knowledgeplane/db/next";
 import { z } from "zod";
 
 export const cardsRouter = router({
@@ -13,20 +13,20 @@ export const cardsRouter = router({
         .optional(),
     )
     .query(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(ctx.workspaceId, ctx.user.userId);
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       const limit = input?.limit || 50;
       const offset = input?.offset || 0;
-      const cards = await KnowledgeCard.list(ctx.teamId, limit, offset);
-      const total = await KnowledgeCard.count(ctx.teamId);
+      const cards = await KnowledgeCard.list(ctx.workspaceId, limit, offset);
+      const total = await KnowledgeCard.count(ctx.workspaceId);
       return { cards, total, limit, offset };
     }),
   getById: protectedProcedure
@@ -36,8 +36,8 @@ export const cardsRouter = router({
       }),
     )
     .query(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
       const card = await KnowledgeCard.findById(input.id);
@@ -45,15 +45,15 @@ export const cardsRouter = router({
         throw new Error("Card not found");
       }
 
-      // Validate that card belongs to user's team
-      if (card.team_id !== ctx.teamId) {
-        throw new Error("Card does not belong to your team");
+      // Validate that card belongs to user's workspace
+      if (card.workspace_id !== ctx.workspaceId) {
+        throw new Error("Card does not belong to your workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(ctx.workspaceId, ctx.user.userId);
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       return { card };
@@ -65,25 +65,25 @@ export const cardsRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
-      // Get the card first to check its team_id
+      // Get the card first to check its workspace_id
       const card = await KnowledgeCard.findById(input.id);
       if (!card) {
         throw new Error("Card not found");
       }
 
-      // Validate that card belongs to user's team
-      if (card.team_id !== ctx.teamId) {
-        throw new Error("Card does not belong to your team");
+      // Validate that card belongs to user's workspace
+      if (card.workspace_id !== ctx.workspaceId) {
+        throw new Error("Card does not belong to your workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(ctx.workspaceId, ctx.user.userId);
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       await KnowledgeCard.delete(input.id);

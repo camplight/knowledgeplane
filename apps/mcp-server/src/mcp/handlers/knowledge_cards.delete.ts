@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { KnowledgeCard, TeamMember } from "@knowledgeplane/db";
+import { KnowledgeCard, WorkspaceMember } from "@knowledgeplane/db";
 
 export const knowledgeCardsDeleteTool: Tool = {
   name: "knowledge_cards.delete",
@@ -8,7 +8,7 @@ export const knowledgeCardsDeleteTool: Tool = {
     type: "object",
     properties: {
       id: { type: "string", description: "The ID of the knowledge card to delete" },
-      user_id: { type: "string", description: "User ID for team membership validation (optional, inferred from session if authenticated)" },
+      user_id: { type: "string", description: "User ID for workspace membership validation (optional, inferred from session if authenticated)" },
     },
     required: ["id"],
   },
@@ -16,29 +16,29 @@ export const knowledgeCardsDeleteTool: Tool = {
 
 export async function handleKnowledgeCardsDelete(args: { 
   id: string;
-  team_id?: string;
+  workspace_id?: string;
   user_id?: string;
 }) {
-  // Get the card first to check its team_id
+  // Get the card first to check its workspace_id
   const card = await KnowledgeCard.findById(args.id);
   if (!card) {
     throw new Error(`Knowledge card with id ${args.id} not found`);
   }
 
-  // Validate team_id (should be set from context)
-  if (!args.team_id) {
-    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  // Validate workspace_id (should be set from context) - map to workspace_id
+  if (!args.workspace_id) {
+    throw new Error("Workspace ID is required. Workspace ID should be automatically inferred from authenticated session context.");
   }
   
-  if (card.team_id !== args.team_id) {
-    throw new Error("Knowledge card does not belong to the specified team");
+  if (card.workspace_id !== args.workspace_id) {
+    throw new Error("Knowledge card does not belong to the specified workspace");
   }
 
-  // Validate team membership if user_id is provided
+  // Validate workspace membership if user_id is provided
   if (args.user_id) {
-    const member = await TeamMember.findByTeamAndUser(card.team_id, args.user_id);
+    const member = await WorkspaceMember.findByWorkspaceAndUser(card.workspace_id, args.user_id);
     if (!member) {
-      throw new Error("You are not a member of this team");
+      throw new Error("You are not a member of this workspace");
     }
   }
 

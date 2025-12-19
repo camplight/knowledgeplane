@@ -4,7 +4,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer, type McpContext } from "../mcp/server.js";
 import { requireAuth, type AuthContext } from "../lib/auth.js";
-import { User, TeamMember } from "@knowledgeplane/db";
+import { User, WorkspaceMember } from "@knowledgeplane/db";
 
 // AsyncLocalStorage for per-request context tracking
 const contextStorage = new AsyncLocalStorage<McpContext | string>();
@@ -62,7 +62,7 @@ export default async function mcpRoutes(app: FastifyInstance) {
 
     // Extract query params first (needed for API key from query and user creation)
     const query = request.query as Record<string, string>;
-    const teamIdFromQuery = query.team_id as string | undefined;
+    const workspaceIdFromQuery = query.workspace_id as string | undefined;
 
     let authContext: AuthContext | undefined;
     try {
@@ -121,18 +121,18 @@ export default async function mcpRoutes(app: FastifyInstance) {
       }
     }
 
-    // Get team_id - prioritize from query, then get user's first team
-    let teamId: string | undefined = teamIdFromQuery;
-    if (!teamId && userId) {
+    // Get workspace_id - prioritize from query, then get user's first workspace
+    let workspaceId: string | undefined = workspaceIdFromQuery;
+    if (!workspaceId && userId) {
       try {
-        const userTeams = await TeamMember.findByUser(userId, 1, 0);
-        if (userTeams.length > 0) {
-          teamId = userTeams[0].team_id;
+        const userWorkspaces = await WorkspaceMember.findByUser(userId, 1, 0);
+        if (userWorkspaces.length > 0) {
+          workspaceId = userWorkspaces[0].workspace_id;
         }
       } catch (error: any) {
         app.log.warn(
           { error: error.message, userId },
-          "MCP: Failed to get user's teams",
+          "MCP: Failed to get user's workspaces",
         );
       }
     }
@@ -142,8 +142,8 @@ export default async function mcpRoutes(app: FastifyInstance) {
     if (userId) {
       requestContext.userId = userId;
     }
-    if (teamId) {
-      requestContext.teamId = teamId;
+    if (workspaceId) {
+      requestContext.workspaceId = workspaceId;
     }
 
     // Store context for this session (if sessionId exists)
@@ -152,7 +152,7 @@ export default async function mcpRoutes(app: FastifyInstance) {
       sessionContexts.set(sessionId, {
         ...existingContext,
         userId: userId || existingContext.userId,
-        teamId: teamId || existingContext.teamId,
+        workspaceId: workspaceId || existingContext.workspaceId,
       });
     }
 
@@ -170,7 +170,7 @@ export default async function mcpRoutes(app: FastifyInstance) {
         sessionContexts.set(sessionId, {
           ...existingContext,
           userId: userId || existingContext.userId,
-          teamId: teamId || existingContext.teamId,
+          workspaceId: workspaceId || existingContext.workspaceId,
         });
       }
     } else {
@@ -195,7 +195,7 @@ export default async function mcpRoutes(app: FastifyInstance) {
           if (userId) {
             sessionContexts.set(id, {
               userId,
-              teamId,
+              workspaceId,
             });
           }
           app.log.info({ sessionId: id }, "MCP: Session initialized");

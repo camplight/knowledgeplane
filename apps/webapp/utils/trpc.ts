@@ -13,20 +13,37 @@ export const getBaseUrl = () => {
   return `http://localhost:${process.env.PORT ?? 3000}`;
 };
 
-// Create client - this is safe because createClient doesn't access React context
-// It only accesses context when the client is used in a Provider
-export const trpcClient = trpc.createClient({
-  links: [
-    httpBatchLink({
-      url: `${getBaseUrl()}/api/trpc`,
-      transformer: superjson,
-      fetch(url, options) {
-        return fetch(url, {
-          ...options,
-          credentials: "include",
-        });
-      },
-    }),
-  ],
-});
+// Create client function - creates the client when called
+// This ensures the client is created with the correct base URL for the current environment
+function createTRPCClient() {
+  return trpc.createClient({
+    links: [
+      httpBatchLink({
+        url: `${getBaseUrl()}/api/trpc`,
+        transformer: superjson,
+        fetch(url, options) {
+          return fetch(url, {
+            ...options,
+            credentials: "include",
+          });
+        },
+      }),
+    ],
+  });
+}
+
+// Export a getter that creates the client lazily
+// This ensures the client is only created when needed and with the correct base URL
+let _trpcClient: ReturnType<typeof createTRPCClient> | null = null;
+
+export const getTrpcClient = () => {
+  if (!_trpcClient) {
+    _trpcClient = createTRPCClient();
+  }
+  return _trpcClient;
+};
+
+// For backward compatibility, create client immediately
+// This should be safe since getBaseUrl() checks for window first
+export const trpcClient = createTRPCClient();
 

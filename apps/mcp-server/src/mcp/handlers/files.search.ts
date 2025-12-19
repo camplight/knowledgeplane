@@ -12,10 +12,6 @@ export const filesSearchTool: Tool = {
         type: "string",
         description: "The fact ID to search for in files",
       },
-      team_id: {
-        type: "string",
-        description: "Team ID for filtering (optional, inferred from session if authenticated)",
-      },
     },
     required: ["fact_id"],
   },
@@ -23,13 +19,13 @@ export const filesSearchTool: Tool = {
 
 export async function handleFilesSearch(args: { 
   fact_id: string;
-  team_id?: string;
+  workspace_id?: string;
 }) {
   let files = await File.findByFactId(args.fact_id);
 
-  // Filter by team_id (should be set from context)
-  if (args.team_id) {
-    files = files.filter((f) => f.team_id === args.team_id);
+  // Filter by workspace_id (should be set from context)
+  if (args.workspace_id) {
+    files = files.filter((f) => f.workspace_id === args.workspace_id);
   }
 
   return {

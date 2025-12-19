@@ -13,11 +13,11 @@ export default function InviteAcceptPage() {
 
   const { data: userData, isLoading: userLoading } = trpc.auth.me.useQuery();
   const { data: invitationData, isLoading: invitationLoading } =
-    trpc.teams.getInvitationByToken.useQuery(
+    trpc.workspaces.getInvitationByToken.useQuery(
       { token },
       { enabled: !!token, retry: false },
     );
-  const acceptInvitationMutation = trpc.teams.acceptInvitation.useMutation({
+  const acceptInvitationMutation = trpc.workspaces.acceptInvitation.useMutation({
     onSuccess: () => {
       router.push("/dashboard");
     },
@@ -110,16 +110,16 @@ export default function InviteAcceptPage() {
               You've Been Invited!
             </h1>
             <p className="text-slate-600">
-              You've been invited to join a team on KnowledgePlane
+              You've been invited to join a workspace on KnowledgePlane
             </p>
           </div>
 
           <div className="space-y-4 mb-6">
-            {invitation.team && (
+            {invitation.workspace && (
               <div className="p-4 bg-slate-50 rounded-lg">
-                <div className="text-sm text-slate-500 mb-1">Team</div>
+                <div className="text-sm text-slate-500 mb-1">Workspace</div>
                 <div className="font-semibold text-slate-900">
-                  {invitation.team.name}
+                  {invitation.workspace.name}
                 </div>
               </div>
             )}
@@ -144,7 +144,7 @@ export default function InviteAcceptPage() {
               <strong>What happens next?</strong>
             </p>
             <p className="text-sm text-indigo-700 mt-2">
-              Sign in to your account to accept this invitation and join the team. 
+              Sign in to your account to accept this invitation and join the workspace. 
               If you don't have an account yet, you can create one during sign in.
             </p>
           </div>
@@ -265,19 +265,19 @@ export default function InviteAcceptPage() {
             </svg>
           </div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">
-            Team Invitation
+            Workspace Invitation
           </h1>
           <p className="text-slate-600">
-            You've been invited to join a team
+            You've been invited to join a workspace
           </p>
         </div>
 
         <div className="space-y-4 mb-6">
-          {invitation.team && (
+          {invitation.workspace && (
             <div className="p-4 bg-slate-50 rounded-lg">
-              <div className="text-sm text-slate-500 mb-1">Team</div>
+              <div className="text-sm text-slate-500 mb-1">Workspace</div>
               <div className="font-semibold text-slate-900">
-                {invitation.team.name}
+                {invitation.workspace.name}
               </div>
             </div>
           )}

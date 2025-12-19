@@ -4,7 +4,7 @@ import { TRPCProvider } from "./providers";
 
 export const metadata: Metadata = {
   title: "KnowledgePlane",
-  description: "Shared Team Memory for AI Agents",
+  description: "Shared Workspace Memory for AI Agents",
 };
 
 // Force all routes to be dynamic - webapp is fully dynamic

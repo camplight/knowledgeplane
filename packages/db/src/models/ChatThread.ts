@@ -6,7 +6,7 @@ export interface ChatThreadRecord {
   _id?: string;
   id: string;
   user_id: string;
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   created_at: string;
   updated_at: string;
   mcp_session_id?: string; // MCP session ID for persistent connections
@@ -37,16 +37,19 @@ export interface ChatMessageInput {
 
 export class ChatThread {
   /**
-   * Create or get existing thread for a user and team
+   * Create or get existing thread for a user and workspace
    */
-  static async getOrCreate(userId: string, teamId: string): Promise<ChatThreadRecord> {
+  static async getOrCreate(
+    userId: string,
+    workspaceId: string,
+  ): Promise<ChatThreadRecord> {
     await ensureInitialized();
 
     // Try to find existing thread
     const aql = `
       FOR thread IN chat_threads
         FILTER thread.user_id == @userId
-        FILTER thread.team_id == @teamId
+        FILTER thread.workspace_id == @workspaceId
         SORT thread.updated_at DESC
         LIMIT 1
         RETURN thread
@@ -54,7 +57,7 @@ export class ChatThread {
 
     const cursor = await collections.chat_threads.database.query(aql, {
       userId,
-      teamId,
+      workspaceId,
     });
     const existing = await cursor.next();
 
@@ -66,7 +69,7 @@ export class ChatThread {
     const now = new Date().toISOString();
     const doc = {
       user_id: userId,
-      team_id: teamId,
+      workspace_id: workspaceId,
       created_at: now,
       updated_at: now,
     };
@@ -80,9 +83,7 @@ export class ChatThread {
   /**
    * Add a message to a thread
    */
-  static async addMessage(
-    input: ChatMessageInput,
-  ): Promise<ChatMessageRecord> {
+  static async addMessage(input: ChatMessageInput): Promise<ChatMessageRecord> {
     await ensureInitialized();
 
     // Get the next sequence number
@@ -170,7 +171,8 @@ export class ChatThread {
     }
 
     // Find the cutoff point: keep the last maxHumanMessages human messages
-    const cutoffHumanMessage = humanMessages[humanMessages.length - maxHumanMessages];
+    const cutoffHumanMessage =
+      humanMessages[humanMessages.length - maxHumanMessages];
     const cutoffSequence = cutoffHumanMessage.sequence;
 
     // Find all tool calls that are part of messages we're keeping
@@ -197,7 +199,10 @@ export class ChatThread {
     // Also add any messages before cutoff that have tool responses we need
     for (const msg of allMessages) {
       const normalized = this._normalizeMessageRecord(msg);
-      if (normalized.tool_call_id && toolCallIdsToKeep.has(normalized.tool_call_id)) {
+      if (
+        normalized.tool_call_id &&
+        toolCallIdsToKeep.has(normalized.tool_call_id)
+      ) {
         // This is a tool response for a tool call we're keeping
         if (!messagesToKeep.find((m) => m.id === normalized.id)) {
           messagesToKeep.push(normalized);
@@ -216,9 +221,7 @@ export class ChatThread {
    * Note: Tool messages are returned as assistant messages with special handling
    * The OpenAI provider will need to handle tool messages separately
    */
-  static messagesToChatMessages(
-    messages: ChatMessageRecord[],
-  ): ChatMessage[] {
+  static messagesToChatMessages(messages: ChatMessageRecord[]): ChatMessage[] {
     const result: ChatMessage[] = [];
 
     for (const msg of messages) {
@@ -315,7 +318,7 @@ export class ChatThread {
       _key: doc._key,
       _id: doc._id,
       user_id: doc.user_id,
-      team_id: doc.team_id,
+      workspace_id: doc.workspace_id,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
       mcp_session_id: doc.mcp_session_id,
@@ -341,4 +344,3 @@ export class ChatThread {
     };
   }
 }
-

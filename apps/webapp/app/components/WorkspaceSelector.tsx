@@ -4,37 +4,37 @@ import { trpc } from "../../utils/trpc";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-export function TeamSelector() {
+export function WorkspaceSelector() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const { data: teamsData, isLoading } = trpc.teams.list.useQuery();
+  const { data: workspacesData, isLoading } = trpc.workspaces.list.useQuery();
   const { data: userData } = trpc.auth.me.useQuery();
   const [isSwitching, setIsSwitching] = useState(false);
 
-  const switchTeam = async (teamId: string) => {
+  const switchWorkspace = async (workspaceId: string) => {
     setIsSwitching(true);
     try {
-      const response = await fetch("/api/teams/switch", {
+      const response = await fetch("/api/workspaces/switch", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ teamId }),
+        body: JSON.stringify({ workspaceId }),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Failed to switch team");
+        throw new Error(error.error || "Failed to switch workspace");
       }
 
       setIsOpen(false);
       router.refresh();
       window.location.reload(); // Force reload to update context
     } catch (error: any) {
-      console.error("Failed to switch team:", error);
-      alert(error.message || "Failed to switch team");
+      console.error("Failed to switch workspace:", error);
+      alert(error.message || "Failed to switch workspace");
     } finally {
       setIsSwitching(false);
     }
@@ -57,17 +57,17 @@ export function TeamSelector() {
     };
   }, []);
 
-  // Get current team from userData
-  const currentTeamId = userData?.currentTeamId || null;
-  const currentTeam = teamsData?.find((t) => t.id === currentTeamId);
+  // Get current workspace from userData
+  const currentWorkspaceId = userData?.currentWorkspaceId || null;
+  const currentWorkspace = workspacesData?.find((w) => w.id === currentWorkspaceId);
 
   if (isLoading) {
     return (
-      <div className="px-3 py-2 text-sm text-slate-600">Loading teams...</div>
+      <div className="px-3 py-2 text-sm text-slate-600">Loading workspaces...</div>
     );
   }
 
-  if (!teamsData || teamsData.length === 0) {
+  if (!workspacesData || workspacesData.length === 0) {
     return null;
   }
 
@@ -77,9 +77,9 @@ export function TeamSelector() {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
       >
-        <span className="text-slate-500">Team:</span>
+        <span className="text-slate-500">Workspace:</span>
         <span className="font-semibold">
-          {currentTeam?.name || "Select Team"}
+          {currentWorkspace?.name || "Select Workspace"}
         </span>
         <svg
           className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
@@ -99,19 +99,19 @@ export function TeamSelector() {
       {isOpen && (
         <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
           <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase border-b border-slate-100">
-            Switch Team
+            Switch Workspace
           </div>
-          {teamsData.map((team) => (
+          {workspacesData.map((workspace) => (
             <button
-              key={team.id}
-              onClick={() => switchTeam(team.id)}
+              key={workspace.id}
+              onClick={() => switchWorkspace(workspace.id)}
               disabled={isSwitching}
               className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 transition-colors flex items-center justify-between ${
-                team.id === currentTeamId ? "bg-indigo-50 text-indigo-700" : ""
+                workspace.id === currentWorkspaceId ? "bg-indigo-50 text-indigo-700" : ""
               }`}
             >
-              <span className="font-medium">{team.name}</span>
-              {team.id === currentTeamId && (
+              <span className="font-medium">{workspace.name}</span>
+              {workspace.id === currentWorkspaceId && (
                 <svg
                   className="w-4 h-4 text-indigo-600"
                   fill="currentColor"
@@ -128,10 +128,10 @@ export function TeamSelector() {
           ))}
           <div className="border-t border-slate-100 mt-1 pt-1">
             <button
-              onClick={() => router.push("/teams")}
+              onClick={() => router.push("/workspaces")}
               className="w-full text-left px-3 py-2 text-sm text-indigo-600 hover:bg-slate-50 transition-colors"
             >
-              Manage Teams →
+              Manage Workspaces →
             </button>
           </div>
         </div>

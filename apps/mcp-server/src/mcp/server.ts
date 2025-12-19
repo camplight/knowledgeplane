@@ -12,10 +12,6 @@ import {
 import { factsSearchTool, handleFactsSearch } from "./handlers/facts.search.js";
 import { factsUpdateTool, handleFactsUpdate } from "./handlers/facts.update.js";
 import { factsTrashTool, handleFactsTrash } from "./handlers/facts.trash.js";
-import {
-  usersRegisterTool,
-  handleUsersRegister,
-} from "./handlers/users.register.js";
 import { filesUploadTool, handleFilesUpload } from "./handlers/files.upload.js";
 import { filesListTool, handleFilesList } from "./handlers/files.list.js";
 import { filesGetTool, handleFilesGet } from "./handlers/files.get.js";
@@ -85,7 +81,7 @@ import {
 
 export interface McpContext {
   userId?: string;
-  teamId?: string;
+  workspaceId?: string;
 }
 
 /**
@@ -102,8 +98,8 @@ interface PrepareArgsOptions {
 
 /**
  * Prepares handler arguments by:
- * 1. Removing team_id from args (team_id is never accepted from args)
- * 2. Setting team_id from context if available
+ * 1. Removing workspace_id from args (workspace_id is never accepted from args)
+ * 2. Setting workspace_id from context if available
  * 3. Optionally setting userId-related fields from context
  */
 function prepareHandlerArgs(
@@ -113,14 +109,14 @@ function prepareHandlerArgs(
 ): any {
   const { setCreatedBy, setLastUpdatedBy, setUserId } = options;
 
-  // Remove team_id from args - it should never come from args, only from context
-  const { team_id, ...cleanedArgs } = args;
+  // Remove workspace_id from args - it should never come from args, only from context
+  const { workspace_id, ...cleanedArgs } = args;
 
   const preparedArgs = { ...cleanedArgs };
 
-  // Always set team_id from context if available (never from args)
-  if (context?.teamId) {
-    preparedArgs.team_id = context.teamId;
+  // Always set workspace_id from context if available (never from args)
+  if (context?.workspaceId) {
+    preparedArgs.workspace_id = context.workspaceId;
   }
 
   // Optionally set userId-related fields from context
@@ -141,7 +137,7 @@ function prepareHandlerArgs(
 
 /**
  * Prepares handler arguments for bulk operations (e.g., facts.bulkwrite)
- * where team_id needs to be removed from nested fact objects
+ * where workspace_id needs to be removed from nested fact objects
  */
 function prepareBulkHandlerArgs(
   args: any,
@@ -150,22 +146,22 @@ function prepareBulkHandlerArgs(
 ): any {
   const { setCreatedBy, setLastUpdatedBy } = options;
 
-  // Remove team_id from top-level args
-  const { team_id, ...cleanedArgs } = args;
+  // Remove workspace_id from top-level args
+  const { workspace_id, ...cleanedArgs } = args;
 
   const preparedArgs = { ...cleanedArgs };
 
   // Handle nested facts array if present
   if (preparedArgs.facts && Array.isArray(preparedArgs.facts)) {
     preparedArgs.facts = preparedArgs.facts.map((fact: any) => {
-      // Remove team_id from each fact
-      const { team_id: factTeamId, ...factWithoutTeamId } = fact;
+      // Remove workspace_id from each fact
+      const { workspace_id: factWorkspaceId, ...factWithoutWorkspaceId } = fact;
 
-      const preparedFact: any = { ...factWithoutTeamId };
+      const preparedFact: any = { ...factWithoutWorkspaceId };
 
-      // Always set team_id from context if available
-      if (context?.teamId) {
-        preparedFact.team_id = context.teamId;
+      // Always set workspace_id from context if available
+      if (context?.workspaceId) {
+        preparedFact.workspace_id = context.workspaceId;
       }
 
       // Optionally set userId-related fields from context
@@ -186,11 +182,6 @@ function prepareBulkHandlerArgs(
 }
 
 // Tool definitions from handlers
-import {
-  workersTriggerTool,
-  handleWorkersTrigger,
-} from "./handlers/workers.trigger.js";
-
 const tools = [
   factsWriteTool,
   factsBulkWriteTool,
@@ -198,7 +189,6 @@ const tools = [
   factsUpdateTool,
   factsTrashTool,
   factsConsolidateTool,
-  usersRegisterTool,
   filesUploadTool,
   filesListTool,
   filesGetTool,
@@ -212,7 +202,6 @@ const tools = [
   factRelationsGetTool,
   factRelationsGetRelatedTool,
   factRelationsGetIncomingTool,
-  workersTriggerTool,
   knowledgeCardsCreateTool,
   knowledgeCardsUpdateTool,
   knowledgeCardsDeleteTool,
@@ -302,9 +291,6 @@ export function createMcpServer(
         setLastUpdatedBy: true,
       });
       handler = handleFactsTrash;
-    } else if (name === "users.register") {
-      handlerArgs = { ...args } as any;
-      handler = handleUsersRegister;
     } else if (name === "files.upload") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setCreatedBy: true,
@@ -360,9 +346,6 @@ export function createMcpServer(
     } else if (name === "fact_relations.get_incoming") {
       handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFactRelationsGetIncoming;
-    } else if (name === "workers.trigger") {
-      handlerArgs = { ...args } as any;
-      handler = handleWorkersTrigger;
     } else if (name === "facts.consolidate") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setCreatedBy: true,

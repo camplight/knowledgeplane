@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { KnowledgeCard, Fact, TeamMember } from "@knowledgeplane/db";
+import { KnowledgeCard, Fact, WorkspaceMember } from "@knowledgeplane/db";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
 import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
 
@@ -26,10 +26,6 @@ export const knowledgeCardsSplitTool: Tool = {
         type: "string",
         description: "User ID of the last updater (optional, inferred from session if authenticated)",
       },
-      team_id: {
-        type: "string",
-        description: "Team ID for validation (optional, inferred from session if authenticated)",
-      },
     },
     required: ["id"],
   },
@@ -40,7 +36,7 @@ export async function handleKnowledgeCardsSplit(args: {
   num_cards?: number;
   created_by?: string;
   last_updated_by?: string;
-  team_id?: string;
+  workspace_id?: string;
 }) {
   if (!args.created_by || !args.last_updated_by) {
     throw new Error(
@@ -56,19 +52,19 @@ export async function handleKnowledgeCardsSplit(args: {
     throw new Error(`Knowledge card with id ${args.id} not found`);
   }
 
-  // Validate team_id (should be set from context)
-  if (!args.team_id) {
-    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  // Validate workspace_id (should be set from context)
+  if (!args.workspace_id) {
+    throw new Error("Workspace ID is required. Workspace ID should be automatically inferred from authenticated session context.");
   }
   
-  if (originalCard.team_id !== args.team_id) {
-    throw new Error("Knowledge card does not belong to the specified team");
+  if (originalCard.workspace_id !== args.workspace_id) {
+    throw new Error("Knowledge card does not belong to the specified workspace");
   }
 
-  // Validate team membership
-  const member = await TeamMember.findByTeamAndUser(originalCard.team_id, args.last_updated_by);
+  // Validate workspace membership
+  const member = await WorkspaceMember.findByWorkspaceAndUser(originalCard.workspace_id, args.last_updated_by);
   if (!member) {
-    throw new Error("You are not a member of this team");
+    throw new Error("You are not a member of this workspace");
   }
 
   // Get the facts associated with the card
@@ -151,7 +147,7 @@ Provide your response as JSON with the following structure:
       summary: cardInfo.summary || "",
       content: cardInfo.content || "",
       fact_ids: cardInfo.fact_ids || [],
-      team_id: originalCard.team_id,
+      workspace_id: originalCard.workspace_id,
       created_by: args.created_by!,
       last_updated_by: args.last_updated_by!,
       metadata: {

@@ -3,7 +3,7 @@ import { collections } from "../db";
 export interface WebhookInput {
   url: string;
   events: string[]; // e.g., ["fact.created", "fact.updated", "card.created"]
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   secret?: string; // Optional secret for webhook signature
   active?: boolean;
   created_by: string;
@@ -15,7 +15,7 @@ export interface WebhookRecord {
   id: string;
   url: string;
   events: string[];
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   secret?: string;
   active: boolean;
   created_by: string;
@@ -37,7 +37,7 @@ export class Webhook {
     const doc = {
       url: input.url,
       events: input.events,
-      team_id: input.team_id,
+      workspace_id: input.workspace_id,
       secret: input.secret || null,
       active: input.active !== undefined ? input.active : true,
       created_by: input.created_by,
@@ -84,13 +84,13 @@ export class Webhook {
     }
   }
 
-  static async list(teamId?: string, activeOnly: boolean = false): Promise<WebhookRecord[]> {
+  static async list(workspaceId?: string, activeOnly: boolean = false): Promise<WebhookRecord[]> {
     const filters: string[] = [];
     const bindVars: any = {};
 
-    if (teamId) {
-      filters.push(`webhook.team_id == @teamId`);
-      bindVars.teamId = teamId;
+    if (workspaceId) {
+      filters.push(`webhook.workspace_id == @workspaceId`);
+      bindVars.workspaceId = workspaceId;
     }
     if (activeOnly) {
       filters.push(`webhook.active == true`);
@@ -105,16 +105,16 @@ export class Webhook {
     return results.map((r: any) => this._normalizeRecord(r));
   }
 
-  static async findByEvent(event: string, teamId?: string): Promise<WebhookRecord[]> {
+  static async findByEvent(event: string, workspaceId?: string): Promise<WebhookRecord[]> {
     const filters: string[] = [
       `webhook.active == true`,
       `@event IN webhook.events`,
     ];
     const bindVars: any = { event };
     
-    if (teamId) {
-      filters.push(`webhook.team_id == @teamId`);
-      bindVars.teamId = teamId;
+    if (workspaceId) {
+      filters.push(`webhook.workspace_id == @workspaceId`);
+      bindVars.workspaceId = workspaceId;
     }
     
     const aql = `
@@ -149,7 +149,7 @@ export class Webhook {
       _id: doc._id,
       url: doc.url,
       events: doc.events || [],
-      team_id: doc.team_id,
+      workspace_id: doc.workspace_id,
       secret: doc.secret,
       active: doc.active !== undefined ? doc.active : true,
       created_by: doc.created_by,

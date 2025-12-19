@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { Fact, TeamMember } from "@knowledgeplane/db/next";
+import { Fact, WorkspaceMember } from "@knowledgeplane/db/next";
 import { z } from "zod";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
 
@@ -13,21 +13,21 @@ export const factsRouter = router({
       }).optional(),
     )
     .query(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(ctx.workspaceId, ctx.user.userId);
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       const limit = input?.limit || 50;
       const offset = input?.offset || 0;
       const includeTrashed = input?.includeTrashed || false;
-      const facts = await Fact.list(ctx.teamId, limit, offset, includeTrashed);
-      const total = await Fact.count(ctx.teamId, includeTrashed);
+      const facts = await Fact.list(ctx.workspaceId, limit, offset, includeTrashed);
+      const total = await Fact.count(ctx.workspaceId, includeTrashed);
       return { facts, total, limit, offset };
     }),
   search: protectedProcedure
@@ -41,14 +41,14 @@ export const factsRouter = router({
       }),
     )
     .query(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(ctx.workspaceId, ctx.user.userId);
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       // Create AI client for embeddings if vector search is requested
@@ -67,7 +67,7 @@ export const factsRouter = router({
 
       const results = await Fact.search({
         query: input.query,
-        team_id: ctx.teamId,
+        workspace_id: ctx.workspaceId,
         k: input.k,
         offset: input.offset,
         include_trashed: input.include_trashed,
@@ -84,20 +84,20 @@ export const factsRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(ctx.workspaceId, ctx.user.userId);
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       const fact = await Fact.write({
         content: input.content,
         metadata: input.metadata,
-        team_id: ctx.teamId,
+        workspace_id: ctx.workspaceId,
         created_by: ctx.user.userId,
         last_updated_by: ctx.user.userId,
       });
@@ -112,25 +112,25 @@ export const factsRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
-      // Get the fact first to check its team_id
+      // Get the fact first to check its workspace_id
       const existingFact = await Fact.findById(input.id);
       if (!existingFact) {
         throw new Error("Fact not found");
       }
 
-      // Validate that fact belongs to user's team
-      if (existingFact.team_id !== ctx.teamId) {
-        throw new Error("Fact does not belong to your team");
+      // Validate that fact belongs to user's workspace
+      if (existingFact.workspace_id !== ctx.workspaceId) {
+        throw new Error("Fact does not belong to your workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(ctx.workspaceId, ctx.user.userId);
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       const fact = await Fact.update({
@@ -148,8 +148,8 @@ export const factsRouter = router({
       }),
     )
     .query(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
       const fact = await Fact.findById(input.id);
@@ -157,15 +157,15 @@ export const factsRouter = router({
         throw new Error("Fact not found");
       }
 
-      // Validate that fact belongs to user's team
-      if (fact.team_id !== ctx.teamId) {
-        throw new Error("Fact does not belong to your team");
+      // Validate that fact belongs to user's workspace
+      if (fact.workspace_id !== ctx.workspaceId) {
+        throw new Error("Fact does not belong to your workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(ctx.workspaceId, ctx.user.userId);
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       return { fact };
@@ -177,25 +177,25 @@ export const factsRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
-      // Get the fact first to check its team_id
+      // Get the fact first to check its workspace_id
       const existingFact = await Fact.findById(input.id);
       if (!existingFact) {
         throw new Error("Fact not found");
       }
 
-      // Validate that fact belongs to user's team
-      if (existingFact.team_id !== ctx.teamId) {
-        throw new Error("Fact does not belong to your team");
+      // Validate that fact belongs to user's workspace
+      if (existingFact.workspace_id !== ctx.workspaceId) {
+        throw new Error("Fact does not belong to your workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(ctx.workspaceId, ctx.user.userId);
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       const fact = await Fact.trash(input.id, ctx.user.userId);

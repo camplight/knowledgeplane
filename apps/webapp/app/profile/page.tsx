@@ -13,7 +13,7 @@ export default function ProfilePage() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
   const [mcpUrlCopied, setMcpUrlCopied] = useState(false);
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -21,11 +21,11 @@ export default function ProfilePage() {
   const { data: profileData, refetch: refetchUserProfile } = trpc.user.getProfile.useQuery(undefined, {
     enabled: !!userData?.user,
   });
-  const { data: teamsData } = trpc.teams.list.useQuery(undefined, {
+  const { data: workspacesData } = trpc.workspaces.list.useQuery(undefined, {
     enabled: !!userData?.user,
   });
   const { data: mcpUrlData } = trpc.user.getMcpUrl.useQuery(
-    { teamId: selectedTeamId || undefined },
+    { workspaceId: selectedWorkspaceId || undefined },
     {
       enabled: !!userData?.user && !!profileData?.api_key,
     },
@@ -86,17 +86,17 @@ export default function ProfilePage() {
     }
   }, [profileData]);
 
-  // Set default team when teams are loaded
+  // Set default workspace when workspaces are loaded
   useEffect(() => {
-    if (teamsData && teamsData.length > 0 && !selectedTeamId) {
-      // Use current team if available, otherwise use first team
-      const currentTeamId = userData?.currentTeamId;
-      const defaultTeamId = currentTeamId && teamsData.some(t => t.id === currentTeamId)
-        ? currentTeamId
-        : teamsData[0].id;
-      setSelectedTeamId(defaultTeamId);
+    if (workspacesData && workspacesData.length > 0 && !selectedWorkspaceId) {
+      // Use current workspace if available, otherwise use first workspace
+      const currentWorkspaceId = userData?.currentWorkspaceId;
+      const defaultWorkspaceId = currentWorkspaceId && workspacesData.some(w => w.id === currentWorkspaceId)
+        ? currentWorkspaceId
+        : workspacesData[0].id;
+      setSelectedWorkspaceId(defaultWorkspaceId);
     }
-  }, [teamsData, userData, selectedTeamId]);
+  }, [workspacesData, userData, selectedWorkspaceId]);
 
   const handleSave = () => {
     setError(null);
@@ -361,7 +361,7 @@ export default function ProfilePage() {
               <div>
                 <h2 className="text-2xl font-bold text-slate-900">MCP Server URL</h2>
                 <p className="text-sm text-slate-600 mt-1">
-                  Copy your personal MCP server URL with your API key and team context included
+                  Copy your personal MCP server URL with your API key and workspace context included
                 </p>
               </div>
             </div>
@@ -369,24 +369,24 @@ export default function ProfilePage() {
             <div className="p-6">
               {mcpUrlData?.url ? (
                 <div className="space-y-4">
-                  {teamsData && teamsData.length > 0 && (
+                  {workspacesData && workspacesData.length > 0 && (
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Select Team
+                        Select Workspace
                       </label>
                       <select
-                        value={selectedTeamId || ""}
-                        onChange={(e) => setSelectedTeamId(e.target.value || null)}
+                        value={selectedWorkspaceId || ""}
+                        onChange={(e) => setSelectedWorkspaceId(e.target.value || null)}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                       >
-                        {teamsData.map((team) => (
-                          <option key={team.id} value={team.id}>
-                            {team.name}
+                        {workspacesData.map((workspace) => (
+                          <option key={workspace.id} value={workspace.id}>
+                            {workspace.name}
                           </option>
                         ))}
                       </select>
                       <p className="text-xs text-slate-500 mt-1">
-                        Choose which team's context to include in the MCP URL
+                        Choose which workspace's context to include in the MCP URL
                       </p>
                     </div>
                   )}
@@ -409,7 +409,7 @@ export default function ProfilePage() {
                       </button>
                     </div>
                     <p className="text-xs text-slate-500 mt-2">
-                      Use this URL to connect AI agents and tools to your KnowledgePlane MCP server. Your API key and team context are included in the URL.
+                      Use this URL to connect AI agents and tools to your KnowledgePlane MCP server. Your API key and workspace context are included in the URL.
                     </p>
                   </div>
                 </div>

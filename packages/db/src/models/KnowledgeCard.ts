@@ -6,7 +6,7 @@ export interface KnowledgeCardInput {
   summary: string;
   content: string; // Full consolidated content
   fact_ids: string[]; // Array of fact IDs that were consolidated
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   created_by: string;
   last_updated_by: string;
   metadata?: Record<string, any>;
@@ -20,7 +20,7 @@ export interface KnowledgeCardRecord {
   summary: string;
   content: string;
   fact_ids: string[];
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   created_by: string;
   last_updated_by: string;
   metadata: Record<string, any>;
@@ -48,7 +48,7 @@ export class KnowledgeCard {
       summary: input.summary,
       content: input.content,
       fact_ids: input.fact_ids,
-      team_id: input.team_id,
+      workspace_id: input.workspace_id,
       created_by: input.created_by,
       last_updated_by: input.last_updated_by,
       metadata: input.metadata || {},
@@ -139,7 +139,7 @@ export class KnowledgeCard {
   }
 
   static async list(
-    teamId?: string,
+    workspaceId?: string,
     limit: number = 50,
     offset: number = 0,
   ): Promise<KnowledgeCardRecord[]> {
@@ -150,9 +150,9 @@ export class KnowledgeCard {
     const filters: string[] = [];
     const bindVars: any = { limit: validLimit, offset: validOffset };
     
-    if (teamId) {
-      filters.push(`card.team_id == @teamId`);
-      bindVars.teamId = teamId;
+    if (workspaceId) {
+      filters.push(`card.workspace_id == @workspaceId`);
+      bindVars.workspaceId = workspaceId;
     }
     
     const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
@@ -170,13 +170,13 @@ export class KnowledgeCard {
     return results.map((r: any) => this._normalizeRecord(r));
   }
 
-  static async count(teamId?: string): Promise<number> {
+  static async count(workspaceId?: string): Promise<number> {
     const filters: string[] = [];
     const bindVars: any = {};
     
-    if (teamId) {
-      filters.push(`card.team_id == @teamId`);
-      bindVars.teamId = teamId;
+    if (workspaceId) {
+      filters.push(`card.workspace_id == @workspaceId`);
+      bindVars.workspaceId = workspaceId;
     }
     
     const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
@@ -216,7 +216,7 @@ export class KnowledgeCard {
       summary: doc.summary,
       content: doc.content,
       fact_ids: doc.fact_ids || [],
-      team_id: doc.team_id,
+      workspace_id: doc.workspace_id,
       created_by: doc.created_by,
       last_updated_by: doc.last_updated_by,
       metadata: doc.metadata || {},

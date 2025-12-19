@@ -5,7 +5,7 @@ export interface FactRelationInput {
   from_fact: string; // Fact ID
   to_fact: string; // Fact ID
   type: string; // e.g., "references", "depends_on", "related_to", "part_of"
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   metadata?: Record<string, any>;
   created_by: string; // User ID
 }
@@ -19,7 +19,7 @@ export interface FactRelationRecord {
   from_fact: string; // Fact ID (normalized)
   to_fact: string; // Fact ID (normalized)
   type: string;
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   metadata: Record<string, any>;
   created_by: string;
   created_at: string;
@@ -28,7 +28,7 @@ export interface FactRelationRecord {
 }
 
 export interface FactRelationQueryParams {
-  team_id?: string;
+  workspace_id?: string;
   from_fact?: string;
   to_fact?: string;
   type?: string;
@@ -48,7 +48,7 @@ export class FactRelation {
       from_fact: input.from_fact,
       to_fact: input.to_fact,
       type: input.type,
-      team_id: input.team_id,
+      workspace_id: input.workspace_id,
       metadata: input.metadata || {},
       created_by: input.created_by,
       created_at: new Date().toISOString(),
@@ -146,9 +146,9 @@ export class FactRelation {
     const bindVars: any = { limit, offset };
 
     const filters: string[] = [];
-    if (params.team_id) {
-      filters.push(`relation.team_id == @teamId`);
-      bindVars.teamId = params.team_id;
+    if (params.workspace_id) {
+      filters.push(`relation.workspace_id == @workspaceId`);
+      bindVars.workspaceId = params.workspace_id;
     }
     if (params.from_fact) {
       filters.push(`relation.from_fact == @fromFact`);
@@ -445,7 +445,7 @@ export class FactRelation {
       from_fact: doc.from_fact,
       to_fact: doc.to_fact,
       type: doc.type,
-      team_id: doc.team_id,
+      workspace_id: doc.workspace_id,
       metadata: doc.metadata || {},
       created_by: doc.created_by,
       created_at: doc.created_at,

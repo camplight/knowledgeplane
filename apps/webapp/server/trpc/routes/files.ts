@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { File, Fact, TeamMember } from "@knowledgeplane/db/next";
+import { File, Fact, WorkspaceMember } from "@knowledgeplane/db/next";
 import { processFileUpload } from "@knowledgeplane/file-processor";
 import { z } from "zod";
 
@@ -14,14 +14,17 @@ export const filesRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       // Decode base64 data
@@ -32,7 +35,7 @@ export const filesRouter = router({
         buffer,
         filename: input.filename,
         mimeType: input.mimeType,
-        teamId: ctx.teamId,
+        workspaceId: ctx.workspaceId,
         uploadedBy: ctx.user.userId,
         openaiApiKey: process.env.OPENAI_API_KEY,
         openaiModel: process.env.OPENAI_MODEL,
@@ -52,28 +55,31 @@ export const filesRouter = router({
         .optional(),
     )
     .query(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       const limit = input?.limit || 50;
       const offset = input?.offset || 0;
 
-      const files = await File.list(ctx.teamId, limit, offset);
+      const files = await File.list(ctx.workspaceId, limit, offset);
       return { files };
     }),
 
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
       const file = await File.findById(input.id);
@@ -81,15 +87,18 @@ export const filesRouter = router({
         throw new Error("File not found");
       }
 
-      // Validate that file belongs to user's team
-      if (file.team_id !== ctx.teamId) {
-        throw new Error("File does not belong to your team");
+      // Validate that file belongs to user's workspace
+      if (file.workspace_id !== ctx.workspaceId) {
+        throw new Error("File does not belong to your workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       return { file };
@@ -98,8 +107,8 @@ export const filesRouter = router({
   getFacts: protectedProcedure
     .input(z.object({ fileId: z.string() }))
     .query(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
       const file = await File.findById(input.fileId);
@@ -107,27 +116,31 @@ export const filesRouter = router({
         throw new Error("File not found");
       }
 
-      // Validate that file belongs to user's team
-      if (file.team_id !== ctx.teamId) {
-        throw new Error("File does not belong to your team");
+      // Validate that file belongs to user's workspace
+      if (file.workspace_id !== ctx.workspaceId) {
+        throw new Error("File does not belong to your workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       const facts = await Promise.all(
         file.fact_ids.map((factId) => Fact.findById(factId)),
       );
 
-      // Filter facts to only return those belonging to the team
-      const teamFacts = facts.filter((f) => f !== null && f.team_id === ctx.teamId);
+      // Filter facts to only return those belonging to the workspace
+      const workspaceFacts = facts.filter(
+        (f) => f !== null && f.workspace_id === ctx.workspaceId,
+      );
 
       return {
-        facts: teamFacts,
+        facts: workspaceFacts,
       };
     }),
 });
-

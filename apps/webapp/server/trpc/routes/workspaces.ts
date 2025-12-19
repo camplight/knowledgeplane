@@ -1,8 +1,8 @@
 import { router, protectedProcedure, publicProcedure } from "../router";
-import { Team, TeamMember, User, Invitation } from "@knowledgeplane/db/next";
+import { Workspace, WorkspaceMember, User, Invitation } from "@knowledgeplane/db/next";
 import { z } from "zod";
 
-export const teamsRouter = router({
+export const workspacesRouter = router({
   create: protectedProcedure
     .input(
       z.object({
@@ -11,45 +11,45 @@ export const teamsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const team = await Team.create({
+      const workspace = await Workspace.create({
         name: input.name,
         description: input.description,
         created_by: ctx.user.userId,
       });
 
       // Add creator as owner
-      await TeamMember.create({
-        team_id: team.id,
+      await WorkspaceMember.create({
+        workspace_id: workspace.id,
         user_id: ctx.user.userId,
         role: "owner",
       });
 
-      return team;
+      return workspace;
     }),
 
   list: protectedProcedure.query(async ({ ctx }) => {
-    const teams = await Team.findByUserId(ctx.user.userId);
-    return teams;
+    const workspaces = await Workspace.findByUserId(ctx.user.userId);
+    return workspaces;
   }),
 
   getById: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const team = await Team.findById(input.id);
-      if (!team) {
-        throw new Error("Team not found");
+      const workspace = await Workspace.findById(input.id);
+      if (!workspace) {
+        throw new Error("Workspace not found");
       }
 
       // Check if user is a member
-      const member = await TeamMember.findByTeamAndUser(
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
         input.id,
         ctx.user.userId,
       );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
-      return team;
+      return workspace;
     }),
 
   update: protectedProcedure
@@ -64,57 +64,57 @@ export const teamsRouter = router({
       const { id, ...updates } = input;
 
       // Check if user is admin or owner
-      const member = await TeamMember.findByTeamAndUser(id, ctx.user.userId);
+      const member = await WorkspaceMember.findByWorkspaceAndUser(id, ctx.user.userId);
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
       if (member.role !== "owner" && member.role !== "admin") {
-        throw new Error("Only owners and admins can update team settings");
+        throw new Error("Only owners and admins can update workspace settings");
       }
 
-      return await Team.update(id, updates);
+      return await Workspace.update(id, updates);
     }),
 
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       // Check if user is owner
-      const member = await TeamMember.findByTeamAndUser(
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
         input.id,
         ctx.user.userId,
       );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
       if (member.role !== "owner") {
-        throw new Error("Only owners can delete teams");
+        throw new Error("Only owners can delete workspaces");
       }
 
-      await Team.delete(input.id);
+      await Workspace.delete(input.id);
       return { success: true };
     }),
 
-  // Team member management
+  // Workspace member management
   listMembers: protectedProcedure
     .input(
       z.object({
-        team_id: z.string(),
+        workspace_id: z.string(),
         limit: z.number().min(1).max(100).default(50),
         offset: z.number().min(0).default(0),
       }),
     )
     .query(async ({ ctx, input }) => {
       // Check if user is a member
-      const member = await TeamMember.findByTeamAndUser(
-        input.team_id,
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        input.workspace_id,
         ctx.user.userId,
       );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
-      const members = await TeamMember.findByTeam(
-        input.team_id,
+      const members = await WorkspaceMember.findByWorkspace(
+        input.workspace_id,
         input.limit,
         input.offset,
       );
@@ -136,7 +136,7 @@ export const teamsRouter = router({
         }),
       );
 
-      const total = await TeamMember.countByTeam(input.team_id);
+      const total = await WorkspaceMember.countByWorkspace(input.workspace_id);
 
       return { members: enriched, total, limit: input.limit, offset: input.offset };
     }),
@@ -144,19 +144,19 @@ export const teamsRouter = router({
   addMember: protectedProcedure
     .input(
       z.object({
-        team_id: z.string(),
+        workspace_id: z.string(),
         user_id: z.string(),
         role: z.enum(["owner", "admin", "member"]).default("member"),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       // Check if user is admin or owner
-      const member = await TeamMember.findByTeamAndUser(
-        input.team_id,
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        input.workspace_id,
         ctx.user.userId,
       );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
       if (member.role !== "owner" && member.role !== "admin") {
         throw new Error("Only owners and admins can add members");
@@ -167,8 +167,8 @@ export const teamsRouter = router({
         throw new Error("Only owners can add other owners");
       }
 
-      return await TeamMember.create({
-        team_id: input.team_id,
+      return await WorkspaceMember.create({
+        workspace_id: input.workspace_id,
         user_id: input.user_id,
         role: input.role,
       });
@@ -177,19 +177,19 @@ export const teamsRouter = router({
   updateMember: protectedProcedure
     .input(
       z.object({
-        team_id: z.string(),
+        workspace_id: z.string(),
         member_id: z.string(),
         role: z.enum(["owner", "admin", "member"]),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       // Check if user is admin or owner
-      const member = await TeamMember.findByTeamAndUser(
-        input.team_id,
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        input.workspace_id,
         ctx.user.userId,
       );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
       if (member.role !== "owner" && member.role !== "admin") {
         throw new Error("Only owners and admins can update member roles");
@@ -201,7 +201,7 @@ export const teamsRouter = router({
       }
 
       // Cannot change owner's role unless current user is owner
-      const targetMember = await TeamMember.findById(input.member_id);
+      const targetMember = await WorkspaceMember.findById(input.member_id);
       if (!targetMember) {
         throw new Error("Member not found");
       }
@@ -209,31 +209,31 @@ export const teamsRouter = router({
         throw new Error("Only owners can change owner roles");
       }
 
-      return await TeamMember.update(input.member_id, { role: input.role });
+      return await WorkspaceMember.update(input.member_id, { role: input.role });
     }),
 
   removeMember: protectedProcedure
     .input(
       z.object({
-        team_id: z.string(),
+        workspace_id: z.string(),
         member_id: z.string(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       // Check if user is admin or owner
-      const member = await TeamMember.findByTeamAndUser(
-        input.team_id,
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        input.workspace_id,
         ctx.user.userId,
       );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
       if (member.role !== "owner" && member.role !== "admin") {
         throw new Error("Only owners and admins can remove members");
       }
 
       // Cannot remove owner unless current user is owner
-      const targetMember = await TeamMember.findById(input.member_id);
+      const targetMember = await WorkspaceMember.findById(input.member_id);
       if (!targetMember) {
         throw new Error("Member not found");
       }
@@ -243,10 +243,10 @@ export const teamsRouter = router({
 
       // Cannot remove yourself
       if (targetMember.user_id === ctx.user.userId) {
-        throw new Error("You cannot remove yourself from the team");
+        throw new Error("You cannot remove yourself from the workspace");
       }
 
-      await TeamMember.delete(input.member_id);
+      await WorkspaceMember.delete(input.member_id);
       return { success: true };
     }),
 
@@ -254,25 +254,25 @@ export const teamsRouter = router({
   createInvitation: protectedProcedure
     .input(
       z.object({
-        team_id: z.string(),
+        workspace_id: z.string(),
         expires_in_days: z.number().min(1).max(365).default(7),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       // Check if user is admin or owner
-      const member = await TeamMember.findByTeamAndUser(
-        input.team_id,
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        input.workspace_id,
         ctx.user.userId,
       );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
       if (member.role !== "owner" && member.role !== "admin") {
         throw new Error("Only owners and admins can create invitations");
       }
 
       return await Invitation.create({
-        team_id: input.team_id,
+        workspace_id: input.workspace_id,
         invited_by: ctx.user.userId,
         expires_in_days: input.expires_in_days,
       });
@@ -281,7 +281,7 @@ export const teamsRouter = router({
   listInvitations: protectedProcedure
     .input(
       z.object({
-        team_id: z.string(),
+        workspace_id: z.string(),
         limit: z.number().min(1).max(100).default(50),
         offset: z.number().min(0).default(0),
         status: z.enum(["pending", "accepted", "expired"]).optional(),
@@ -289,23 +289,23 @@ export const teamsRouter = router({
     )
     .query(async ({ ctx, input }) => {
       // Check if user is a member
-      const member = await TeamMember.findByTeamAndUser(
-        input.team_id,
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        input.workspace_id,
         ctx.user.userId,
       );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       await Invitation.checkAndExpire();
 
       const invitations = await Invitation.list(
-        input.team_id,
+        input.workspace_id,
         input.limit,
         input.offset,
         input.status,
       );
-      const total = await Invitation.count(input.team_id, input.status);
+      const total = await Invitation.count(input.workspace_id, input.status);
 
       // Enrich with inviter information
       const enriched = await Promise.all(
@@ -347,10 +347,10 @@ export const teamsRouter = router({
       // Accept invitation
       await Invitation.accept(input.token, ctx.user.userId);
 
-      // Add user to team as member
+      // Add user to workspace as member
       try {
-        await TeamMember.create({
-          team_id: invitation.team_id,
+        await WorkspaceMember.create({
+          workspace_id: invitation.workspace_id,
           user_id: ctx.user.userId,
           role: "member",
         });
@@ -361,16 +361,16 @@ export const teamsRouter = router({
         }
       }
 
-      // Switch user's active team to the invited team
+      // Switch user's active workspace to the invited workspace
       const cookieStore = await import("next/headers").then((m) => m.cookies());
-      cookieStore.set("teamId", invitation.team_id, {
+      cookieStore.set("workspaceId", invitation.workspace_id, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         maxAge: 60 * 60 * 24 * 7, // 7 days
       });
 
-      return { success: true, team_id: invitation.team_id };
+      return { success: true, workspace_id: invitation.workspace_id };
     }),
 
   getInvitationByToken: publicProcedure
@@ -385,16 +385,16 @@ export const teamsRouter = router({
         throw new Error("Invitation not found");
       }
 
-      const team = await Team.findById(invitation.team_id);
+      const workspace = await Workspace.findById(invitation.workspace_id);
       const inviter = await User.findById(invitation.invited_by);
 
       return {
         ...invitation,
-        team: team
+        workspace: workspace
           ? {
-              id: team.id,
-              name: team.name,
-              slug: team.slug,
+              id: workspace.id,
+              name: workspace.name,
+              slug: workspace.slug,
             }
           : null,
         inviter: inviter
@@ -410,18 +410,18 @@ export const teamsRouter = router({
   deleteInvitation: protectedProcedure
     .input(
       z.object({
-        team_id: z.string(),
+        workspace_id: z.string(),
         invitation_id: z.string(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       // Check if user is admin or owner
-      const member = await TeamMember.findByTeamAndUser(
-        input.team_id,
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        input.workspace_id,
         ctx.user.userId,
       );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
       if (member.role !== "owner" && member.role !== "admin") {
         throw new Error("Only owners and admins can delete invitations");
@@ -432,36 +432,36 @@ export const teamsRouter = router({
         throw new Error("Invitation not found");
       }
 
-      if (invitation.team_id !== input.team_id) {
-        throw new Error("Invitation does not belong to this team");
+      if (invitation.workspace_id !== input.workspace_id) {
+        throw new Error("Invitation does not belong to this workspace");
       }
 
       await Invitation.delete(input.invitation_id);
       return { success: true };
     }),
 
-  switchTeam: protectedProcedure
-    .input(z.object({ teamId: z.string() }))
+  switchWorkspace: protectedProcedure
+    .input(z.object({ workspaceId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      // Validate that user is a member of this team
-      const member = await TeamMember.findByTeamAndUser(
-        input.teamId,
+      // Validate that user is a member of this workspace
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        input.workspaceId,
         ctx.user.userId,
       );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
-      // Set teamId cookie
+      // Set workspaceId cookie
       const cookieStore = await import("next/headers").then((m) => m.cookies());
-      cookieStore.set("teamId", input.teamId, {
+      cookieStore.set("workspaceId", input.workspaceId, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         maxAge: 60 * 60 * 24 * 7, // 7 days
       });
 
-      return { success: true, teamId: input.teamId };
+      return { success: true, workspaceId: input.workspaceId };
     }),
 });
 

@@ -10,7 +10,7 @@ export interface InvitationRecord {
   _key?: string;
   _id?: string;
   id: string;
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   invited_by: string; // User ID
   token: string; // Unique invitation token (personal invitation link)
   status: "pending" | "accepted" | "expired";
@@ -23,7 +23,7 @@ export interface InvitationRecord {
 }
 
 export interface InvitationInput {
-  team_id: string; // Team ID
+  workspace_id: string; // Workspace ID
   invited_by: string; // User ID
   expires_in_days?: number; // Default 7 days
 }
@@ -37,7 +37,7 @@ export class Invitation {
     const token = `inv_${crypto.randomBytes(32).toString("base64url")}`;
 
     const doc = {
-      team_id: input.team_id,
+      workspace_id: input.workspace_id,
       invited_by: input.invited_by,
       token,
       status: "pending" as const,
@@ -85,21 +85,21 @@ export class Invitation {
     return this._normalizeRecord(results[0]);
   }
 
-  static async findByTeam(
-    teamId: string,
+  static async findByWorkspace(
+    workspaceId: string,
     limit: number = 50,
     offset: number = 0,
   ): Promise<InvitationRecord[]> {
     const aql = `
       FOR inv IN invitations
-        FILTER inv.team_id == @teamId
+        FILTER inv.workspace_id == @workspaceId
         SORT inv.created_at DESC
         LIMIT @offset, @limit
         RETURN inv
     `;
 
     const cursor = await collections.invitations.database.query(aql, {
-      teamId,
+      workspaceId,
       limit,
       offset,
     });
@@ -133,7 +133,7 @@ export class Invitation {
   }
 
   static async list(
-    teamId?: string,
+    workspaceId?: string,
     limit: number = 50,
     offset: number = 0,
     status?: "pending" | "accepted" | "expired",
@@ -145,9 +145,9 @@ export class Invitation {
     const filters: string[] = [];
     const bindVars: any = { limit, offset };
 
-    if (teamId) {
-      filters.push(`inv.team_id == @teamId`);
-      bindVars.teamId = teamId;
+    if (workspaceId) {
+      filters.push(`inv.workspace_id == @workspaceId`);
+      bindVars.workspaceId = workspaceId;
     }
     if (status) {
       filters.push(`inv.status == @status`);
@@ -175,7 +175,7 @@ export class Invitation {
   }
 
   static async count(
-    teamId?: string,
+    workspaceId?: string,
     status?: "pending" | "accepted" | "expired",
   ): Promise<number> {
     let aql = `
@@ -186,9 +186,9 @@ export class Invitation {
     const filters: string[] = [];
     const bindVars: any = {};
 
-    if (teamId) {
-      filters.push(`inv.team_id == @teamId`);
-      bindVars.teamId = teamId;
+    if (workspaceId) {
+      filters.push(`inv.workspace_id == @workspaceId`);
+      bindVars.workspaceId = workspaceId;
     }
     if (status) {
       filters.push(`inv.status == @status`);
@@ -346,7 +346,7 @@ export class Invitation {
       id: doc._id || `invitations/${doc._key}`,
       _key: doc._key,
       _id: doc._id,
-      team_id: doc.team_id,
+      workspace_id: doc.workspace_id,
       invited_by: doc.invited_by,
       token: doc.token,
       status: doc.status,

@@ -3,7 +3,7 @@ import { collections } from "../db";
 export interface WorkerLogInput {
   worker_name: string;
   task_type: string;
-  team_id?: string; // Team ID (optional, for team-specific workers)
+  workspace_id?: string; // Workspace ID (optional, for workspace-specific workers)
   status: "success" | "error" | "running";
   message?: string;
   details?: Record<string, any>;
@@ -20,7 +20,7 @@ export interface WorkerLogRecord {
   id: string;
   worker_name: string;
   task_type: string;
-  team_id?: string; // Team ID (optional, for team-specific workers)
+  workspace_id?: string; // Workspace ID (optional, for workspace-specific workers)
   status: "success" | "error" | "running";
   message?: string;
   details?: Record<string, any>;
@@ -38,7 +38,7 @@ export class WorkerLog {
     const doc = {
       worker_name: input.worker_name,
       task_type: input.task_type,
-      team_id: input.team_id || null,
+      workspace_id: input.workspace_id || null,
       status: input.status,
       message: input.message || null,
       details: input.details || {},
@@ -55,7 +55,7 @@ export class WorkerLog {
   }
 
   static async list(
-    teamId?: string,
+    workspaceId?: string,
     limit: number = 50,
     offset: number = 0,
     worker_name?: string,
@@ -65,9 +65,9 @@ export class WorkerLog {
     const bindVars: any = { limit, offset };
     const filters: string[] = [];
 
-    if (teamId) {
-      filters.push(`log.team_id == @teamId`);
-      bindVars.teamId = teamId;
+    if (workspaceId) {
+      filters.push(`log.workspace_id == @workspaceId`);
+      bindVars.workspaceId = workspaceId;
     }
     if (worker_name) {
       filters.push(`log.worker_name == @workerName`);
@@ -91,7 +91,7 @@ export class WorkerLog {
   }
 
   static async count(
-    teamId?: string,
+    workspaceId?: string,
     worker_name?: string,
     status?: "success" | "error" | "running",
   ): Promise<number> {
@@ -99,9 +99,9 @@ export class WorkerLog {
     const bindVars: any = {};
     const filters: string[] = [];
 
-    if (teamId) {
-      filters.push(`log.team_id == @teamId`);
-      bindVars.teamId = teamId;
+    if (workspaceId) {
+      filters.push(`log.workspace_id == @workspaceId`);
+      bindVars.workspaceId = workspaceId;
     }
     if (worker_name) {
       filters.push(`log.worker_name == @workerName`);
@@ -139,7 +139,7 @@ export class WorkerLog {
       _id: doc._id,
       worker_name: doc.worker_name,
       task_type: doc.task_type,
-      team_id: doc.team_id,
+      workspace_id: doc.workspace_id,
       status: doc.status,
       message: doc.message,
       details: doc.details || {},

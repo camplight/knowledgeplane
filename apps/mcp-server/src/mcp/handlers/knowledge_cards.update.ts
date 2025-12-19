@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { KnowledgeCard, TeamMember } from "@knowledgeplane/db";
+import { KnowledgeCard, WorkspaceMember } from "@knowledgeplane/db";
 
 export const knowledgeCardsUpdateTool: Tool = {
   name: "knowledge_cards.update",
@@ -38,11 +38,6 @@ export const knowledgeCardsUpdateTool: Tool = {
         description:
           "User ID of the person updating the card (optional, inferred from session if authenticated)",
       },
-      team_id: {
-        type: "string",
-        description:
-          "Team ID for validation (optional, inferred from session if authenticated)",
-      },
     },
     required: ["id"],
   },
@@ -56,7 +51,7 @@ export async function handleKnowledgeCardsUpdate(args: {
   fact_ids?: string[];
   metadata?: Record<string, any>;
   last_updated_by?: string;
-  team_id?: string;
+  workspace_id?: string;
 }) {
   if (!args.last_updated_by) {
     throw new Error(
@@ -64,28 +59,28 @@ export async function handleKnowledgeCardsUpdate(args: {
     );
   }
 
-  // Get the card first to check its team_id
+  // Get the card first to check its workspace_id
   const existingCard = await KnowledgeCard.findById(args.id);
   if (!existingCard) {
     throw new Error(`Knowledge card with id ${args.id} not found`);
   }
 
-  // Validate team_id (should be set from context)
-  if (!args.team_id) {
-    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  // Validate workspace_id (should be set from context) - map to workspace_id
+  if (!args.workspace_id) {
+    throw new Error("Workspace ID is required. Workspace ID should be automatically inferred from authenticated session context.");
   }
   
-  if (existingCard.team_id !== args.team_id) {
-    throw new Error("Knowledge card does not belong to the specified team");
+  if (existingCard.workspace_id !== args.workspace_id) {
+    throw new Error("Knowledge card does not belong to the specified workspace");
   }
   
-  // Validate team membership
-  const member = await TeamMember.findByTeamAndUser(
-    args.team_id,
+  // Validate workspace membership
+  const member = await WorkspaceMember.findByWorkspaceAndUser(
+    args.workspace_id,
     args.last_updated_by,
   );
   if (!member) {
-    throw new Error("You are not a member of this team");
+    throw new Error("You are not a member of this workspace");
   }
 
   const card = await KnowledgeCard.update({

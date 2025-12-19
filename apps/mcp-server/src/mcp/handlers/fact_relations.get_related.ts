@@ -16,10 +16,6 @@ export const factRelationsGetRelatedTool: Tool = {
         type: "string",
         description: "Optional filter by relation type",
       },
-      team_id: {
-        type: "string",
-        description: "Team ID for filtering (optional, inferred from session if authenticated)",
-      },
     },
     required: ["fact_id"],
   },
@@ -28,21 +24,21 @@ export const factRelationsGetRelatedTool: Tool = {
 export async function handleFactRelationsGetRelated(args: {
   fact_id: string;
   relation_type?: string;
-  team_id?: string;
+  workspace_id?: string;
 }) {
-  // Get the fact to check its team_id
+  // Get the fact to check its workspace_id
   const fact = await Fact.findById(args.fact_id);
   if (!fact) {
     throw new Error(`Fact with id ${args.fact_id} not found`);
   }
 
-  // Validate team_id (should be set from context)
-  if (!args.team_id) {
-    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  // Validate workspace_id (should be set from context) - map to workspace_id
+  if (!args.workspace_id) {
+    throw new Error("Workspace ID is required. Workspace ID should be automatically inferred from authenticated session context.");
   }
   
-  if (fact.team_id !== args.team_id) {
-    throw new Error("Fact does not belong to the specified team");
+  if (fact.workspace_id !== args.workspace_id) {
+    throw new Error("Fact does not belong to the specified workspace");
   }
 
   const results = await FactRelation.getRelatedFacts(
@@ -50,10 +46,10 @@ export async function handleFactRelationsGetRelated(args: {
     args.relation_type,
   );
 
-  // Filter by team_id
-  const teamId = args.team_id;
+  // Filter by workspace_id
+  const workspaceId = args.workspace_id;
   const filteredResults = results.filter(
-    (r) => r.relation.team_id === teamId && r.fact.team_id === teamId,
+    (r) => r.relation.workspace_id === workspaceId && r.fact.workspace_id === workspaceId,
   );
 
   return {

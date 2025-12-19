@@ -62,7 +62,7 @@ export const userRouter = router({
   getMcpUrl: protectedProcedure
     .input(
       z.object({
-        teamId: z.string().optional(),
+        workspaceId: z.string().optional(),
       }).optional(),
     )
     .query(async ({ ctx, input }) => {
@@ -92,15 +92,15 @@ export const userRouter = router({
       const url = new URL(baseUrl);
       url.searchParams.set("api_key", user.api_key);
       
-      // Add team_id if provided
-      if (input?.teamId) {
-        // Validate that user is a member of this team
-        const { TeamMember } = await import("@knowledgeplane/db/next");
-        const member = await TeamMember.findByTeamAndUser(input.teamId, ctx.user.userId);
+      // Add workspace_id if provided
+      if (input?.workspaceId) {
+        // Validate that user is a member of this workspace
+        const { WorkspaceMember } = await import("@knowledgeplane/db/next");
+        const member = await WorkspaceMember.findByWorkspaceAndUser(input.workspaceId, ctx.user.userId);
         if (!member) {
-          throw new Error("You are not a member of this team");
+          throw new Error("You are not a member of this workspace");
         }
-        url.searchParams.set("team_id", input.teamId);
+        url.searchParams.set("workspace_id", input.workspaceId);
       }
       
       return { url: url.toString() };
@@ -120,7 +120,7 @@ export const userRouter = router({
 
       // Enrich users with invitation status
       // Note: We can only find accepted invitations by user ID since invitations
-      // are team-based tokens and don't store email addresses
+      // are workspace-based tokens and don't store email addresses
       const enriched = await Promise.all(
         users.map(async (user) => {
           const acceptedInvitations = await Invitation.findByAcceptedBy(user.id);

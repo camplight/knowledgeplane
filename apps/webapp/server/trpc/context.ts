@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
-import { User, TeamMember } from "@knowledgeplane/db/next";
+import { User, WorkspaceMember } from "@knowledgeplane/db/next";
 
 export interface SessionUser {
   userId: string;
@@ -10,7 +10,7 @@ export interface SessionUser {
 
 export interface TRPCContext {
   user: SessionUser | null;
-  teamId: string | null;
+  workspaceId: string | null;
   req: NextRequest;
 }
 
@@ -20,7 +20,7 @@ export async function createContext(opts: {
   const { req } = opts;
   
   let user: SessionUser | null = null;
-  let teamId: string | null = null;
+  let workspaceId: string | null = null;
   const cookieStore = await cookies();
   const sessionId = cookieStore.get("session")?.value;
   
@@ -38,24 +38,24 @@ export async function createContext(opts: {
           username: userRecord.username,
         };
 
-        // Get team_id from cookie, or fall back to user's first team
-        const teamIdFromCookie = cookieStore.get("teamId")?.value;
-        if (teamIdFromCookie) {
-          // Validate that user is a member of this team
-          const member = await TeamMember.findByTeamAndUser(teamIdFromCookie, userId);
+        // Get workspace_id from cookie, or fall back to user's first workspace
+        const workspaceIdFromCookie = cookieStore.get("workspaceId")?.value;
+        if (workspaceIdFromCookie) {
+          // Validate that user is a member of this workspace
+          const member = await WorkspaceMember.findByWorkspaceAndUser(workspaceIdFromCookie, userId);
           if (member) {
-            teamId = teamIdFromCookie;
+            workspaceId = workspaceIdFromCookie;
           }
         }
 
-        // If no valid teamId from cookie, get user's first team
-        if (!teamId) {
-          const userTeams = await TeamMember.findByUser(userId, 1, 0);
-          if (userTeams.length > 0) {
-            teamId = userTeams[0].team_id;
+        // If no valid workspaceId from cookie, get user's first workspace
+        if (!workspaceId) {
+          const userWorkspaces = await WorkspaceMember.findByUser(userId, 1, 0);
+          if (userWorkspaces.length > 0) {
+            workspaceId = userWorkspaces[0].workspace_id;
           }
-          // Note: teamId can still be null if user has no teams
-          // This will be handled by individual routes that require a team
+          // Note: workspaceId can still be null if user has no workspaces
+          // This will be handled by individual routes that require a workspace
         }
       }
     }
@@ -63,7 +63,7 @@ export async function createContext(opts: {
   
   return {
     user,
-    teamId,
+    workspaceId,
     req,
   };
 }

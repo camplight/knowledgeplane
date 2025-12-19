@@ -180,7 +180,6 @@ The server implements the Model Context Protocol with the following tools:
 - `facts.trash` - Trash facts
 - `facts.bulkwrite` - Bulk write facts
 - `knowledgecontexts.list` - List knowledge contexts
-- `users.register` - Register new users
 - `files.upload` - Upload files
 
 ## Health Check

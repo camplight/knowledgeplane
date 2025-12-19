@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { KnowledgeCard, Fact, TeamMember } from "@knowledgeplane/db";
+import { KnowledgeCard, Fact, WorkspaceMember } from "@knowledgeplane/db";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
 import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
 
@@ -23,10 +23,6 @@ export const knowledgeCardsCombineTool: Tool = {
         type: "string",
         description: "User ID of the last updater (optional, inferred from session if authenticated)",
       },
-      team_id: {
-        type: "string",
-        description: "Team ID for validation (optional, inferred from session if authenticated)",
-      },
     },
     required: ["card_ids"],
   },
@@ -36,7 +32,7 @@ export async function handleKnowledgeCardsCombine(args: {
   card_ids: string[];
   created_by?: string;
   last_updated_by?: string;
-  team_id?: string;
+  workspace_id?: string;
 }) {
   if (!args.created_by || !args.last_updated_by) {
     throw new Error(
@@ -58,27 +54,27 @@ export async function handleKnowledgeCardsCombine(args: {
     throw new Error("One or more cards not found");
   }
 
-  // Validate that all cards belong to the same team
-  const teamIds = new Set(validCards.map((c) => c.team_id));
-  if (teamIds.size > 1) {
-    throw new Error("All cards must belong to the same team");
+  // Validate that all cards belong to the same workspace
+  const workspaceIds = new Set(validCards.map((c) => c.workspace_id));
+  if (workspaceIds.size > 1) {
+    throw new Error("All cards must belong to the same workspace");
   }
 
-  const cardTeamId = validCards[0].team_id;
+  const cardWorkspaceId = validCards[0].workspace_id;
 
-  // Validate team_id (should be set from context)
-  if (!args.team_id) {
-    throw new Error("Team ID is required. Team ID should be automatically inferred from authenticated session context.");
+  // Validate workspace_id (should be set from context) - map to workspace_id
+  if (!args.workspace_id) {
+    throw new Error("Workspace ID is required. Workspace ID should be automatically inferred from authenticated session context.");
   }
   
-  if (cardTeamId !== args.team_id) {
-    throw new Error("Cards do not belong to the specified team");
+  if (cardWorkspaceId !== args.workspace_id) {
+    throw new Error("Cards do not belong to the specified workspace");
   }
 
-  // Validate team membership
-  const member = await TeamMember.findByTeamAndUser(cardTeamId, args.last_updated_by);
+  // Validate workspace membership
+  const member = await WorkspaceMember.findByWorkspaceAndUser(cardWorkspaceId, args.last_updated_by);
   if (!member) {
-    throw new Error("You are not a member of this team");
+    throw new Error("You are not a member of this workspace");
   }
 
   // Collect all unique fact IDs
@@ -162,7 +158,7 @@ Provide your response as JSON with the following structure:
     summary: parsed.summary || "",
     content: parsed.content || "",
     fact_ids: Array.from(allFactIds),
-    team_id: cardTeamId,
+    workspace_id: cardWorkspaceId,
     created_by: args.created_by!,
     last_updated_by: args.last_updated_by!,
     metadata: {

@@ -1,11 +1,10 @@
 import { router, protectedProcedure } from "../router";
-import { TeamMember } from "@knowledgeplane/db/next";
 
 export const authRouter = router({
   me: protectedProcedure.query(async ({ ctx }) => {
     return {
       user: ctx.user,
-      currentTeamId: ctx.teamId,
+      currentWorkspaceId: ctx.workspaceId,
     };
   }),
   

@@ -20,14 +20,14 @@ export const knowledgeCardsListTool: Tool = {
 };
 
 export async function handleKnowledgeCardsList(args: {
-  team_id?: string;
+  workspace_id?: string;
   limit?: number;
   offset?: number;
 }) {
   const limit = args.limit || 50;
   const offset = args.offset || 0;
 
-  const cards = await KnowledgeCard.list(args.team_id, limit, offset);
+  const cards = await KnowledgeCard.list(args.workspace_id, limit, offset); // workspace_id maps to workspaceId
 
   return {
     content: [

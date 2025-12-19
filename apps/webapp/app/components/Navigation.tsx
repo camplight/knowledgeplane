@@ -4,7 +4,7 @@ import { trpc } from "../../utils/trpc";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
-import { TeamSelector } from "./TeamSelector";
+import { WorkspaceSelector } from "./WorkspaceSelector";
 
 export function Navigation() {
   const router = useRouter();
@@ -61,7 +61,7 @@ export function Navigation() {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <TeamSelector />
+            <WorkspaceSelector />
             <Link
               href="/dashboard"
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
@@ -103,14 +103,14 @@ export function Navigation() {
               Chat
             </Link>
             <Link
-              href="/teams"
+              href="/workspaces"
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                isActive("/teams")
+                isActive("/workspaces")
                   ? "bg-blue-600 text-white hover:bg-blue-700"
                   : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
               }`}
             >
-              Teams
+              Workspaces
             </Link>
             <Link
               href="/worker-logs"

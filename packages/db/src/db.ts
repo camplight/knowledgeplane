@@ -18,9 +18,7 @@ const isServer = typeof window === "undefined";
 
 // Helper function to convert a body to a buffer/string for Content-Length calculation
 // This ensures undici.fetch can set Content-Length header instead of using chunked encoding
-async function normalizeBody(
-  body: BodyInit | null,
-): Promise<BodyInit | null> {
+async function normalizeBody(body: BodyInit | null): Promise<BodyInit | null> {
   if (body === null || body === undefined) {
     return null;
   }
@@ -84,14 +82,45 @@ const createUndiciFetchWrapper = () => {
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> => {
+    // Helper to calculate Content-Length for normalized body
+    const getContentLength = (body: BodyInit | null): number | undefined => {
+      if (body === null || body === undefined) {
+        return undefined;
+      }
+      if (typeof body === "string") {
+        return Buffer.byteLength(body, "utf8");
+      }
+      if (body instanceof Buffer) {
+        return body.length;
+      }
+      if (body instanceof Uint8Array) {
+        return body.length;
+      }
+      if (body instanceof ArrayBuffer) {
+        return body.byteLength;
+      }
+      if (ArrayBuffer.isView(body)) {
+        return body.byteLength;
+      }
+      return undefined;
+    };
+
     // If input is a Request object, extract URL and options
     if (input instanceof Request) {
       const url = input.url;
 
       // Build options from Request object
+      // Copy headers to a plain object to avoid issues with Headers object
+      const headersObj: Record<string, string> = {};
+      if (input.headers) {
+        input.headers.forEach((value, key) => {
+          headersObj[key] = value;
+        });
+      }
+
       const options: RequestInit = {
         method: input.method,
-        headers: input.headers,
+        headers: headersObj,
         redirect: input.redirect,
         signal: input.signal,
       };
@@ -101,20 +130,81 @@ const createUndiciFetchWrapper = () => {
         const normalizedBody = await normalizeBody(input.body as BodyInit);
         if (normalizedBody !== null) {
           options.body = normalizedBody;
+          // Explicitly set Content-Length header
+          const contentLength = getContentLength(normalizedBody);
+          if (contentLength !== undefined) {
+            options.headers = {
+              ...headersObj,
+              "Content-Length": contentLength.toString(),
+            };
+            // Remove Transfer-Encoding if present
+            if (options.headers["Transfer-Encoding"]) {
+              delete options.headers["Transfer-Encoding"];
+            }
+          }
         }
       }
 
       // Merge with init to allow overrides
       if (init) {
+        // Copy init headers if present
+        const initHeaders: Record<string, string> = {};
+        if (init.headers) {
+          if (init.headers instanceof Headers) {
+            init.headers.forEach((value, key) => {
+              initHeaders[key] = value;
+            });
+          } else if (Array.isArray(init.headers)) {
+            init.headers.forEach(([key, value]) => {
+              initHeaders[key] = value;
+            });
+          } else {
+            Object.assign(initHeaders, init.headers);
+          }
+        }
+
         // Normalize init body if present
         if (init.body !== null && init.body !== undefined) {
           const normalizedInitBody = await normalizeBody(init.body);
           if (normalizedInitBody !== null) {
             options.body = normalizedInitBody;
+            // Explicitly set Content-Length header
+            const contentLength = getContentLength(normalizedInitBody);
+            if (contentLength !== undefined) {
+              const mergedHeaders: Record<string, string> = {
+                ...(options.headers as Record<string, string>),
+                ...initHeaders,
+                "Content-Length": contentLength.toString(),
+              };
+              // Remove Transfer-Encoding if present
+              if (mergedHeaders["Transfer-Encoding"]) {
+                delete mergedHeaders["Transfer-Encoding"];
+              }
+              options.headers = mergedHeaders;
+            } else {
+              options.headers = {
+                ...(options.headers as Record<string, string>),
+                ...initHeaders,
+              };
+            }
+          } else {
+            options.headers = {
+              ...(options.headers as Record<string, string>),
+              ...initHeaders,
+            };
           }
+        } else {
+          options.headers = {
+            ...(options.headers as Record<string, string>),
+            ...initHeaders,
+          };
         }
         // Merge other init properties
-        Object.assign(options, { ...init, body: options.body });
+        Object.assign(options, {
+          ...init,
+          body: options.body,
+          headers: options.headers,
+        });
       }
 
       return undiciFetch(url, options);
@@ -124,12 +214,64 @@ const createUndiciFetchWrapper = () => {
     // Normalize body if present to ensure Content-Length header
     if (init && init.body !== null && init.body !== undefined) {
       const normalizedBody = await normalizeBody(init.body);
-      const undiciInit = { ...init };
+      const undiciInit: RequestInit = { ...init };
+
+      // Copy headers to plain object
+      const headersObj: Record<string, string> = {};
+      if (init.headers) {
+        if (init.headers instanceof Headers) {
+          init.headers.forEach((value, key) => {
+            headersObj[key] = value;
+          });
+        } else if (Array.isArray(init.headers)) {
+          init.headers.forEach(([key, value]) => {
+            headersObj[key] = value;
+          });
+        } else {
+          Object.assign(headersObj, init.headers);
+        }
+      }
+
       if (normalizedBody !== null) {
         undiciInit.body = normalizedBody;
+        // Explicitly set Content-Length header
+        const contentLength = getContentLength(normalizedBody);
+        if (contentLength !== undefined) {
+          const finalHeaders: Record<string, string> = {
+            ...headersObj,
+            "Content-Length": contentLength.toString(),
+          };
+          // Remove Transfer-Encoding if present
+          if (finalHeaders["Transfer-Encoding"]) {
+            delete finalHeaders["Transfer-Encoding"];
+          }
+          undiciInit.headers = finalHeaders;
+        } else {
+          undiciInit.headers = headersObj;
+        }
+      } else {
+        undiciInit.headers = headersObj;
       }
       return undiciFetch(input, undiciInit);
     }
+
+    // Handle headers even when there's no body
+    if (init && init.headers) {
+      const headersObj: Record<string, string> = {};
+      if (init.headers instanceof Headers) {
+        init.headers.forEach((value, key) => {
+          headersObj[key] = value;
+        });
+      } else if (Array.isArray(init.headers)) {
+        init.headers.forEach(([key, value]) => {
+          headersObj[key] = value;
+        });
+      } else {
+        Object.assign(headersObj, init.headers);
+      }
+      return undiciFetch(input, { ...init, headers: headersObj });
+    }
+
     return undiciFetch(input, init);
   };
 };
@@ -180,8 +322,8 @@ export const collections = {
   worker_triggers: db.collection("worker_triggers"),
   chat_threads: db.collection("chat_threads"),
   chat_messages: db.collection("chat_messages"),
-  teams: db.collection("teams"),
-  team_members: db.collection("team_members"),
+  workspaces: db.collection("workspaces"),
+  workspace_members: db.collection("workspace_members"),
 };
 
 // Graph for relations
@@ -229,8 +371,8 @@ export async function init() {
     "worker_triggers",
     "chat_threads",
     "chat_messages",
-    "teams",
-    "team_members",
+    "workspaces",
+    "workspace_members",
   ];
 
   for (const name of documentCollectionNames) {
@@ -284,8 +426,8 @@ export async function init() {
   try {
     await collections.facts.ensureIndex({
       type: "persistent",
-      fields: ["team_id"],
-      name: "idx_fact_team_id",
+      fields: ["workspace_id"],
+      name: "idx_fact_workspace_id",
     });
     await collections.facts.ensureIndex({
       type: "persistent",
@@ -369,8 +511,8 @@ export async function init() {
     });
     await collections.invitations.ensureIndex({
       type: "persistent",
-      fields: ["team_id"],
-      name: "idx_invitation_team_id",
+      fields: ["workspace_id"],
+      name: "idx_invitation_workspace_id",
     });
     await collections.invitations.ensureIndex({
       type: "persistent",
@@ -388,32 +530,32 @@ export async function init() {
       fields: ["invited_by"],
       name: "idx_invitation_invited_by",
     });
-    await collections.teams.ensureIndex({
+    await collections.workspaces.ensureIndex({
       type: "persistent",
       fields: ["slug"],
       unique: true,
-      name: "idx_team_slug",
+      name: "idx_workspace_slug",
     });
-    await collections.teams.ensureIndex({
+    await collections.workspaces.ensureIndex({
       type: "persistent",
       fields: ["created_by"],
-      name: "idx_team_created_by",
+      name: "idx_workspace_created_by",
     });
-    await collections.team_members.ensureIndex({
+    await collections.workspace_members.ensureIndex({
       type: "persistent",
-      fields: ["team_id"],
-      name: "idx_team_member_team_id",
+      fields: ["workspace_id"],
+      name: "idx_workspace_member_workspace_id",
     });
-    await collections.team_members.ensureIndex({
+    await collections.workspace_members.ensureIndex({
       type: "persistent",
       fields: ["user_id"],
-      name: "idx_team_member_user_id",
+      name: "idx_workspace_member_user_id",
     });
-    await collections.team_members.ensureIndex({
+    await collections.workspace_members.ensureIndex({
       type: "persistent",
-      fields: ["team_id", "user_id"],
+      fields: ["workspace_id", "user_id"],
       unique: true,
-      name: "idx_team_member_team_user",
+      name: "idx_workspace_member_workspace_user",
     });
     await collections.relations.ensureIndex({
       type: "persistent",
@@ -468,8 +610,8 @@ export async function init() {
     });
     await collections.chat_threads.ensureIndex({
       type: "persistent",
-      fields: ["team_id"],
-      name: "idx_chat_thread_team_id",
+      fields: ["workspace_id"],
+      name: "idx_chat_thread_workspace_id",
     });
     await collections.chat_threads.ensureIndex({
       type: "persistent",
@@ -483,23 +625,23 @@ export async function init() {
     });
     await collections.knowledge_cards.ensureIndex({
       type: "persistent",
-      fields: ["team_id"],
-      name: "idx_knowledge_card_team_id",
+      fields: ["workspace_id"],
+      name: "idx_knowledge_card_workspace_id",
     });
     await collections.files.ensureIndex({
       type: "persistent",
-      fields: ["team_id"],
-      name: "idx_file_team_id",
+      fields: ["workspace_id"],
+      name: "idx_file_workspace_id",
     });
     await collections.relations.ensureIndex({
       type: "persistent",
-      fields: ["team_id"],
-      name: "idx_relation_team_id",
+      fields: ["workspace_id"],
+      name: "idx_relation_workspace_id",
     });
     await collections.webhooks.ensureIndex({
       type: "persistent",
-      fields: ["team_id"],
-      name: "idx_webhook_team_id",
+      fields: ["workspace_id"],
+      name: "idx_webhook_workspace_id",
     });
     await collections.chat_messages.ensureIndex({
       type: "persistent",
@@ -528,9 +670,8 @@ export async function init() {
         )
         RETURN count
       `;
-      const countCursor = await collections.knowledge_cards.database.query(
-        countQuery,
-      );
+      const countCursor =
+        await collections.knowledge_cards.database.query(countQuery);
       const vectorCount = (await countCursor.next()) || 0;
 
       // nLists must be <= vectorCount (ArangoDB requirement)
@@ -539,9 +680,8 @@ export async function init() {
       // - Maximum: 100 (for large datasets)
       // - If no vectors yet, use 16 (will work when vectors are added)
       // - If vectors < 16, use vectorCount (or 1 if vectorCount is 0)
-      const nLists = vectorCount > 0
-        ? Math.min(Math.max(1, vectorCount), 100)
-        : 16;
+      const nLists =
+        vectorCount > 0 ? Math.min(Math.max(1, vectorCount), 100) : 16;
 
       await collections.knowledge_cards.ensureIndex({
         type: "vector",

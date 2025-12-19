@@ -20,10 +20,6 @@ export const filesUploadTool: Tool = {
         type: "string",
         description: "Base64-encoded file content",
       },
-      team_id: {
-        type: "string",
-        description: "Team ID (optional, inferred from session if authenticated)",
-      },
       created_by: {
         type: "string",
         description:
@@ -38,18 +34,18 @@ export async function handleFilesUpload(args: {
   filename: string;
   mimeType: string;
   data: string; // Base64 encoded
-  team_id?: string;
+  workspace_id?: string;
   created_by?: string;
 }) {
-  // Validate that user ID and team_id are provided (should be merged from context by server.ts)
+  // Validate that user ID and workspace_id are provided (should be merged from context by server.ts)
   if (!args.created_by) {
     throw new Error(
       "User ID is required. Either provide created_by, or authenticate via session.",
     );
   }
-  if (!args.team_id) {
+  if (!args.workspace_id) {
     throw new Error(
-      "Team ID is required. Team ID should be automatically inferred from authenticated session context.",
+      "Workspace ID is required. Workspace ID should be automatically inferred from authenticated session context.",
     );
   }
 
@@ -61,7 +57,7 @@ export async function handleFilesUpload(args: {
     buffer,
     filename: args.filename,
     mimeType: args.mimeType,
-    teamId: args.team_id,
+    workspaceId: args.workspace_id,
     uploadedBy: args.created_by,
     openaiApiKey: process.env.OPENAI_API_KEY,
     openaiModel: process.env.OPENAI_MODEL,

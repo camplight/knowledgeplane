@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { Invitation, User, TeamMember } from "@knowledgeplane/db/next";
+import { Invitation, User, WorkspaceMember } from "@knowledgeplane/db/next";
 import { z } from "zod";
 
 export const invitationsRouter = router({
@@ -10,18 +10,21 @@ export const invitationsRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       return await Invitation.create({
-        team_id: ctx.teamId,
+        workspace_id: ctx.workspaceId,
         invited_by: ctx.user.userId,
         expires_in_days: input.expires_in_days,
       });
@@ -38,14 +41,17 @@ export const invitationsRouter = router({
         .optional(),
     )
     .query(async ({ input, ctx }) => {
-      if (!ctx.user || !ctx.teamId) {
-        throw new Error("User must be authenticated and have a team");
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
       }
 
-      // Validate team membership
-      const member = await TeamMember.findByTeamAndUser(ctx.teamId, ctx.user.userId);
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
       if (!member) {
-        throw new Error("You are not a member of this team");
+        throw new Error("You are not a member of this workspace");
       }
 
       const limit = input?.limit || 50;
@@ -55,8 +61,13 @@ export const invitationsRouter = router({
       // Check and expire old invitations
       await Invitation.checkAndExpire();
 
-      const invitations = await Invitation.list(ctx.teamId, limit, offset, status);
-      const total = await Invitation.count(ctx.teamId, status);
+      const invitations = await Invitation.list(
+        ctx.workspaceId,
+        limit,
+        offset,
+        status,
+      );
+      const total = await Invitation.count(ctx.workspaceId, status);
 
       // Enrich with inviter information
       const enriched = await Promise.all(
@@ -95,18 +106,21 @@ export const invitationsRouter = router({
       }
 
       // Check if user is already a member
-      const member = await TeamMember.findByTeamAndUser(invitation.team_id, ctx.user.userId);
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        invitation.workspace_id,
+        ctx.user.userId,
+      );
       if (member) {
-        throw new Error("You are already a member of this team");
+        throw new Error("You are already a member of this workspace");
       }
 
       // Accept invitation
       await Invitation.accept(input.token, ctx.user.userId);
 
-      // Add user to team as member
+      // Add user to workspace as member
       try {
-        await TeamMember.create({
-          team_id: invitation.team_id,
+        await WorkspaceMember.create({
+          workspace_id: invitation.workspace_id,
           user_id: ctx.user.userId,
           role: "member",
         });
@@ -117,7 +131,7 @@ export const invitationsRouter = router({
         }
       }
 
-      return { success: true, team_id: invitation.team_id };
+      return { success: true, workspace_id: invitation.workspace_id };
     }),
 
   getByToken: protectedProcedure
@@ -145,4 +159,3 @@ export const invitationsRouter = router({
       };
     }),
 });
-

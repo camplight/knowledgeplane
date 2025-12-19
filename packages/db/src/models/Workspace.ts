@@ -1,25 +1,25 @@
 import { collections } from "../db";
 
-export interface TeamRecord {
+export interface WorkspaceRecord {
   _key?: string;
   _id?: string;
   id: string;
   name: string;
-  slug: string; // URL-friendly team identifier
+  slug: string; // URL-friendly workspace identifier
   description?: string;
   created_by: string; // User ID of the creator
   created_at: string;
   updated_at: string;
 }
 
-export interface TeamInput {
+export interface WorkspaceInput {
   name: string;
   description?: string;
   created_by: string; // User ID of the creator
 }
 
-export class Team {
-  static async create(input: TeamInput): Promise<TeamRecord> {
+export class Workspace {
+  static async create(input: WorkspaceInput): Promise<WorkspaceRecord> {
     // Generate slug from name
     const slug = this._generateSlug(input.name);
 
@@ -35,9 +35,9 @@ export class Team {
   }
 
   private static async _createWithSlug(
-    input: TeamInput,
+    input: WorkspaceInput,
     slug: string,
-  ): Promise<TeamRecord> {
+  ): Promise<WorkspaceRecord> {
     const now = new Date().toISOString();
     const doc = {
       name: input.name,
@@ -49,17 +49,17 @@ export class Team {
     };
 
     try {
-      const result = await collections.teams.save(doc, { returnNew: true });
+      const result = await collections.workspaces.save(doc, { returnNew: true });
       return this._normalizeRecord(result.new!);
     } catch (error: any) {
       throw error;
     }
   }
 
-  static async findById(id: string): Promise<TeamRecord | null> {
+  static async findById(id: string): Promise<WorkspaceRecord | null> {
     const key = this._extractKey(id);
     try {
-      const doc = await collections.teams.document(key);
+      const doc = await collections.workspaces.document(key);
       return this._normalizeRecord(doc);
     } catch (error: any) {
       if (error.errorNum === 1202) {
@@ -69,15 +69,15 @@ export class Team {
     }
   }
 
-  static async findBySlug(slug: string): Promise<TeamRecord | null> {
+  static async findBySlug(slug: string): Promise<WorkspaceRecord | null> {
     const aql = `
-      FOR team IN teams
-        FILTER team.slug == @slug
+      FOR workspace IN workspaces
+        FILTER workspace.slug == @slug
         LIMIT 1
-        RETURN team
+        RETURN workspace
     `;
 
-    const cursor = await collections.teams.database.query(aql, { slug });
+    const cursor = await collections.workspaces.database.query(aql, { slug });
     const results = await cursor.all();
 
     if (!results || results.length === 0) {
@@ -90,15 +90,15 @@ export class Team {
   static async list(
     limit: number = 50,
     offset: number = 0,
-  ): Promise<TeamRecord[]> {
+  ): Promise<WorkspaceRecord[]> {
     const aql = `
-      FOR team IN teams
-        SORT team.created_at DESC
+      FOR workspace IN workspaces
+        SORT workspace.created_at DESC
         LIMIT @offset, @limit
-        RETURN team
+        RETURN workspace
     `;
 
-    const cursor = await collections.teams.database.query(aql, {
+    const cursor = await collections.workspaces.database.query(aql, {
       limit,
       offset,
     });
@@ -111,15 +111,15 @@ export class Team {
     return results.map((r: any) => this._normalizeRecord(r));
   }
 
-  static async findByUserId(userId: string): Promise<TeamRecord[]> {
+  static async findByUserId(userId: string): Promise<WorkspaceRecord[]> {
     const aql = `
-      FOR member IN team_members
+      FOR member IN workspace_members
         FILTER member.user_id == @userId
-        LET team = DOCUMENT(member.team_id)
-        RETURN team
+        LET workspace = DOCUMENT(member.workspace_id)
+        RETURN workspace
     `;
 
-    const cursor = await collections.team_members.database.query(aql, {
+    const cursor = await collections.workspace_members.database.query(aql, {
       userId,
     });
     const results = await cursor.all();
@@ -133,8 +133,8 @@ export class Team {
 
   static async update(
     id: string,
-    updates: Partial<Pick<TeamRecord, "name" | "description">>,
-  ): Promise<TeamRecord> {
+    updates: Partial<Pick<WorkspaceRecord, "name" | "description">>,
+  ): Promise<WorkspaceRecord> {
     const key = this._extractKey(id);
     const updateDoc: any = {
       updated_at: new Date().toISOString(),
@@ -149,7 +149,7 @@ export class Team {
       updateDoc.description = updates.description;
     }
 
-    const result = await collections.teams.update(key, updateDoc, {
+    const result = await collections.workspaces.update(key, updateDoc, {
       returnNew: true,
     });
     return this._normalizeRecord(result.new!);
@@ -158,7 +158,7 @@ export class Team {
   static async delete(id: string): Promise<void> {
     const key = this._extractKey(id);
     try {
-      await collections.teams.remove(key);
+      await collections.workspaces.remove(key);
     } catch (error: any) {
       if (error.errorNum !== 1202) {
         throw error;
@@ -168,11 +168,11 @@ export class Team {
 
   static async count(): Promise<number> {
     const aql = `
-      LET count = LENGTH(FOR team IN teams RETURN team)
+      LET count = LENGTH(FOR workspace IN workspaces RETURN workspace)
       RETURN count
     `;
 
-    const cursor = await collections.teams.database.query(aql);
+    const cursor = await collections.workspaces.database.query(aql);
     const result = await cursor.next();
 
     return result || 0;
@@ -195,9 +195,9 @@ export class Team {
       .replace(/-+/g, "-"); // Replace multiple hyphens with single hyphen
   }
 
-  static _normalizeRecord(doc: any): TeamRecord {
+  static _normalizeRecord(doc: any): WorkspaceRecord {
     return {
-      id: doc._id || `teams/${doc._key}`,
+      id: doc._id || `workspaces/${doc._key}`,
       _key: doc._key,
       _id: doc._id,
       name: doc.name,
