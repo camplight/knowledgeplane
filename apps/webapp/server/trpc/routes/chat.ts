@@ -84,7 +84,8 @@ export const chatRouter = router({
       const mcpServerUrl = getMcpServerUrl(ctx.workspaceId);
 
       // Build system prompt with instructions for JSON response
-      const systemPrompt = `You are a helpful assistant with access to a knowledge base through MCP tools.
+      // Note: If MCP tools are available, use them. If not, respond normally without mentioning tools.
+      const systemPrompt = `You are a helpful assistant${mcpServerUrl ? " with access to a knowledge base through MCP tools" : ""}.
 
 IMPORTANT: You MUST always return your response as valid JSON with the following structure:
 {
@@ -97,12 +98,14 @@ Rules:
 2. The "usedFacts" array should contain the IDs (as strings) of facts that you actually used to construct your response
 3. If you didn't use any facts, return an empty array [] for "usedFacts"
 4. Always return valid JSON, even if tool calls fail or you don't use any facts
-5. After using MCP tools, you must still format your final response as JSON with the structure above
+5. ${mcpServerUrl ? "After using MCP tools, you must still format your final response as JSON with the structure above" : "Simply respond to the user's question in the content field"}
+6. ${mcpServerUrl ? "If MCP tools are available, use them to search the knowledge base. If tools are not available or fail, respond normally without mentioning the tools." : "Respond to the user's question directly."}
+7. NEVER output tool specifications or tool call details as text - only use tools if they are actually available and working
 
 Example response:
 {
-  "content": "Based on the knowledge base, I found that...",
-  "usedFacts": ["facts/123", "facts/456"]
+  "content": "${mcpServerUrl ? "Based on the knowledge base, I found that..." : "I can help you with that."}",
+  "usedFacts": ${mcpServerUrl ? '["facts/123", "facts/456"]' : "[]"}
 }`;
 
       // Get thread messages (with truncation)
@@ -155,7 +158,21 @@ Example response:
         try {
           const parsedResponse = JSON.parse(responseText);
           if (parsedResponse.content) {
-            responseContent = parsedResponse.content;
+            // Handle case where content might be an object (with nested content and metadata)
+            if (typeof parsedResponse.content === "string") {
+              responseContent = parsedResponse.content;
+            } else if (
+              typeof parsedResponse.content === "object" &&
+              parsedResponse.content !== null
+            ) {
+              // If content is an object, try to extract the string content
+              if (typeof parsedResponse.content.content === "string") {
+                responseContent = parsedResponse.content.content;
+              } else {
+                // Fallback: stringify the object if it doesn't have a content property
+                responseContent = JSON.stringify(parsedResponse.content);
+              }
+            }
           }
           if (Array.isArray(parsedResponse.usedFacts)) {
             usedFactIds = parsedResponse.usedFacts;

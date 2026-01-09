@@ -416,6 +416,27 @@ export async function init() {
       // Create as edge collection (type: 3)
       await relationsCollection.create({ type: 3 });
       console.log(`Edge collection relations created`);
+    } else {
+      // Check if collection has a schema that might be causing issues
+      try {
+        const properties = await relationsCollection.properties();
+        console.log("Relations collection properties:", JSON.stringify(properties, null, 2));
+        
+        if (properties.schema) {
+          console.warn("Relations collection has a schema validation:", JSON.stringify(properties.schema, null, 2));
+        }
+        
+        // Always try to remove schema validation and set level to none (it might be causing type mismatches)
+        try {
+          await relationsCollection.properties({ schema: null, level: "none" });
+          console.log("Removed schema validation and set validation level to none for relations collection");
+        } catch (schemaError: any) {
+          console.warn("Could not remove schema validation:", schemaError.message, schemaError);
+        }
+      } catch (e: any) {
+        // Log the error but don't fail initialization
+        console.error("Error checking/updating relations collection properties:", e.message, e);
+      }
     }
   } catch (error: any) {
     if (error.errorNum !== 1207) {

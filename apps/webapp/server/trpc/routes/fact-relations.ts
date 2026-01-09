@@ -52,7 +52,19 @@ export const factRelationsRouter = router({
         from_fact: z.string().min(1),
         to_fact: z.string().min(1),
         type: z.string().min(1),
-        metadata: z.record(z.string()).optional(),
+        metadata: z
+          .any()
+          .optional()
+          .transform((val) => {
+            if (val === null || val === undefined) return undefined;
+            if (Array.isArray(val)) return undefined; // Reject arrays, return undefined
+            if (typeof val === "object") {
+              // Only return object if it has keys, otherwise return undefined
+              const keys = Object.keys(val);
+              return keys.length > 0 ? val : undefined;
+            }
+            return undefined; // Reject non-objects
+          }),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -103,7 +115,19 @@ export const factRelationsRouter = router({
       z.object({
         id: z.string().min(1),
         type: z.string().min(1).optional(),
-        metadata: z.record(z.string()).optional(),
+        metadata: z
+          .any()
+          .optional()
+          .transform((val) => {
+            if (val === null || val === undefined) return undefined;
+            if (Array.isArray(val)) return undefined; // Reject arrays, return undefined
+            if (typeof val === "object") {
+              // Only return object if it has keys, otherwise return undefined
+              const keys = Object.keys(val);
+              return keys.length > 0 ? val : undefined;
+            }
+            return undefined; // Reject non-objects
+          }),
       }),
     )
     .mutation(async ({ input, ctx }) => {

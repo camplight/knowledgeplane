@@ -4,6 +4,79 @@ import { z } from "zod";
 import { Buffer } from "node:buffer";
 import * as path from "node:path";
 
+// Schedule parsing utilities (shared with worker)
+interface ScheduleInterval {
+  type: "interval";
+  value: number; // milliseconds
+}
+
+interface ScheduleCron {
+  type: "cron";
+  value: string; // cron expression
+}
+
+type ParsedSchedule = ScheduleInterval | ScheduleCron;
+
+function parseSchedule(schedule: string): ParsedSchedule {
+  const trimmed = schedule.trim().toLowerCase();
+
+  // Check for "every X unit" format
+  const everyMatch = trimmed.match(
+    /^every\s+(\d+)\s+(minute|minutes|hour|hours|day|days)$/,
+  );
+  if (everyMatch) {
+    const value = parseInt(everyMatch[1], 10);
+    const unit = everyMatch[2];
+    let ms = 0;
+    if (unit.startsWith("minute")) {
+      ms = value * 60 * 1000;
+    } else if (unit.startsWith("hour")) {
+      ms = value * 60 * 60 * 1000;
+    } else if (unit.startsWith("day")) {
+      ms = value * 24 * 60 * 60 * 1000;
+    }
+    return { type: "interval", value: ms };
+  }
+
+  // Check if it's a number (milliseconds)
+  const numMatch = trimmed.match(/^\d+$/);
+  if (numMatch) {
+    return { type: "interval", value: parseInt(trimmed, 10) };
+  }
+
+  // Assume it's a cron expression
+  return { type: "cron", value: schedule };
+}
+
+function calculateNextRun(schedule: ParsedSchedule, lastRun?: string): string {
+  const now = new Date();
+  let nextRun: Date;
+
+  if (schedule.type === "interval") {
+    if (lastRun) {
+      const lastRunDate = new Date(lastRun);
+      nextRun = new Date(lastRunDate.getTime() + schedule.value);
+      // If next run is in the past, set it to now + interval
+      if (nextRun < now) {
+        nextRun = new Date(now.getTime() + schedule.value);
+      }
+    } else {
+      nextRun = new Date(now.getTime() + schedule.value);
+    }
+  } else {
+    // For cron, we'll use a simple approach: run every hour if no last run
+    // In production, you'd want to use a proper cron parser like node-cron
+    if (lastRun) {
+      const lastRunDate = new Date(lastRun);
+      nextRun = new Date(lastRunDate.getTime() + 60 * 60 * 1000); // Default to 1 hour
+    } else {
+      nextRun = new Date(now.getTime() + 60 * 60 * 1000);
+    }
+  }
+
+  return nextRun.toISOString();
+}
+
 export const dataSourcesRouter = router({
   create: protectedProcedure
     .input(
@@ -187,6 +260,15 @@ export const dataSourcesRouter = router({
 
       if (dataSource.workspace_id !== ctx.workspaceId) {
         throw new Error("Data source does not belong to this workspace");
+      }
+
+      // If schedule is being updated, recalculate next_run_at based on the new schedule
+      if (updates.schedule !== undefined && updates.schedule !== dataSource.schedule) {
+        const parsedSchedule = parseSchedule(updates.schedule);
+        // Use current time as base if no last_run_at, or use last_run_at if it exists
+        // This ensures the new schedule takes effect immediately
+        const nextRunAt = calculateNextRun(parsedSchedule, dataSource.last_run_at);
+        updates.next_run_at = nextRunAt;
       }
 
       return await DataSource.update(id, updates);

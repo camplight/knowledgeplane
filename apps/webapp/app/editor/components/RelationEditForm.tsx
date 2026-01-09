@@ -115,8 +115,17 @@ export function RelationEditForm({
             required
           >
             {allAvailableFacts.map((fact) => {
-              const displayText = fact.content 
-                ? `${fact.content.substring(0, 50)}${fact.content.length > 50 ? "..." : ""}`
+              // Normalize content to ensure it's always a string
+              let contentStr = "";
+              if (typeof fact.content === "string") {
+                contentStr = fact.content;
+              } else if (typeof fact.content === "object" && fact.content !== null && "content" in fact.content) {
+                contentStr = String((fact.content as any).content);
+              } else {
+                contentStr = JSON.stringify(fact.content || "");
+              }
+              const displayText = contentStr 
+                ? `${contentStr.substring(0, 50)}${contentStr.length > 50 ? "..." : ""}`
                 : `Fact ${fact.id.substring(0, 30)}${fact.id.length > 30 ? "..." : ""}`;
               return (
                 <option key={fact.id} value={fact.id}>

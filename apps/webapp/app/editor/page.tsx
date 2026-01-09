@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { Navigation } from "../components/Navigation";
 import { FactEditForm } from "./components/FactEditForm";
 import { RelationItem } from "./components/RelationItem";
+import { TruncatedContent } from "./components/TruncatedContent";
 
 export default function EditorPage() {
   const router = useRouter();
@@ -161,6 +162,19 @@ export default function EditorPage() {
     onError: (error) => {
       console.error("Failed to delete relation:", error);
       alert(`Failed to delete relation: ${error.message}`);
+    },
+  });
+
+  // Delete fact mutation
+  const deleteFactMutation = trpc.facts.trash.useMutation({
+    onSuccess: () => {
+      setSelectedFact(null);
+      refetchFacts();
+      refetchFactRelations();
+    },
+    onError: (error) => {
+      console.error("Failed to delete fact:", error);
+      alert(`Failed to delete fact: ${error.message}`);
     },
   });
 
@@ -381,6 +395,18 @@ export default function EditorPage() {
     
     if (confirm("Are you sure you want to delete this relation?")) {
       deleteRelationMutation.mutate({ id: relationId });
+    }
+  };
+
+  const handleDeleteFact = (factId: string) => {
+    if (!factId || factId.trim() === "") {
+      console.error("Missing fact ID");
+      alert("Missing fact ID");
+      return;
+    }
+    
+    if (confirm("Are you sure you want to delete this fact? This action cannot be undone.")) {
+      deleteFactMutation.mutate({ id: factId });
     }
   };
 
@@ -620,12 +646,23 @@ export default function EditorPage() {
                             selectedFact === fact.id ? "bg-blue-50 border-l-4 border-blue-600" : ""
                           }`}
                         >
-                          <p className="text-slate-900 mb-2 leading-relaxed">{fact.content}</p>
+                          <div className="text-slate-900 mb-2 leading-relaxed">
+                            <TruncatedContent
+                              content={
+                                typeof fact.content === "string"
+                                  ? fact.content
+                                  : typeof fact.content === "object" && fact.content !== null && "content" in fact.content
+                                  ? String((fact.content as any).content)
+                                  : JSON.stringify(fact.content)
+                              }
+                              maxLength={300}
+                            />
+                          </div>
                           <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
                             <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">
                               ID: {factIdDisplay}
                             </span>
-                            <span>{new Date(fact.created_at).toLocaleDateString()}</span>
+                            <span>{new Date(fact.created_at).toLocaleString()}</span>
                           </div>
                         </div>
                       );
@@ -802,7 +839,12 @@ export default function EditorPage() {
                     <>
                       <div>
                         <p className="text-sm font-medium text-slate-600 mb-1">Content</p>
-                        <p className="text-slate-900">{facts.find((f: any) => f.id === selectedFact)?.content}</p>
+                        <div className="text-slate-900">
+                          <TruncatedContent
+                            content={facts.find((f: any) => f.id === selectedFact)?.content || ""}
+                            maxLength={500}
+                          />
+                        </div>
                       </div>
                       <div>
                         <p className="text-sm font-medium text-slate-600 mb-1">Created</p>
@@ -946,9 +988,18 @@ export default function EditorPage() {
                                 );
 
                                 if (!relatedFactAlreadyPresent && rel.fact && relatedFactId) {
+                                  // Normalize content to ensure it's always a string
+                                  let normalizedContent = "";
+                                  if (typeof rel.fact.content === "string") {
+                                    normalizedContent = rel.fact.content;
+                                  } else if (typeof rel.fact.content === "object" && rel.fact.content !== null && "content" in rel.fact.content) {
+                                    normalizedContent = String((rel.fact.content as any).content);
+                                  } else {
+                                    normalizedContent = JSON.stringify(rel.fact.content || "");
+                                  }
                                   availableFactsList.push({
                                     id: relatedFactId,
-                                    content: rel.fact.content || "",
+                                    content: normalizedContent,
                                   });
                                 }
 
@@ -1075,12 +1126,23 @@ export default function EditorPage() {
                   )}
                 </div>
 
-                <button
-                  onClick={() => setSelectedFact(null)}
-                  className="w-full px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-                >
-                  Close
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedFact(null)}
+                    className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                  >
+                    Close
+                  </button>
+                  {editingFactId !== selectedFact && (
+                    <button
+                      onClick={() => handleDeleteFact(selectedFact)}
+                      disabled={deleteFactMutation.isPending}
+                      className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {deleteFactMutation.isPending ? "Deleting..." : "Delete"}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1191,7 +1253,13 @@ export default function EditorPage() {
                             }}
                             className="p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors"
                           >
-                            <p className="text-sm text-slate-900 line-clamp-2">{fact.content}</p>
+                            <p className="text-sm text-slate-900 line-clamp-2">
+                              {typeof fact.content === "string"
+                                ? fact.content
+                                : typeof fact.content === "object" && fact.content !== null && "content" in fact.content
+                                ? String((fact.content as any).content)
+                                : JSON.stringify(fact.content)}
+                            </p>
                             <p className="text-xs text-slate-500 mt-1 font-mono">
                               {fact.id?.includes("/") ? fact.id.substring(fact.id.lastIndexOf("/") + 1) : fact.id?.substring(0, 8)}
                             </p>

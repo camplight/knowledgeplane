@@ -137,7 +137,11 @@ export default function ChatPage() {
                       : "bg-white text-slate-900 border border-slate-200 shadow-sm"
                   }`}
                 >
-                  <div className="whitespace-pre-wrap break-words">{message.content}</div>
+                  <div className="whitespace-pre-wrap break-words">
+                    {typeof message.content === "string"
+                      ? message.content
+                      : JSON.stringify(message.content)}
+                  </div>
                   {message.role === "assistant" && message.factsUsed !== undefined && (
                     <div className="mt-2 pt-2 border-t border-slate-200">
                       <p className="text-xs text-slate-500">
@@ -151,7 +155,11 @@ export default function ChatPage() {
                           <div className="mt-2 space-y-2">
                             {message.facts.map((fact, factIdx) => (
                               <div key={factIdx} className="text-xs bg-slate-50 p-2 rounded border border-slate-200">
-                                <p className="text-slate-700">{fact.content}</p>
+                                <p className="text-slate-700">
+                                  {typeof fact.content === "string"
+                                    ? fact.content
+                                    : JSON.stringify(fact.content)}
+                                </p>
                               </div>
                             ))}
                           </div>

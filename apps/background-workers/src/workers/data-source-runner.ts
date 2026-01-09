@@ -279,10 +279,28 @@ async function executeCodeInVM(args: {
 
   // Create facts API object for the execution context
   const factsAPI = {
-    create: async (content: string, metadata?: Record<string, string>) => {
+    create: async (content: string | { content?: string; metadata?: Record<string, string> }, metadata?: Record<string, string>) => {
+      // Handle case where first parameter is an object (common mistake)
+      let actualContent: string;
+      let actualMetadata: Record<string, string> | undefined;
+      
+      if (typeof content === "object" && content !== null && !Array.isArray(content)) {
+        // First parameter is an object - extract content and metadata
+        actualContent = typeof content.content === "string" ? content.content : JSON.stringify(content);
+        actualMetadata = content.metadata || metadata;
+      } else if (typeof content === "string") {
+        // Normal case: first parameter is a string
+        actualContent = content;
+        actualMetadata = metadata;
+      } else {
+        // Fallback: convert to string
+        actualContent = String(content);
+        actualMetadata = metadata;
+      }
+      
       const fact = await Fact.write({
-        content,
-        metadata,
+        content: actualContent,
+        metadata: actualMetadata,
         workspace_id: workspaceId,
         created_by: userId,
         last_updated_by: userId,
@@ -292,13 +310,28 @@ async function executeCodeInVM(args: {
     bulkCreate: async (
       facts: Array<{ content: string; metadata?: Record<string, string> }>,
     ) => {
-      const factInputs = facts.map((f) => ({
-        content: f.content,
-        metadata: f.metadata,
-        workspace_id: workspaceId,
-        created_by: userId,
-        last_updated_by: userId,
-      }));
+      const factInputs = facts.map((f) => {
+        // Ensure content is always a string
+        let content: string;
+        if (typeof f.content === "string") {
+          content = f.content;
+        } else if (typeof f.content === "object" && f.content !== null) {
+          // If content is an object, try to extract string content or stringify
+          content = typeof (f.content as any).content === "string" 
+            ? (f.content as any).content 
+            : JSON.stringify(f.content);
+        } else {
+          content = String(f.content);
+        }
+        
+        return {
+          content,
+          metadata: f.metadata,
+          workspace_id: workspaceId,
+          created_by: userId,
+          last_updated_by: userId,
+        };
+      });
       const result = await Fact.bulkWrite(factInputs);
       return result;
     },
@@ -379,6 +412,24 @@ async function executeCodeInVM(args: {
     // Provide URL and URLSearchParams for URL manipulation
     URL: globalThis.URL,
     URLSearchParams: globalThis.URLSearchParams,
+    // Provide require stub with helpful error message
+    require: () => {
+      throw new Error(
+        "require() is not available in the sandboxed execution environment. " +
+        "All necessary APIs (fetch, Buffer, URL, etc.) are already available in the global scope. " +
+        "Use the provided APIs directly without requiring modules."
+      );
+    },
+    // Provide module stub to prevent "module is not defined" errors
+    module: {
+      exports: {},
+      require: () => {
+        throw new Error(
+          "require() is not available in the sandboxed execution environment. " +
+          "All necessary APIs (fetch, Buffer, URL, etc.) are already available in the global scope."
+        );
+      },
+    },
   });
 
   // Wrap code in async function to support top-level await
@@ -683,6 +734,7 @@ You have access to the code_execute tool which executes JavaScript/TypeScript co
 
 When using code_execute:
 - The execution context includes: secrets (from data source), facts API, console for logging, and logProgress for custom progress logging
+- IMPORTANT: \`require()\` and \`import\` statements are NOT available. All necessary APIs (fetch, Buffer, URL, JSON, Math, Date, etc.) are already available in the global scope.
 - Secrets are automatically available in the execution context as \`secrets\` object
 - Facts API is available as \`facts\` object with the following methods:
   - facts.create(content, metadata?): Create a single fact

@@ -33,6 +33,8 @@ export const workerLogsRouter = router({
       const offset = input?.offset || 0;
       const worker_name = input?.worker_name;
       const status = input?.status;
+      
+      // Filter logs by current workspace - WorkerLog.list() and count() will filter by workspace_id
       const logs = await WorkerLog.list(
         ctx.workspaceId,
         limit,

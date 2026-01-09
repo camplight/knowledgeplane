@@ -1,0 +1,1 @@
+Fetch the contents from camplight.net and store them as a fact. Create new facts on every fetch.

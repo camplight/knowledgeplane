@@ -360,13 +360,19 @@ export class CardConsolidator {
 
           if (existingRelations.length === 0) {
             try {
+              // Ensure metadata is always an object (handle cases where AI returns array/null/undefined)
+              let metadata: Record<string, any> = {};
+              if (relation.metadata && typeof relation.metadata === "object" && !Array.isArray(relation.metadata)) {
+                metadata = { ...relation.metadata };
+              }
+              
               await FactRelation.create({
                 from_fact: fromFactId,
                 to_fact: toFactId,
                 type: relation.type,
                 workspace_id: fromFactWorkspaceId,
                 metadata: {
-                  ...relation.metadata,
+                  ...metadata,
                   source: "card-consolidator",
                   created_at: new Date().toISOString(),
                 },
@@ -379,6 +385,18 @@ export class CardConsolidator {
                 `Failed to create relation between ${fromFactId} and ${toFactId}:`,
                 error.message,
               );
+              // Log additional details for debugging
+              if (error.message?.includes("Array") || error.message?.includes("type")) {
+                console.warn("Relation creation error details:", {
+                  fromFactId,
+                  toFactId,
+                  type: relation.type,
+                  metadata: relation.metadata,
+                  metadataType: typeof relation.metadata,
+                  isArray: Array.isArray(relation.metadata),
+                  error: error.message,
+                });
+              }
             }
           }
         }

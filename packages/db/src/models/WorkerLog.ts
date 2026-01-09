@@ -71,6 +71,7 @@ export class WorkerLog {
     const bindVars: any = { limit, offset };
     const filters: string[] = [];
 
+    // Always filter by workspace_id when provided (required for workspace-scoped queries)
     if (workspaceId) {
       filters.push(`log.workspace_id == @workspaceId`);
       bindVars.workspaceId = workspaceId;
@@ -179,6 +180,7 @@ export class WorkerLog {
     const bindVars: any = {};
     const filters: string[] = [];
 
+    // Always filter by workspace_id when provided (required for workspace-scoped queries)
     if (workspaceId) {
       filters.push(`log.workspace_id == @workspaceId`);
       bindVars.workspaceId = workspaceId;

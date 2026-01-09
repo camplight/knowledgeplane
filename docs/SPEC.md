@@ -633,6 +633,7 @@ The web interface is built with React and Tailwind CSS, featuring:
   - File details sidebar showing filename, MIME type, size, storage path, fact count, extracted facts list (clickable to navigate to facts), timestamps, and metadata
   - Card deletion functionality with confirmation dialog
   - Fact details sidebar with relations management (create and view outgoing/incoming relations)
+  - Fact deletion functionality with confirmation dialog (marks facts as trashed)
   - Search functionality for facts with server-side semantic search
   - Real-time client-side filtering that filters visible facts, cards, and files as you type, searching through content, title, summary, and filename fields
 - Facts browsing page (`/facts`) with pagination, filtering, and detailed fact display
@@ -1649,8 +1650,14 @@ KnowledgePlane includes background workers that automatically maintain and organ
   - `.md` or `.txt` files: stored as text instructions
   - `.zip` files: extracts markdown files (instructions) and code files
 - Updates `last_run_at` and calculates `next_run_at` based on schedule (with 10-second timeout to prevent hanging)
+- When schedule is updated via the update endpoint, `next_run_at` is automatically recalculated based on the new schedule
 - Logs execution lifecycle to `WorkerLog` collection with `data_source_id` linking logs to specific data sources
 - Can be manually triggered via the data sources UI or tRPC API (works even when data source is disabled)
+- **Code Execution Environment**:
+  - Code is executed in a sandboxed VM context with limited APIs
+  - `require()` and `import` statements are NOT available - all necessary APIs (fetch, Buffer, URL, JSON, Math, Date, etc.) are already available in the global scope
+  - The VM context includes: secrets, facts API, console, fetch, setTimeout/setInterval, JSON, Math, Date, Promise, Buffer, URL, URLSearchParams, and other standard JavaScript APIs
+  - Attempts to use `require()` will throw a helpful error message explaining that it's not available
 - Each data source execution:
   1. Creates a log entry with status "running" when execution starts
   2. Updates the log entry with progress information throughout execution:
@@ -1714,6 +1721,7 @@ KnowledgePlane includes background workers that automatically maintain and organ
 Workers can be manually triggered through:
 - **Web UI**: 
   - Navigate to `/worker-logs` page and click the "Trigger Card Consolidator" or "Trigger Embeddings Generator" buttons
+  - The worker logs page displays logs filtered by the current workspace - only logs for the active workspace are shown
   - Navigate to `/data-sources` page and click "Run Now" button for a specific data source
 - **tRPC API**: 
   - Call `workerLogs.trigger` mutation with `worker` parameter ("card-consolidator" or "embeddings-generator")

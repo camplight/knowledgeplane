@@ -7,6 +7,10 @@ export class EmbeddingsGenerator {
   private triggerCheckInterval: NodeJS.Timeout | null = null;
   private running = false;
   private embeddingModel: string;
+  // OpenAI embeddings API limit: 300,000 tokens per request
+  private readonly MAX_TOKENS_PER_BATCH = 300000;
+  // Conservative token estimation: ~3 characters per token (slightly overestimate to be safe)
+  private readonly CHARS_PER_TOKEN = 3;
 
   constructor() {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -133,6 +137,71 @@ export class EmbeddingsGenerator {
     }
   }
 
+  /**
+   * Estimate token count for a text string
+   * Uses a conservative approximation: ~3 characters per token
+   */
+  private estimateTokens(text: string): number {
+    return Math.ceil(text.length / this.CHARS_PER_TOKEN);
+  }
+
+  /**
+   * Truncate text to fit within token limit if needed
+   * Returns the truncated text and logs a warning if truncation occurred
+   */
+  private truncateToTokenLimit(text: string, maxTokens: number = this.MAX_TOKENS_PER_BATCH): string {
+    const tokens = this.estimateTokens(text);
+    if (tokens <= maxTokens) {
+      return text;
+    }
+    // Truncate to fit within limit (with some margin for safety)
+    const maxChars = (maxTokens - 100) * this.CHARS_PER_TOKEN;
+    const truncated = text.substring(0, maxChars);
+    console.warn(
+      `Text exceeds token limit (${tokens} tokens), truncating from ${text.length} to ${truncated.length} characters`,
+    );
+    return truncated;
+  }
+
+  /**
+   * Create batches of items based on token count rather than item count
+   * Ensures each batch stays under MAX_TOKENS_PER_BATCH
+   */
+  private createTokenAwareBatches<T>(
+    items: T[],
+    getText: (item: T) => string,
+  ): T[][] {
+    const batches: T[][] = [];
+    let currentBatch: T[] = [];
+    let currentBatchTokens = 0;
+
+    for (const item of items) {
+      const text = getText(item);
+      // Use truncated text for token estimation to match what we'll actually send
+      const truncatedText = this.truncateToTokenLimit(text);
+      const itemTokens = this.estimateTokens(truncatedText);
+
+      // If adding this item would exceed the limit, start a new batch
+      if (currentBatchTokens + itemTokens > this.MAX_TOKENS_PER_BATCH && currentBatch.length > 0) {
+        batches.push(currentBatch);
+        currentBatch = [];
+        currentBatchTokens = 0;
+      }
+
+      // If a single item exceeds the limit, it will be in its own batch
+      // (truncation already handled in truncateToTokenLimit)
+      currentBatch.push(item);
+      currentBatchTokens += itemTokens;
+    }
+
+    // Add the last batch if it has items
+    if (currentBatch.length > 0) {
+      batches.push(currentBatch);
+    }
+
+    return batches;
+  }
+
   private async process() {
     if (this.running) {
       return;
@@ -167,10 +236,16 @@ export class EmbeddingsGenerator {
 
           console.log(`Processing ${factsNeedingEmbeddings.length} facts for workspace ${workspace.id}`);
 
-          // Process facts in batches
-          for (let i = 0; i < factsNeedingEmbeddings.length; i += 10) {
-            const batch = factsNeedingEmbeddings.slice(i, i + 10);
-            const texts = batch.map((f) => f.content);
+          // Process facts in token-aware batches
+          const factBatches = this.createTokenAwareBatches(
+            factsNeedingEmbeddings,
+            (f) => f.content,
+          );
+
+          for (let batchIdx = 0; batchIdx < factBatches.length; batchIdx++) {
+            const batch = factBatches[batchIdx];
+            // Truncate texts to fit within token limits
+            const texts = batch.map((f) => this.truncateToTokenLimit(f.content));
             
             try {
               const result = await provider.embeddings(texts, this.embeddingModel);
@@ -187,7 +262,10 @@ export class EmbeddingsGenerator {
                 workspaceFactsUpdated++;
               }
             } catch (err: any) {
-              console.error(`Error processing fact batch ${i}-${i + batch.length}:`, err.message);
+              const startIdx = batchIdx > 0 
+                ? factBatches.slice(0, batchIdx).reduce((sum, b) => sum + b.length, 0)
+                : 0;
+              console.error(`Error processing fact batch ${startIdx}-${startIdx + batch.length}:`, err.message);
             }
           }
 
@@ -199,13 +277,22 @@ export class EmbeddingsGenerator {
 
           console.log(`Processing ${relationsNeedingEmbeddings.length} relations for workspace ${workspace.id}`);
 
-          // Process relations in batches
-          for (let i = 0; i < relationsNeedingEmbeddings.length; i += 10) {
-            const batch = relationsNeedingEmbeddings.slice(i, i + 10);
-            // Create text representation: type + metadata
-            const texts = batch.map((r) => {
+          // Process relations in token-aware batches
+          const relationBatches = this.createTokenAwareBatches(
+            relationsNeedingEmbeddings,
+            (r) => {
               const metadataStr = r.metadata ? JSON.stringify(r.metadata) : "";
               return `${r.type}${metadataStr ? ` ${metadataStr}` : ""}`;
+            },
+          );
+
+          for (let batchIdx = 0; batchIdx < relationBatches.length; batchIdx++) {
+            const batch = relationBatches[batchIdx];
+            // Create text representation: type + metadata, and truncate if needed
+            const texts = batch.map((r) => {
+              const metadataStr = r.metadata ? JSON.stringify(r.metadata) : "";
+              const text = `${r.type}${metadataStr ? ` ${metadataStr}` : ""}`;
+              return this.truncateToTokenLimit(text);
             });
             
             try {
@@ -223,7 +310,10 @@ export class EmbeddingsGenerator {
                 workspaceRelationsUpdated++;
               }
             } catch (err: any) {
-              console.error(`Error processing relation batch ${i}-${i + batch.length}:`, err.message);
+              const startIdx = batchIdx > 0 
+                ? relationBatches.slice(0, batchIdx).reduce((sum, b) => sum + b.length, 0)
+                : 0;
+              console.error(`Error processing relation batch ${startIdx}-${startIdx + batch.length}:`, err.message);
             }
           }
 
@@ -235,11 +325,19 @@ export class EmbeddingsGenerator {
 
           console.log(`Processing ${cardsNeedingEmbeddings.length} cards for workspace ${workspace.id}`);
 
-          // Process cards in batches
-          for (let i = 0; i < cardsNeedingEmbeddings.length; i += 10) {
-            const batch = cardsNeedingEmbeddings.slice(i, i + 10);
-            // Create text representation: title + summary + content
-            const texts = batch.map((c) => `${c.title}\n${c.summary}\n${c.content}`);
+          // Process cards in token-aware batches
+          const cardBatches = this.createTokenAwareBatches(
+            cardsNeedingEmbeddings,
+            (c) => `${c.title}\n${c.summary}\n${c.content}`,
+          );
+
+          for (let batchIdx = 0; batchIdx < cardBatches.length; batchIdx++) {
+            const batch = cardBatches[batchIdx];
+            // Create text representation: title + summary + content, and truncate if needed
+            const texts = batch.map((c) => {
+              const text = `${c.title}\n${c.summary}\n${c.content}`;
+              return this.truncateToTokenLimit(text);
+            });
             
             try {
               const result = await provider.embeddings(texts, this.embeddingModel);
@@ -256,7 +354,10 @@ export class EmbeddingsGenerator {
                 workspaceCardsUpdated++;
               }
             } catch (err: any) {
-              console.error(`Error processing card batch ${i}-${i + batch.length}:`, err.message);
+              const startIdx = batchIdx > 0 
+                ? cardBatches.slice(0, batchIdx).reduce((sum, b) => sum + b.length, 0)
+                : 0;
+              console.error(`Error processing card batch ${startIdx}-${startIdx + batch.length}:`, err.message);
             }
           }
 

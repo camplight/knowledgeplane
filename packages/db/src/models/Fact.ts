@@ -51,8 +51,22 @@ export interface FactUpdateInput {
 export class Fact {
   static async write(input: FactInput): Promise<FactRecord> {
     const now = new Date().toISOString();
+    
+    // Ensure content is always a string
+    let content: string;
+    if (typeof input.content === "string") {
+      content = input.content;
+    } else if (typeof input.content === "object" && input.content !== null) {
+      // If content is an object, try to extract string content or stringify
+      content = typeof (input.content as any).content === "string"
+        ? (input.content as any).content
+        : JSON.stringify(input.content);
+    } else {
+      content = String(input.content || "");
+    }
+    
     const doc = {
-      content: input.content,
+      content,
       metadata: input.metadata || {},
       workspace_id: input.workspace_id,
       created_by: input.created_by,
@@ -79,16 +93,31 @@ export class Fact {
     }
 
     const now = new Date().toISOString();
-    const docs = inputs.map((input) => ({
-      content: input.content,
-      metadata: input.metadata || {},
-      workspace_id: input.workspace_id,
-      created_by: input.created_by,
-      last_updated_by: input.last_updated_by,
-      trashed: false,
-      created_at: now,
-      updated_at: now,
-    }));
+    const docs = inputs.map((input) => {
+      // Ensure content is always a string
+      let content: string;
+      if (typeof input.content === "string") {
+        content = input.content;
+      } else if (typeof input.content === "object" && input.content !== null) {
+        // If content is an object, try to extract string content or stringify
+        content = typeof (input.content as any).content === "string"
+          ? (input.content as any).content
+          : JSON.stringify(input.content);
+      } else {
+        content = String(input.content || "");
+      }
+      
+      return {
+        content,
+        metadata: input.metadata || {},
+        workspace_id: input.workspace_id,
+        created_by: input.created_by,
+        last_updated_by: input.last_updated_by,
+        trashed: false,
+        created_at: now,
+        updated_at: now,
+      };
+    });
 
     const result = await collections.facts.saveAll(docs, {
       returnNew: true,
@@ -115,7 +144,17 @@ export class Fact {
     };
 
     if (input.content !== undefined) {
-      updates.content = input.content;
+      // Ensure content is always a string
+      if (typeof input.content === "string") {
+        updates.content = input.content;
+      } else if (typeof input.content === "object" && input.content !== null) {
+        // If content is an object, try to extract string content or stringify
+        updates.content = typeof (input.content as any).content === "string"
+          ? (input.content as any).content
+          : JSON.stringify(input.content);
+      } else {
+        updates.content = String(input.content || "");
+      }
     }
     if (input.metadata !== undefined) {
       updates.metadata = input.metadata;
@@ -525,11 +564,25 @@ export class Fact {
     if (!doc) {
       throw new Error("Cannot normalize null or undefined fact document");
     }
+    
+    // Ensure content is always a string, even if stored as an object
+    let content: string;
+    if (typeof doc.content === "string") {
+      content = doc.content;
+    } else if (typeof doc.content === "object" && doc.content !== null) {
+      // If content is an object, try to extract string content or stringify
+      content = typeof doc.content.content === "string"
+        ? doc.content.content
+        : JSON.stringify(doc.content);
+    } else {
+      content = String(doc.content || "");
+    }
+    
     return {
       id: doc._id || `facts/${doc._key}`,
       _key: doc._key,
       _id: doc._id,
-      content: doc.content || "", // Ensure content is never undefined
+      content, // Always a string
       metadata: doc.metadata || {},
       workspace_id: doc.workspace_id,
       created_at: doc.created_at,
