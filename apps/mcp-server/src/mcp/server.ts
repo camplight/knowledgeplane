@@ -386,6 +386,15 @@ export function createMcpServer(
         setLastUpdatedBy: true,
       });
       handler = handleKnowledgeCardsCombine;
+    } else if (name === "code_execute") {
+      // For code_execute, we need to preserve secrets from args but set workspace_id and created_by from context
+      const { workspace_id, ...cleanedArgs } = args;
+      handlerArgs = {
+        ...cleanedArgs,
+        workspace_id: context?.workspaceId || workspace_id,
+        created_by: context?.userId || cleanedArgs.created_by || "system",
+      };
+      handler = handleCodeExecute;
     } else {
       const error = `Unknown tool: ${name}`;
       if (logger) {

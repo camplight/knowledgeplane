@@ -31,7 +31,7 @@ AQL queries – support for ArangoDB Query Language (AQL) for advanced graph que
 
 KnowledgeCard consolidation – background worker automatically creates FactRelations between unconsolidated facts using AI analysis, then consolidates related facts and their FactRelations into summary knowledge cards using OpenAI agents. The worker uses graph traversal to find related facts via FactRelations.
 
-DataSource automation – automated data sources that gather knowledge from external sources (APIs, websites, databases, etc.) and store facts into the Knowledge Plane. Data sources are defined via markdown files or zip archives containing instructions and code, scheduled to run at intervals or cron expressions, and executed by a background worker that uses AI models with code interpretation capabilities and MCP tools to store gathered knowledge.
+DataSource automation – automated data sources that gather knowledge from external sources (APIs, websites, databases, etc.) and store facts into the Knowledge Plane. Data sources are defined via markdown files or zip archives containing instructions and code, scheduled to run at intervals or cron expressions, and executed by a background worker that uses AI models with code interpretation capabilities and MCP tools to store gathered knowledge. The data source runner provides a `code_execute` function tool (not an MCP tool) that allows executing JavaScript/TypeScript code in a sandboxed VM environment with access to secrets, facts API, and a `logProgress` function for custom progress logging. This tool is only available during data source execution and is passed directly to the AI model.
 
 Webhooks – register webhooks to receive notifications on fact/card events.
 
@@ -490,6 +490,7 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `last_run_at` (string, optional): Timestamp of last execution (ISO 8601)
 - `next_run_at` (string, optional): Timestamp of next scheduled execution (ISO 8601)
 - `metadata` (object): Additional metadata for the data source
+- `secrets` (object): Key-value pairs for storing secrets (e.g., API keys, tokens, passwords) securely per data source
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
 
@@ -649,10 +650,20 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Create data source form with file upload (.md, .txt, or .zip)
   - Schedule configuration (interval-based or cron expressions)
   - Enable/disable toggle for each data source
+  - Secrets management during creation:
+    - Add secret key-value pairs when creating a new data source
+    - Secure password-style input fields for secret values
+    - View and remove secrets before submitting the form
   - Manual trigger button ("Run Now") for immediate execution
   - View and edit data source details (name, description, schedule, enabled status)
   - View definition file information
   - Last run and next run timestamps display
+  - Secrets management per data source (after creation):
+    - View all secrets (with show/hide toggle for values)
+    - Add new secret key-value pairs
+    - Update existing secrets
+    - Delete secrets
+    - Secure password-style input fields for secret values
   - Pagination support for large lists
   - Toast notifications for user feedback
 - Onboarding page (`/onboarding`) for new users:
@@ -1637,15 +1648,67 @@ KnowledgePlane includes background workers that automatically maintain and organ
 - Extracts definition content from:
   - `.md` or `.txt` files: stored as text instructions
   - `.zip` files: extracts markdown files (instructions) and code files
-- Updates `last_run_at` and calculates `next_run_at` based on schedule
-- Logs execution results to `WorkerLog` collection
-- Can be manually triggered via the data sources UI or tRPC API
+- Updates `last_run_at` and calculates `next_run_at` based on schedule (with 10-second timeout to prevent hanging)
+- Logs execution lifecycle to `WorkerLog` collection with `data_source_id` linking logs to specific data sources
+- Can be manually triggered via the data sources UI or tRPC API (works even when data source is disabled)
 - Each data source execution:
-  1. Loads definition file content
-  2. Builds system prompt with instructions and available code files
-  3. Calls AI model with MCP tools configured
-  4. AI model executes code, gathers data, and stores facts via MCP tools
-  5. Updates data source metadata with execution results
+  1. Creates a log entry with status "running" when execution starts
+  2. Updates the log entry with progress information throughout execution:
+     - Stage: "initialization" - Execution started
+     - Stage: "loading_definition_file" - Loading definition file
+     - Stage: "extracting_content" - Extracting content from definition file
+     - Stage: "preparing_ai_execution" - Preparing AI execution context
+     - Stage: "ai_execution_started" - Starting AI execution
+     - Stage: "processing_tool_calls" - Processing tool calls (with iteration number)
+     - Stage: "executing_code" - Executing code in VM (with iteration number)
+     - Stage: "code_execution_completed" - Code execution completed (with console output info)
+     - Stage: "code_execution_error" - Code execution error (with error details)
+     - Stage: "extracting_results" - Extracting execution results
+     - Stage: "updating_schedule" - Updating data source schedule
+     - Stage: "completed" - Execution completed successfully
+     - Stage: "error" - Execution failed
+  3. Loads definition file content
+  4. Builds system prompt with instructions and available code files
+  5. Calls AI model with MCP tools configured
+  6. AI model executes code, gathers data, and stores facts via MCP tools
+  7. Updates data source metadata with execution results
+  8. Updates the log entry to "success" or "error" status when execution completes
+- **Execution Logs**: 
+  - All data source executions are logged with status "running" when they start, then "success" or "error" when they complete
+  - Logs are stored in the `WorkerLog` collection with `data_source_id` field
+  - Logs are updated in real-time with progress information via the `WorkerLog.update()` method
+  - Logs have both `created_at` (when log was first created) and `updated_at` (when log was last updated) timestamps
+  - The UI displays `updated_at` for completed logs (success/error) and `created_at` for running logs to show accurate completion times
+  - Progress information is stored in the `details` field with a `stage` property indicating the current execution stage
+  - Logs can be viewed per data source in the UI with pagination
+  - Logs include execution time, facts created, and error details (if any)
+  - "Running" status logs appear in blue, "success" in green, and "error" in red
+  - Accessible via tRPC endpoint `dataSources.getLogs` with pagination support
+  - Logs auto-refresh every 3 seconds when a data source is running
+  - **Progress Logging from Scripts**: Scripts executed via `code_execute` can log custom progress messages using the `logProgress(message, metadata?)` function available in the execution context. Progress messages are stored in `details.progress` as an array of entries, each containing a timestamp, message, and optional metadata. These progress messages are displayed in the UI alongside other log information, providing real-time visibility into script execution progress.
+- **File Handling in Data Sources**: Data source scripts that download files from external sources (e.g., Google Drive) must properly handle binary files. Binary files like `.docx` (Word documents) should be converted to text format using appropriate APIs (e.g., Google Drive export API) before storing as facts. Scripts should check content-type headers and detect binary data to avoid encoding issues. Only text-based files or files that can be exported/converted to text format are supported for fact extraction.
+- **Running Status Indicators**:
+  - Data sources show a visual "Running" indicator in the list when they are currently executing
+  - The indicator includes a spinning icon and the current execution stage message
+  - Running status is checked via the `dataSources.checkRunningStatus` tRPC endpoint
+  - The UI auto-refreshes running status every 3 seconds when any data source is running
+  - The "Run Now" button is disabled while a data source is running
+- **Manual Triggering ("Run Now")**:
+  - The "Run Now" button sets `next_run_at` to the current time
+  - The runner picks up manually triggered data sources even if they are disabled
+  - Works for both enabled and disabled data sources
+  - Execution starts within 5 seconds (next runner check interval)
+- **Stopping Running Executions ("Stop")**:
+  - A "Stop" button appears in the UI when a data source is currently running
+  - The button replaces the "Run Now" button while execution is in progress
+  - Clicking "Stop" cancels the running execution by updating the running log to "error" status with `cancelled: true` in details
+  - The worker checks for cancellation at key points during execution (before AI calls, before code execution, between iterations)
+  - When cancellation is detected, the worker immediately stops execution and updates the log appropriately
+  - The log is updated with a cancellation message and metadata indicating it was cancelled by the user
+  - Accessible via tRPC endpoint `dataSources.stop` mutation with `id` parameter (data source ID)
+  - Only workspace owners and admins can stop data source executions
+  - The UI automatically refreshes after stopping to reflect the updated status
+  - Cancellation checks occur periodically during execution, so stopping may take a few seconds depending on the current execution stage
 
 **Manual Worker Triggering:**
 Workers can be manually triggered through:
@@ -1655,6 +1718,7 @@ Workers can be manually triggered through:
 - **tRPC API**: 
   - Call `workerLogs.trigger` mutation with `worker` parameter ("card-consolidator" or "embeddings-generator")
   - Call `dataSources.trigger` mutation with `id` parameter (data source ID)
+  - Call `dataSources.stop` mutation with `id` parameter (data source ID) to cancel a running execution
 - **Trigger Mechanism**: 
   - Creates a trigger record in the `worker_triggers` collection with status "pending"
   - Workers check for pending triggers every 30 seconds

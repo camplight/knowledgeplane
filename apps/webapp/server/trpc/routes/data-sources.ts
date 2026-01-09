@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { DataSource, File, WorkspaceMember } from "@knowledgeplane/db/next";
+import { DataSource, File, WorkspaceMember, WorkerLog, type WorkerLogRecord } from "@knowledgeplane/db/next";
 import { z } from "zod";
 import { Buffer } from "node:buffer";
 import * as path from "node:path";
@@ -17,6 +17,7 @@ export const dataSourcesRouter = router({
           data: z.string(), // Base64 encoded
         }),
         enabled: z.boolean().default(true),
+        secrets: z.record(z.string(), z.string()).optional(), // Key-value pairs for secrets
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -79,6 +80,7 @@ export const dataSourcesRouter = router({
         definition_file_id: fileRecord.id,
         enabled: input.enabled,
         created_by: ctx.user.userId,
+        secrets: input.secrets || {},
       });
 
       return dataSource;
@@ -253,6 +255,289 @@ export const dataSourcesRouter = router({
       });
 
       return { success: true };
+    }),
+
+  stop: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.workspaceId) {
+        throw new Error("Workspace ID is required");
+      }
+
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
+      if (!member) {
+        throw new Error("You are not a member of this workspace");
+      }
+      if (member.role !== "owner" && member.role !== "admin") {
+        throw new Error("Only owners and admins can stop data sources");
+      }
+
+      const dataSource = await DataSource.findById(input.id);
+      if (!dataSource) {
+        throw new Error("Data source not found");
+      }
+
+      if (dataSource.workspace_id !== ctx.workspaceId) {
+        throw new Error("Data source does not belong to this workspace");
+      }
+
+      // Find the latest running log for this data source
+      const runningLog = await WorkerLog.findLatestRunning(input.id);
+      if (!runningLog) {
+        throw new Error("No running execution found for this data source");
+      }
+
+      // Update the log to error status with cancellation message
+      const executionTime = Date.now() - new Date(runningLog.created_at).getTime();
+
+      await WorkerLog.update(runningLog.id, {
+        status: "error",
+        message: `Data source execution cancelled by user`,
+        execution_time_ms: executionTime,
+        error: "Execution was cancelled by user",
+        details: {
+          ...(runningLog.details || {}),
+          cancelled: true,
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: ctx.user.userId,
+        },
+      });
+
+      return { success: true };
+    }),
+
+  getLogs: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        limit: z.number().min(1).max(100).default(20),
+        offset: z.number().min(0).default(0),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      if (!ctx.workspaceId) {
+        throw new Error("Workspace ID is required");
+      }
+
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
+      if (!member) {
+        throw new Error("You are not a member of this workspace");
+      }
+
+      const dataSource = await DataSource.findById(input.id);
+      if (!dataSource) {
+        throw new Error("Data source not found");
+      }
+
+      if (dataSource.workspace_id !== ctx.workspaceId) {
+        throw new Error("Data source does not belong to this workspace");
+      }
+
+      const limit = input.limit || 20;
+      const offset = input.offset || 0;
+      const logs = await WorkerLog.list(
+        ctx.workspaceId,
+        limit,
+        offset,
+        "data-source-runner",
+        undefined,
+        input.id,
+      );
+      const total = await WorkerLog.count(
+        ctx.workspaceId,
+        "data-source-runner",
+        undefined,
+        input.id,
+      );
+
+      return { logs, total, limit, offset };
+    }),
+
+  checkRunningStatus: protectedProcedure
+    .input(
+      z.object({
+        ids: z.array(z.string()),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      if (!ctx.workspaceId) {
+        throw new Error("Workspace ID is required");
+      }
+
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
+      if (!member) {
+        throw new Error("You are not a member of this workspace");
+      }
+
+      // Check running status for each data source
+      const runningStatus: Record<string, boolean> = {};
+      const runningLogs: Record<string, WorkerLogRecord | null> = {};
+
+      for (const id of input.ids) {
+        const dataSource = await DataSource.findById(id);
+        if (dataSource && dataSource.workspace_id === ctx.workspaceId) {
+          const runningLog = await WorkerLog.findLatestRunning(id);
+          runningStatus[id] = runningLog !== null;
+          runningLogs[id] = runningLog;
+        }
+      }
+
+      return { runningStatus, runningLogs };
+    }),
+
+  addSecret: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        key: z.string().min(1).max(100),
+        value: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.workspaceId) {
+        throw new Error("Workspace ID is required");
+      }
+
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
+      if (!member) {
+        throw new Error("You are not a member of this workspace");
+      }
+      if (member.role !== "owner" && member.role !== "admin") {
+        throw new Error("Only owners and admins can manage secrets");
+      }
+
+      const dataSource = await DataSource.findById(input.id);
+      if (!dataSource) {
+        throw new Error("Data source not found");
+      }
+
+      if (dataSource.workspace_id !== ctx.workspaceId) {
+        throw new Error("Data source does not belong to this workspace");
+      }
+
+      // Merge the new secret into existing secrets
+      const updatedSecrets = {
+        ...(dataSource.secrets || {}),
+        [input.key]: input.value,
+      };
+
+      const updated = await DataSource.update(input.id, {
+        secrets: updatedSecrets,
+      });
+
+      return updated;
+    }),
+
+  updateSecret: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        key: z.string().min(1).max(100),
+        value: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.workspaceId) {
+        throw new Error("Workspace ID is required");
+      }
+
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
+      if (!member) {
+        throw new Error("You are not a member of this workspace");
+      }
+      if (member.role !== "owner" && member.role !== "admin") {
+        throw new Error("Only owners and admins can manage secrets");
+      }
+
+      const dataSource = await DataSource.findById(input.id);
+      if (!dataSource) {
+        throw new Error("Data source not found");
+      }
+
+      if (dataSource.workspace_id !== ctx.workspaceId) {
+        throw new Error("Data source does not belong to this workspace");
+      }
+
+      // Check if secret exists
+      if (!dataSource.secrets || !(input.key in dataSource.secrets)) {
+        throw new Error(`Secret key "${input.key}" does not exist`);
+      }
+
+      // Update the secret
+      const updatedSecrets = {
+        ...(dataSource.secrets || {}),
+        [input.key]: input.value,
+      };
+
+      const updated = await DataSource.update(input.id, {
+        secrets: updatedSecrets,
+      });
+
+      return updated;
+    }),
+
+  deleteSecret: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        key: z.string().min(1).max(100),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.workspaceId) {
+        throw new Error("Workspace ID is required");
+      }
+
+      // Validate workspace membership
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
+      if (!member) {
+        throw new Error("You are not a member of this workspace");
+      }
+      if (member.role !== "owner" && member.role !== "admin") {
+        throw new Error("Only owners and admins can manage secrets");
+      }
+
+      const dataSource = await DataSource.findById(input.id);
+      if (!dataSource) {
+        throw new Error("Data source not found");
+      }
+
+      if (dataSource.workspace_id !== ctx.workspaceId) {
+        throw new Error("Data source does not belong to this workspace");
+      }
+
+      // Remove the secret key
+      const updatedSecrets = { ...(dataSource.secrets || {}) };
+      delete updatedSecrets[input.key];
+
+      const updated = await DataSource.update(input.id, {
+        secrets: updatedSecrets,
+      });
+
+      return updated;
     }),
 });
 

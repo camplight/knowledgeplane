@@ -11,6 +11,7 @@ export interface DataSourceInput {
   last_run_at?: string;
   next_run_at?: string;
   metadata?: Record<string, any>;
+  secrets?: Record<string, string>; // Key-value pairs for secrets
 }
 
 export interface DataSourceRecord {
@@ -27,6 +28,7 @@ export interface DataSourceRecord {
   last_run_at?: string;
   next_run_at?: string;
   metadata: Record<string, any>;
+  secrets: Record<string, string>; // Key-value pairs for secrets
   created_at: string;
   updated_at: string;
 }
@@ -40,6 +42,7 @@ export interface DataSourceUpdateInput {
   last_run_at?: string;
   next_run_at?: string;
   metadata?: Record<string, any>;
+  secrets?: Record<string, string>; // Key-value pairs for secrets
 }
 
 export class DataSource {
@@ -56,6 +59,7 @@ export class DataSource {
       last_run_at: input.last_run_at || null,
       next_run_at: input.next_run_at || null,
       metadata: input.metadata || {},
+      secrets: input.secrets || {},
       created_at: now,
       updated_at: now,
     };
@@ -82,6 +86,7 @@ export class DataSource {
     if (input.last_run_at !== undefined) updates.last_run_at = input.last_run_at;
     if (input.next_run_at !== undefined) updates.next_run_at = input.next_run_at;
     if (input.metadata !== undefined) updates.metadata = input.metadata;
+    if (input.secrets !== undefined) updates.secrets = input.secrets;
 
     const result = await collections.data_sources.update(key, updates, {
       returnNew: true,
@@ -150,10 +155,11 @@ export class DataSource {
 
   static async findEnabledForExecution(): Promise<DataSourceRecord[]> {
     const now = new Date().toISOString();
+    // Include enabled data sources that are due, OR disabled data sources that were manually triggered (next_run_at is set and in the past)
     const aql = `
       FOR ds IN data_sources
-        FILTER ds.enabled == true
-        FILTER ds.next_run_at == null OR ds.next_run_at <= @now
+        FILTER (ds.enabled == true AND (ds.next_run_at == null OR ds.next_run_at <= @now))
+           OR (ds.enabled == false AND ds.next_run_at != null AND ds.next_run_at <= @now)
         RETURN ds
     `;
 
@@ -164,13 +170,24 @@ export class DataSource {
   }
 
   static async delete(id: string): Promise<void> {
+    if (!id || id.trim() === "") {
+      throw new Error("DataSource ID is required");
+    }
+
     const key = this._extractKey(id);
     try {
+      // Get the data source before deletion to verify it exists
+      const dataSource = await this.findById(id);
+      if (!dataSource) {
+        throw new Error(`DataSource with id ${id} not found`);
+      }
+
       await collections.data_sources.remove(key);
     } catch (error: any) {
-      if (error.errorNum !== 1202) {
-        throw error;
+      if (error.errorNum === 1202) {
+        throw new Error(`DataSource with id ${id} (key: ${key}) not found`);
       }
+      throw error;
     }
   }
 
@@ -214,6 +231,7 @@ export class DataSource {
       last_run_at: doc.last_run_at,
       next_run_at: doc.next_run_at,
       metadata: doc.metadata || {},
+      secrets: doc.secrets || {},
       created_at: doc.created_at,
       updated_at: doc.updated_at,
     };

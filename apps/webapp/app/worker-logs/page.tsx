@@ -185,7 +185,11 @@ export default function WorkerLogsPage() {
                     {logs.map((log: any) => (
                       <tr key={log.id} className="hover:bg-slate-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
-                          {new Date(log.created_at).toLocaleString()}
+                          {log.status === "running" 
+                            ? new Date(log.created_at).toLocaleString()
+                            : (log.updated_at 
+                                ? new Date(log.updated_at).toLocaleString()
+                                : new Date(log.created_at).toLocaleString())}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                           {log.worker_name}
