@@ -1717,6 +1717,15 @@ KnowledgePlane includes background workers that automatically maintain and organ
   - The UI automatically refreshes after stopping to reflect the updated status
   - Cancellation checks occur periodically during execution, so stopping may take a few seconds depending on the current execution stage
 
+**Skills (Data Source Definitions):**
+- Skills are stored in the repo under `skills/` as markdown files that define data source instructions and optional code blocks.
+- They are used as data source definition files for the Data Source Runner and can be uploaded via the `/data-sources` UI.
+- Skills can reference `secrets`, the `facts` API, and `logProgress()` in their code (see the Data Source Runner execution context).
+- Current repo skills:
+  - `skills/fetch-web-page.md` - Fetches `camplight.net` and stores the contents as a new fact each run.
+  - `skills/skill1.md` - Pings `https://camplight.net` and records online/offline status as a fact.
+  - `skills/gdrive/skill.md` - Syncs a specific Google Drive folder into facts, with metadata and error handling.
+
 **Manual Worker Triggering:**
 Workers can be manually triggered through:
 - **Web UI**: 
