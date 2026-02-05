@@ -2,6 +2,8 @@
 
 KnowledgePlane is an open-core Model Context Protocol (MCP) server that gives AI agents and teams a shared, persistent memory layer — secure, queryable, and self-maintaining.
 
+Short version for sharing: `docs/SPEC_SHORT.md`.
+
 🎯 Problem
 
 Agents forget everything between sessions, and teams lose context across tools.
@@ -1718,13 +1720,18 @@ KnowledgePlane includes background workers that automatically maintain and organ
   - Cancellation checks occur periodically during execution, so stopping may take a few seconds depending on the current execution stage
 
 **Skills (Data Source Definitions):**
-- Skills are stored in the repo under `skills/` as markdown files that define data source instructions and optional code blocks.
-- They are used as data source definition files for the Data Source Runner and can be uploaded via the `/data-sources` UI.
-- Skills can reference `secrets`, the `facts` API, and `logProgress()` in their code (see the Data Source Runner execution context).
+- Skills are markdown files stored under `skills/` and serve as **data source definitions** for the Data Source Runner.
+- A skill combines natural-language instructions with optional code blocks. The runner loads the file, builds an AI prompt, and executes the embedded code in a sandboxed VM.
+- Skills are uploaded via `/data-sources` (or included in a zip) and become runnable, scheduled data sources.
+- Skills can access the execution context: `secrets`, `facts` API (`facts.create`/`facts.bulkCreate`), `fetch`, `console`, and `logProgress(message, metadata?)` for UI-visible progress.
+- Skills should be text-first: gather data, convert to text, then store as facts with useful metadata.
 - Current repo skills:
-  - `skills/fetch-web-page.md` - Fetches `camplight.net` and stores the contents as a new fact each run.
-  - `skills/skill1.md` - Pings `https://camplight.net` and records online/offline status as a fact.
-  - `skills/gdrive/skill.md` - Syncs a specific Google Drive folder into facts, with metadata and error handling.
+  - `skills/fetch-web-page.md`: Fetches `camplight.net` content and stores a new fact each run.
+  - `skills/skill1.md`: Pings `https://camplight.net` and records online/offline status as a fact.
+  - `skills/gdrive/skill.md`: Syncs a specific Google Drive folder into facts with per-file metadata, recursive traversal, and error handling.
+    - Requires a Google OAuth access token in `secrets` (`googleAccessToken` or `GOOGLE_ACCESS_TOKEN`) with `drive.readonly` scope.
+    - Converts Google Docs/Sheets/Slides to text/CSV via export; skips unsupported binary Office files unless converted to Google Workspace format.
+    - Uses `facts.bulkCreate()` for efficiency and `logProgress()` for detailed execution logs.
 
 **Manual Worker Triggering:**
 Workers can be manually triggered through:
