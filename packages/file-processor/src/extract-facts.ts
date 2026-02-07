@@ -108,7 +108,8 @@ Return your response as JSON with this structure:
     }
     try {
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(buffer);
+      const workbookBuffer = Buffer.from(buffer);
+      await workbook.xlsx.load(workbookBuffer);
       const worksheets = workbook.worksheets;
       let textContent = `Excel Spreadsheet: ${filename}\n\n`;
 

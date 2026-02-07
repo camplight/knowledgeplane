@@ -511,22 +511,23 @@ export default async function mcpRoutes(app: FastifyInstance) {
 
   // Add error handler to catch errors
   app.setErrorHandler((error, request, reply) => {
+    const err = error as Error & { statusCode?: number; message?: string; stack?: string };
     if (request.url.startsWith("/mcp") || request.url === "/") {
       app.log.error(
         {
-          error: error.message,
-          stack: error.stack,
+          error: err.message,
+          stack: err.stack,
           method: request.method,
           url: request.url,
         },
         "MCP: Error handler - request failed",
       );
     }
-    reply.code(error.statusCode || 500).send({
+    reply.code(err.statusCode || 500).send({
       jsonrpc: "2.0",
       error: {
         code: -32603,
-        message: error.message || "Internal error",
+        message: err.message || "Internal error",
       },
       id: null,
     });
