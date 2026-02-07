@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   try {
     const originBase = (process.env.APP_URL || "http://localhost:3000").replace(
       /\/$/,
-      ""
+      "",
     );
 
     const rendered = await renderSkillMarkdown({
@@ -20,6 +20,7 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
+    console.error(error);
     return new Response("Skill document unavailable. Please try again later.", {
       status: 500,
       headers: {
@@ -28,4 +29,3 @@ export async function GET(request: Request) {
     });
   }
 }
-

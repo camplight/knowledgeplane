@@ -67,6 +67,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/webapp/.next/standalone ./
 # Copy static files to match the standalone structure (server runs from apps/webapp/server.js)
 COPY --from=builder --chown=nextjs:nodejs /app/apps/webapp/.next/static ./apps/webapp/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/webapp/public ./apps/webapp/public
+COPY --from=builder --chown=nextjs:nodejs /app/packages/api-core/skill-template.md ./packages/api-core/skill-template.md
 
 USER nextjs
 
