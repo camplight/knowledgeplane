@@ -54,5 +54,5 @@ COPY --from=builder --chown=nodejs:nodejs /app/apps/rest-api/package.json ./pack
 
 USER nodejs
 
-CMD ["tsx", "dist/index.js"]
+CMD ["tsx", "dist/apps/rest-api/src/index.js"]
 
