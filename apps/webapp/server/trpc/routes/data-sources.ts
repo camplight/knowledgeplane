@@ -1,5 +1,12 @@
 import { router, protectedProcedure } from "../router";
-import { DataSource, File, WorkspaceMember, WorkerLog, type WorkerLogRecord } from "@knowledgeplane/db/next";
+import {
+  DataSource,
+  File,
+  WorkspaceMember,
+  WorkerLog,
+  type DataSourceUpdateInput,
+  type WorkerLogRecord,
+} from "@knowledgeplane/db/next";
 import { z } from "zod";
 import { Buffer } from "node:buffer";
 import * as path from "node:path";
@@ -241,7 +248,8 @@ export const dataSourcesRouter = router({
         throw new Error("Workspace ID is required");
       }
 
-      const { id, ...updates } = input;
+      const { id, ...updatesInput } = input;
+      const updates: DataSourceUpdateInput = { ...updatesInput };
 
       // Validate workspace membership
       const member = await WorkspaceMember.findByWorkspaceAndUser(

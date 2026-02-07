@@ -696,6 +696,7 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Data source listing with status indicators (enabled/disabled)
   - Create data source form with file upload (.md, .txt, or .zip)
   - Schedule configuration (interval-based or cron expressions)
+  - Schedule updates recalculate the next run timestamp immediately
   - Enable/disable toggle for each data source
   - Secrets management during creation:
     - Add secret key-value pairs when creating a new data source
