@@ -1,4 +1,5 @@
 import { collections } from "../db";
+import crypto from "crypto";
 
 export interface WorkspaceRecord {
   _key?: string;
@@ -8,6 +9,9 @@ export interface WorkspaceRecord {
   slug: string; // URL-friendly workspace identifier
   description?: string;
   created_by: string; // User ID of the creator
+  rest_api_key?: string;
+  rest_api_key_created_by?: string;
+  rest_api_key_created_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -87,6 +91,24 @@ export class Workspace {
     return this._normalizeRecord(results[0]);
   }
 
+  static async findByRestApiKey(apiKey: string): Promise<WorkspaceRecord | null> {
+    const aql = `
+      FOR workspace IN workspaces
+        FILTER workspace.rest_api_key == @apiKey
+        LIMIT 1
+        RETURN workspace
+    `;
+
+    const cursor = await collections.workspaces.database.query(aql, { apiKey });
+    const results = await cursor.all();
+
+    if (!results || results.length === 0) {
+      return null;
+    }
+
+    return this._normalizeRecord(results[0]);
+  }
+
   static async list(
     limit: number = 50,
     offset: number = 0,
@@ -133,7 +155,16 @@ export class Workspace {
 
   static async update(
     id: string,
-    updates: Partial<Pick<WorkspaceRecord, "name" | "description">>,
+    updates: Partial<
+      Pick<
+        WorkspaceRecord,
+        | "name"
+        | "description"
+        | "rest_api_key"
+        | "rest_api_key_created_by"
+        | "rest_api_key_created_at"
+      >
+    >,
   ): Promise<WorkspaceRecord> {
     const key = this._extractKey(id);
     const updateDoc: any = {
@@ -147,6 +178,15 @@ export class Workspace {
     }
     if (updates.description !== undefined) {
       updateDoc.description = updates.description;
+    }
+    if (updates.rest_api_key !== undefined) {
+      updateDoc.rest_api_key = updates.rest_api_key;
+    }
+    if (updates.rest_api_key_created_by !== undefined) {
+      updateDoc.rest_api_key_created_by = updates.rest_api_key_created_by;
+    }
+    if (updates.rest_api_key_created_at !== undefined) {
+      updateDoc.rest_api_key_created_at = updates.rest_api_key_created_at;
     }
 
     const result = await collections.workspaces.update(key, updateDoc, {
@@ -178,6 +218,27 @@ export class Workspace {
     return result || 0;
   }
 
+  static async generateRestApiKey(
+    id: string,
+    createdBy: string,
+  ): Promise<string> {
+    const apiKey = `kpw_${crypto.randomBytes(32).toString("base64url")}`;
+    await this.update(id, {
+      rest_api_key: apiKey,
+      rest_api_key_created_by: createdBy,
+      rest_api_key_created_at: new Date().toISOString(),
+    });
+    return apiKey;
+  }
+
+  static async removeRestApiKey(id: string): Promise<void> {
+    await this.update(id, {
+      rest_api_key: undefined,
+      rest_api_key_created_by: undefined,
+      rest_api_key_created_at: undefined,
+    });
+  }
+
   // Helper methods
   static _extractKey(id: string): string {
     if (id.includes("/")) {
@@ -204,6 +265,9 @@ export class Workspace {
       slug: doc.slug,
       description: doc.description,
       created_by: doc.created_by,
+      rest_api_key: doc.rest_api_key,
+      rest_api_key_created_by: doc.rest_api_key_created_by,
+      rest_api_key_created_at: doc.rest_api_key_created_at,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
     };

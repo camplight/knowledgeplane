@@ -378,12 +378,14 @@ KnowledgePlane supports three types of authentication:
 3. **API Key Authentication** (for server-to-server and automated access):
    - Uses `knowledgeplane-key` header for authentication (also supports `knowledgeplane_key`)
    - Also supports API key via query parameter (`?api_key=...`) for internal use when headers cannot be set (e.g., OpenAI MCP connector)
-   - If `API_KEYS` environment variable is configured, validates against it (comma-separated list)
-   - If `API_KEYS` is not configured, any API key is accepted and automatically creates/finds a user with that key stored in their profile
-   - The same API key always maps to the same user for consistency
+   - Supports three key scopes:
+     - **Workspace REST API keys** (per-workspace keys generated in the web profile)
+     - **User API keys** (personal keys used for MCP access)
+     - **Legacy keys** from `API_KEYS` environment variable (comma-separated list)
+   - Workspace REST API keys automatically set the workspace context for REST API calls
    - No OAuth flow required - direct authentication
    - Suitable for automated scripts, CI/CD pipelines, and server-to-server communication
-   - User ID is automatically inferred from the API key authentication context
+   - User ID is inferred from the API key context (workspace key creator or user key owner)
 
 **MCP Session Management:**
 - Sessions are identified by `mcp-session-id` header
@@ -396,6 +398,7 @@ KnowledgePlane supports three types of authentication:
 - For `facts_write` and other creation operations, `created_by`, `last_updated_by`, and `workspace_id` are automatically set from the authenticated session if not explicitly provided
 - All MCP operations are scoped to the workspace context (either from query param or user's first workspace)
 - **Personal MCP URL**: Users can generate and copy their personal MCP server URL with their API key included via the profile page. This URL includes the API key as a query parameter and can be used to connect AI agents and tools.
+- **REST API URL**: Users can generate and copy a workspace-scoped REST API URL with the workspace REST API key included for quick REST calls.
 - **Workspace-Aware Chat**: The chat interface is workspace-aware and automatically passes the current workspace's `workspace_id` to the MCP server URL. When users switch workspaces, the chat automatically uses the correct workspace context for MCP operations.
 - **Server Restart Handling**: When the server restarts, in-memory session state is lost. Clients reconnecting with an existing `mcp-session-id` will have a new transport created. The MCP protocol requires clients to send an `initialize` request before any other requests. If a client sends a non-initialize request after a server restart, it will receive a 400 error and should reinitialize the session.
 
@@ -417,6 +420,9 @@ KnowledgePlane supports three types of authentication:
 - `slug` (string): URL-friendly workspace identifier (unique)
 - `description` (string): Optional workspace description
 - `created_by` (string): Reference to user ID who created the workspace
+- `rest_api_key` (string, optional): Workspace REST API key
+- `rest_api_key_created_by` (string, optional): User ID who generated the REST API key
+- `rest_api_key_created_at` (string, optional): REST API key creation timestamp (ISO 8601)
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
 

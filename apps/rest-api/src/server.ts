@@ -104,6 +104,9 @@ async function resolveContext(
   }
 
   let workspaceId = query.workspace_id as string | undefined;
+  if (!workspaceId && authContext?.workspaceId) {
+    workspaceId = authContext.workspaceId;
+  }
   if (!workspaceId && userId) {
     const userWorkspaces = await WorkspaceMember.findByUser(userId, 1, 0);
     if (userWorkspaces.length > 0) {

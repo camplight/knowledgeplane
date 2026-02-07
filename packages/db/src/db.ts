@@ -428,7 +428,7 @@ export async function init() {
         
         // Always try to remove schema validation and set level to none (it might be causing type mismatches)
         try {
-          await relationsCollection.properties({ schema: null, level: "none" });
+          await relationsCollection.properties({ schema: null, level: "none" } as any);
           console.log("Removed schema validation and set validation level to none for relations collection");
         } catch (schemaError: any) {
           console.warn("Could not remove schema validation:", schemaError.message, schemaError);
@@ -563,6 +563,13 @@ export async function init() {
       type: "persistent",
       fields: ["created_by"],
       name: "idx_workspace_created_by",
+    });
+    await collections.workspaces.ensureIndex({
+      type: "persistent",
+      fields: ["rest_api_key"],
+      unique: true,
+      sparse: true,
+      name: "idx_workspace_rest_api_key",
     });
     await collections.workspace_members.ensureIndex({
       type: "persistent",

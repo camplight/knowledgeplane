@@ -463,5 +463,67 @@ export const workspacesRouter = router({
 
       return { success: true, workspaceId: input.workspaceId };
     }),
+
+  getRestApiKey: protectedProcedure
+    .input(z.object({ workspace_id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const workspace = await Workspace.findById(input.workspace_id);
+      if (!workspace) {
+        throw new Error("Workspace not found");
+      }
+
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        input.workspace_id,
+        ctx.user.userId,
+      );
+      if (!member) {
+        throw new Error("You are not a member of this workspace");
+      }
+
+      return {
+        api_key: workspace.rest_api_key || null,
+        created_by: workspace.rest_api_key_created_by || null,
+        created_at: workspace.rest_api_key_created_at || null,
+      };
+    }),
+
+  generateRestApiKey: protectedProcedure
+    .input(z.object({ workspace_id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        input.workspace_id,
+        ctx.user.userId,
+      );
+      if (!member) {
+        throw new Error("You are not a member of this workspace");
+      }
+      if (member.role !== "owner" && member.role !== "admin") {
+        throw new Error("Only owners and admins can generate REST API keys");
+      }
+
+      const apiKey = await Workspace.generateRestApiKey(
+        input.workspace_id,
+        ctx.user.userId,
+      );
+      return { api_key: apiKey };
+    }),
+
+  removeRestApiKey: protectedProcedure
+    .input(z.object({ workspace_id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        input.workspace_id,
+        ctx.user.userId,
+      );
+      if (!member) {
+        throw new Error("You are not a member of this workspace");
+      }
+      if (member.role !== "owner" && member.role !== "admin") {
+        throw new Error("Only owners and admins can remove REST API keys");
+      }
+
+      await Workspace.removeRestApiKey(input.workspace_id);
+      return { success: true };
+    }),
 });
 

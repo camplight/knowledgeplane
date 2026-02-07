@@ -13,6 +13,10 @@ export default function ProfilePage() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
   const [mcpUrlCopied, setMcpUrlCopied] = useState(false);
+  const [showRestApiKey, setShowRestApiKey] = useState(false);
+  const [restApiKeyCopied, setRestApiKeyCopied] = useState(false);
+  const [restApiUrlCopied, setRestApiUrlCopied] = useState(false);
+  const [restApiUrl, setRestApiUrl] = useState<string | null>(null);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -24,6 +28,13 @@ export default function ProfilePage() {
   const { data: workspacesData } = trpc.workspaces.list.useQuery(undefined, {
     enabled: !!userData?.user,
   });
+  const { data: restApiKeyData, refetch: refetchRestApiKey } =
+    trpc.workspaces.getRestApiKey.useQuery(
+      { workspace_id: selectedWorkspaceId || "" },
+      {
+        enabled: !!userData?.user && !!selectedWorkspaceId,
+      },
+    );
   const { data: mcpUrlData } = trpc.user.getMcpUrl.useQuery(
     { workspaceId: selectedWorkspaceId || undefined },
     {
@@ -73,6 +84,33 @@ export default function ProfilePage() {
     },
   });
 
+  const generateRestApiKeyMutation = trpc.workspaces.generateRestApiKey.useMutation({
+    onSuccess: () => {
+      setSuccess("REST API key generated successfully!");
+      setError(null);
+      refetchRestApiKey();
+      setTimeout(() => setSuccess(null), 3000);
+    },
+    onError: (error) => {
+      setError(error.message);
+      setSuccess(null);
+    },
+  });
+
+  const removeRestApiKeyMutation = trpc.workspaces.removeRestApiKey.useMutation({
+    onSuccess: () => {
+      setSuccess("REST API key removed successfully!");
+      setError(null);
+      setShowRestApiKey(false);
+      refetchRestApiKey();
+      setTimeout(() => setSuccess(null), 3000);
+    },
+    onError: (error) => {
+      setError(error.message);
+      setSuccess(null);
+    },
+  });
+
   useEffect(() => {
     if (!userLoading && !userData?.user) {
       router.push("/");
@@ -97,6 +135,21 @@ export default function ProfilePage() {
       setSelectedWorkspaceId(defaultWorkspaceId);
     }
   }, [workspacesData, userData, selectedWorkspaceId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!restApiKeyData?.api_key) {
+      setRestApiUrl(null);
+      return;
+    }
+
+    const url = new URL(`${window.location.origin}/api`);
+    url.searchParams.set("api_key", restApiKeyData.api_key);
+    if (selectedWorkspaceId) {
+      url.searchParams.set("workspace_id", selectedWorkspaceId);
+    }
+    setRestApiUrl(url.toString());
+  }, [restApiKeyData?.api_key, selectedWorkspaceId]);
 
   const handleSave = () => {
     setError(null);
@@ -137,6 +190,22 @@ export default function ProfilePage() {
     }
   };
 
+  const handleCopyRestApiKey = () => {
+    if (restApiKeyData?.api_key) {
+      navigator.clipboard.writeText(restApiKeyData.api_key);
+      setRestApiKeyCopied(true);
+      setTimeout(() => setRestApiKeyCopied(false), 2000);
+    }
+  };
+
+  const handleCopyRestApiUrl = () => {
+    if (restApiUrl) {
+      navigator.clipboard.writeText(restApiUrl);
+      setRestApiUrlCopied(true);
+      setTimeout(() => setRestApiUrlCopied(false), 2000);
+    }
+  };
+
   const handleGenerateApiKey = () => {
     if (confirm("Are you sure you want to generate a new API key? The old key will be invalidated.")) {
       generateApiKeyMutation.mutate();
@@ -146,6 +215,34 @@ export default function ProfilePage() {
   const handleRemoveApiKey = () => {
     if (confirm("Are you sure you want to remove your API key? You won't be able to use it for authentication.")) {
       removeApiKeyMutation.mutate();
+    }
+  };
+
+  const handleGenerateRestApiKey = () => {
+    if (!selectedWorkspaceId) {
+      setError("Select a workspace to generate a REST API key");
+      return;
+    }
+    if (
+      confirm(
+        "Generate a new REST API key for this workspace? The old key will be invalidated.",
+      )
+    ) {
+      generateRestApiKeyMutation.mutate({ workspace_id: selectedWorkspaceId });
+    }
+  };
+
+  const handleRemoveRestApiKey = () => {
+    if (!selectedWorkspaceId) {
+      setError("Select a workspace to remove its REST API key");
+      return;
+    }
+    if (
+      confirm(
+        "Remove the REST API key for this workspace? You can generate a new one later.",
+      )
+    ) {
+      removeRestApiKeyMutation.mutate({ workspace_id: selectedWorkspaceId });
     }
   };
 
@@ -278,13 +375,13 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* API Key Management Card */}
+        {/* MCP API Key Management Card */}
         <div className="bg-white rounded-xl shadow-lg border border-slate-200 mb-6">
           <div className="p-6 border-b border-slate-200">
             <div>
-              <h2 className="text-2xl font-bold text-slate-900">API Key Management</h2>
+              <h2 className="text-2xl font-bold text-slate-900">MCP API Key</h2>
               <p className="text-sm text-slate-600 mt-1">
-                Generate and manage API keys for programmatic access
+                Generate and manage your personal API key for MCP access
               </p>
             </div>
           </div>
@@ -348,6 +445,132 @@ export default function ProfilePage() {
                   className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {generateApiKeyMutation.isPending ? "Generating..." : "Generate API Key"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* REST API Keys Card */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 mb-6">
+          <div className="p-6 border-b border-slate-200">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900">REST API Keys</h2>
+              <p className="text-sm text-slate-600 mt-1">
+                Generate per-workspace keys for the REST API
+              </p>
+            </div>
+          </div>
+
+          <div className="p-6">
+            {workspacesData && workspacesData.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Select Workspace
+                </label>
+                <select
+                  value={selectedWorkspaceId || ""}
+                  onChange={(e) => setSelectedWorkspaceId(e.target.value || null)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                >
+                  {workspacesData.map((workspace) => (
+                    <option key={workspace.id} value={workspace.id}>
+                      {workspace.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  Choose which workspace the REST API key applies to
+                </p>
+              </div>
+            )}
+
+            {restApiKeyData?.api_key ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    REST API Key
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type={showRestApiKey ? "text" : "password"}
+                      value={restApiKeyData.api_key}
+                      readOnly
+                      className="flex-1 px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 font-mono text-sm"
+                    />
+                    <button
+                      onClick={() => setShowRestApiKey(!showRestApiKey)}
+                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                    >
+                      {showRestApiKey ? "Hide" : "Show"}
+                    </button>
+                    <button
+                      onClick={handleCopyRestApiKey}
+                      className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                    >
+                      {restApiKeyCopied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Use this key in the{" "}
+                    <code className="bg-slate-100 px-1 py-0.5 rounded">
+                      knowledgeplane-key
+                    </code>{" "}
+                    header or as the <code className="bg-slate-100 px-1 py-0.5 rounded">api_key</code> query parameter
+                  </p>
+                </div>
+                {restApiUrl && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      REST API URL
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={restApiUrl}
+                        readOnly
+                        className="flex-1 px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 font-mono text-xs break-all"
+                      />
+                      <button
+                        onClick={handleCopyRestApiUrl}
+                        className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors whitespace-nowrap"
+                      >
+                        {restApiUrlCopied ? "Copied!" : "Copy URL"}
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2">
+                      Includes your workspace context and API key for quick REST calls.
+                    </p>
+                  </div>
+                )}
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={handleGenerateRestApiKey}
+                    disabled={generateRestApiKeyMutation.isPending}
+                    className="px-6 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generateRestApiKeyMutation.isPending ? "Generating..." : "Generate New Key"}
+                  </button>
+                  <button
+                    onClick={handleRemoveRestApiKey}
+                    disabled={removeRestApiKeyMutation.isPending}
+                    className="px-6 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {removeRestApiKeyMutation.isPending ? "Removing..." : "Remove Key"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-slate-600">
+                  No REST API key for this workspace yet. Generate one to enable REST API access.
+                </p>
+                <button
+                  onClick={handleGenerateRestApiKey}
+                  disabled={generateRestApiKeyMutation.isPending}
+                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {generateRestApiKeyMutation.isPending ? "Generating..." : "Generate REST API Key"}
                 </button>
               </div>
             )}

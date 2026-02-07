@@ -2,11 +2,14 @@ import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
 import type { JwksClient } from "jwks-rsa";
 import { User } from "../models/User";
+import { Workspace } from "../models/Workspace";
 
 export interface AuthContext {
   userId: string;
   email?: string;
   provider?: "google" | "github";
+  workspaceId?: string;
+  apiKeyScope?: "legacy" | "workspace" | "user";
   [key: string]: any;
 }
 
@@ -162,37 +165,43 @@ async function validateApiKey(apiKey?: string): Promise<AuthContext | null> {
       .map((k) => k.trim())
       .filter(Boolean) || [];
 
-  if (validKeys.length > 0) {
-    if (validKeys.includes(apiKey)) {
-      const user = await User.getOrCreateByApiKey(apiKey);
-      return {
-        userId: user.id,
-        email: user.email,
-        provider: undefined,
-        apiKey: true,
-      };
-    }
-
-    const existingUser = await User.findByApiKey(apiKey);
-    if (existingUser) {
-      return {
-        userId: existingUser.id,
-        email: existingUser.email,
-        provider: undefined,
-        apiKey: true,
-      };
-    }
-
-    return null;
+  if (validKeys.length > 0 && validKeys.includes(apiKey)) {
+    const user = await User.getOrCreateByApiKey(apiKey);
+    return {
+      userId: user.id,
+      email: user.email,
+      provider: undefined,
+      apiKey: true,
+      apiKeyScope: "legacy",
+    };
   }
 
-  const user = await User.getOrCreateByApiKey(apiKey);
-  return {
-    userId: user.id,
-    email: user.email,
-    provider: undefined,
-    apiKey: true,
-  };
+  const workspace = await Workspace.findByRestApiKey(apiKey);
+  if (workspace) {
+    const userId = workspace.rest_api_key_created_by || workspace.created_by;
+    const user = await User.findById(userId);
+    return {
+      userId,
+      email: user?.email,
+      provider: undefined,
+      apiKey: true,
+      apiKeyScope: "workspace",
+      workspaceId: workspace.id,
+    };
+  }
+
+  const existingUser = await User.findByApiKey(apiKey);
+  if (existingUser) {
+    return {
+      userId: existingUser.id,
+      email: existingUser.email,
+      provider: undefined,
+      apiKey: true,
+      apiKeyScope: "user",
+    };
+  }
+
+  return null;
 }
 
 export async function requireAuth(
