@@ -1,6 +1,7 @@
 import { router, protectedProcedure } from "../router";
 import { FactRelation, Fact, WorkspaceMember } from "@knowledgeplane/db/next";
 import { z } from "zod";
+import { stripEmbeddings, stripEmbeddingsArray } from "../strip-embeddings";
 
 export const factRelationsRouter = router({
   list: protectedProcedure
@@ -44,7 +45,10 @@ export const factRelationsRouter = router({
         to_fact: input?.to_fact,
         type: input?.type,
       });
-      return { relations, total: allRelations.length };
+      return {
+        relations: stripEmbeddingsArray(relations),
+        total: allRelations.length,
+      };
     }),
   create: protectedProcedure
     .input(
@@ -108,7 +112,7 @@ export const factRelationsRouter = router({
         metadata: input.metadata,
         created_by: ctx.user.userId,
       });
-      return { relation };
+      return { relation: stripEmbeddings(relation) };
     }),
   update: protectedProcedure
     .input(
@@ -156,8 +160,11 @@ export const factRelationsRouter = router({
       }
 
       const { id, ...updates } = input;
-      const relation = await FactRelation.update(id, updates);
-      return { relation };
+      const relation = await FactRelation.update(id, {
+        ...updates,
+        last_updated_by: ctx.user.userId,
+      });
+      return { relation: stripEmbeddings(relation) };
     }),
   delete: protectedProcedure
     .input(
@@ -190,7 +197,7 @@ export const factRelationsRouter = router({
         throw new Error("You are not a member of this workspace");
       }
 
-      await FactRelation.delete(input.id);
+      await FactRelation.delete(input.id, ctx.user.userId);
       return { success: true };
     }),
   getForFact: protectedProcedure
@@ -247,8 +254,14 @@ export const factRelationsRouter = router({
       );
 
       return {
-        outgoing: filteredOutgoing,
-        incoming: filteredIncoming,
+        outgoing: filteredOutgoing.map((r) => ({
+          relation: stripEmbeddings(r.relation),
+          fact: stripEmbeddings(r.fact),
+        })),
+        incoming: filteredIncoming.map((r) => ({
+          relation: stripEmbeddings(r.relation),
+          fact: stripEmbeddings(r.fact),
+        })),
       };
     }),
 });

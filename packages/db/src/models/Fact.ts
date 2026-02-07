@@ -22,6 +22,8 @@ export interface FactRecord {
   updated_at: string;
   created_by: string;
   last_updated_by: string;
+  deleted_by?: string | null;
+  deleted_at?: string | null;
   trashed: boolean;
   embedding?: number[]; // Vector embedding for semantic search
   embedding_model?: string; // Model used to generate embedding
@@ -179,14 +181,20 @@ export class Fact {
     return record;
   }
 
-  static async trash(id: string, last_updated_by: string): Promise<FactRecord> {
+  static async trash(
+    id: string,
+    last_updated_by: string,
+  ): Promise<FactRecord> {
     const key = this.extractKey(id);
+    const now = new Date().toISOString();
     const result = await collections.facts.update(
       key,
       {
         trashed: true,
         last_updated_by,
-        updated_at: new Date().toISOString(),
+        deleted_at: now,
+        deleted_by: last_updated_by,
+        updated_at: now,
       },
       { returnNew: true },
     );
@@ -536,7 +544,11 @@ export class Fact {
     const key = this.extractKey(id);
     try {
       const doc = await collections.facts.document(key);
-      return this._normalizeRecord(doc);
+      const record = this._normalizeRecord(doc);
+      if (record.trashed || record.deleted_at) {
+        return null;
+      }
+      return record;
     } catch (error: any) {
       if (error.errorNum === 1202) {
         // Document not found
@@ -589,6 +601,8 @@ export class Fact {
       updated_at: doc.updated_at,
       created_by: doc.created_by,
       last_updated_by: doc.last_updated_by,
+      deleted_by: doc.deleted_by || null,
+      deleted_at: doc.deleted_at || null,
       trashed: doc.trashed || false,
       embedding: doc.embedding,
       embedding_model: doc.embedding_model,

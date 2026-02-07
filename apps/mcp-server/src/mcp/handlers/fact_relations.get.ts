@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { FactRelation, WorkspaceMember } from "@knowledgeplane/db";
+import { stripEmbeddings } from "./strip-embeddings.js";
 
 export const factRelationsGetTool: Tool = {
   name: "fact_relations_get",
@@ -48,11 +49,13 @@ export async function handleFactRelationsGet(args: {
     }
   }
 
+  const sanitizedRelation = stripEmbeddings(relation);
+
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify({ relation }, null, 2),
+        text: JSON.stringify({ relation: sanitizedRelation }, null, 2),
       },
     ],
   };

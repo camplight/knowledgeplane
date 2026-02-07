@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { collections, File, WorkspaceMember } from "@knowledgeplane/db";
+import { File, WorkspaceMember } from "@knowledgeplane/db";
 
 export const filesDeleteTool: Tool = {
   name: "files_delete",
@@ -48,17 +48,8 @@ export async function handleFilesDelete(args: {
     }
   }
 
-  // Extract key from ID (format: "files/_key" or just "_key")
-  const key = args.id.includes("/") ? args.id.split("/")[1] : args.id;
-  
-  try {
-    await collections.files.remove(key);
-  } catch (error: any) {
-    if (error.errorNum === 1202) {
-      throw new Error(`File with id ${args.id} not found`);
-    }
-    throw error;
-  }
+  const deletedBy = args.user_id || "system";
+  await File.delete(args.id, deletedBy);
 
   return {
     content: [

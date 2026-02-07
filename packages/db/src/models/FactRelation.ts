@@ -23,6 +23,10 @@ export interface FactRelationRecord {
   metadata: Record<string, any>;
   created_by: string;
   created_at: string;
+  last_updated_by: string;
+  updated_at: string;
+  deleted_by?: string | null;
+  deleted_at?: string | null;
   embedding?: number[]; // Vector embedding for semantic search (based on type + metadata)
   embedding_model?: string; // Model used to generate embedding
 }
@@ -92,6 +96,7 @@ export class FactRelation {
       }
     }
 
+    const now = new Date().toISOString();
     const doc: any = {
       _from: verifiedFromId,  // Use verified document ID for edge
       _to: verifiedToId,      // Use verified document ID for edge
@@ -100,7 +105,9 @@ export class FactRelation {
       type: input.type,
       workspace_id: input.workspace_id,
       created_by: input.created_by,
-      created_at: new Date().toISOString(),
+      created_at: now,
+      last_updated_by: input.created_by,
+      updated_at: now,
     };
 
     // Only include metadata if it has content
@@ -390,7 +397,11 @@ export class FactRelation {
     const key = this.extractKey(id);
     try {
       const doc = await collections.relations.document(key);
-      return this._normalizeRecord(doc);
+      const record = this._normalizeRecord(doc);
+      if (record.deleted_at) {
+        return null;
+      }
+      return record;
     } catch (error: any) {
       if (error.errorNum === 1202) {
         return null;
@@ -401,7 +412,7 @@ export class FactRelation {
 
   static async update(
     id: string,
-    updates: { type?: string; metadata?: Record<string, any> },
+    updates: { type?: string; metadata?: Record<string, any>; last_updated_by: string },
   ): Promise<FactRelationRecord> {
     // Validate ID format - should be fact_relations/_key or just _key
     if (!id || id.trim() === "") {
@@ -416,7 +427,10 @@ export class FactRelation {
     }
 
     const key = this.extractKey(id);
-    const updateDoc: any = {};
+    const updateDoc: any = {
+      last_updated_by: updates.last_updated_by,
+      updated_at: new Date().toISOString(),
+    };
     if (updates.type !== undefined) {
       updateDoc.type = updates.type;
     }
@@ -450,10 +464,13 @@ export class FactRelation {
     }
   }
 
-  static async delete(id: string): Promise<void> {
+  static async delete(id: string, deleted_by: string): Promise<FactRelationRecord> {
     // Validate ID format - should be fact_relations/_key or just _key
     if (!id || id.trim() === "") {
       throw new Error("Relation ID is required");
+    }
+    if (!deleted_by || deleted_by.trim() === "") {
+      throw new Error("deleted_by is required");
     }
 
     // Check if ID looks like a fact ID (facts/...) instead of relation ID
@@ -464,8 +481,22 @@ export class FactRelation {
     }
 
     const key = this.extractKey(id);
+    const now = new Date().toISOString();
     try {
-      await collections.relations.remove(key);
+      const result = await collections.relations.update(
+        key,
+        {
+          deleted_at: now,
+          deleted_by,
+          last_updated_by: deleted_by,
+          updated_at: now,
+        },
+        { returnNew: true },
+      );
+      if (!result) {
+        throw new Error(`FactRelation with id ${id} (key: ${key}) not found`);
+      }
+      return this._normalizeRecord(result.new!);
     } catch (error: any) {
       if (error.errorNum === 1202) {
         throw new Error(`FactRelation with id ${id} (key: ${key}) not found`);
@@ -501,6 +532,7 @@ export class FactRelation {
       bindVars.type = params.type;
     }
 
+    filters.push(`relation.deleted_at == null`);
     if (filters.length > 0) {
       aql += ` FILTER ${filters.join(" && ")}`;
     }
@@ -522,6 +554,7 @@ export class FactRelation {
     let aql = `
       FOR relation IN relations
         FILTER relation._from == @factId
+        FILTER relation.deleted_at == null
         ${relationType ? "FILTER relation.type == @type" : ""}
         LET fact = DOCUMENT(relation._to)
         FILTER fact != null AND fact.content != null
@@ -601,6 +634,9 @@ export class FactRelation {
             });
           }
           const normalizedFact = Fact._normalizeRecord(r.fact);
+          if (normalizedFact.trashed || normalizedFact.deleted_at) {
+            return null;
+          }
           return {
             relation: this._normalizeRecord(r.relation),
             fact: normalizedFact,
@@ -631,6 +667,7 @@ export class FactRelation {
     let aql = `
       FOR relation IN relations
         FILTER relation._to == @factId
+        FILTER relation.deleted_at == null
         ${relationType ? "FILTER relation.type == @type" : ""}
         LET fact = DOCUMENT(relation._from)
         FILTER fact != null AND fact.content != null
@@ -714,6 +751,9 @@ export class FactRelation {
             });
           }
           const normalizedFact = Fact._normalizeRecord(r.fact);
+          if (normalizedFact.trashed || normalizedFact.deleted_at) {
+            return null;
+          }
           return {
             relation: this._normalizeRecord(r.relation),
             fact: normalizedFact,
@@ -739,6 +779,7 @@ export class FactRelation {
     const aql = `
       LET count = LENGTH(
         FOR relation IN relations
+          FILTER relation.deleted_at == null
           RETURN relation
       )
       RETURN count
@@ -787,6 +828,10 @@ export class FactRelation {
       metadata: doc.metadata || {},
       created_by: doc.created_by,
       created_at: doc.created_at,
+      last_updated_by: doc.last_updated_by || doc.created_by,
+      updated_at: doc.updated_at || doc.created_at,
+      deleted_by: doc.deleted_by || null,
+      deleted_at: doc.deleted_at || null,
       embedding: doc.embedding,
       embedding_model: doc.embedding_model,
     };

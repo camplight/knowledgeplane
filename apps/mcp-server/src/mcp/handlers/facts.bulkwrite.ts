@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { Fact } from "@knowledgeplane/db";
+import { stripEmbeddingsArray } from "./strip-embeddings.js";
 
 export const factsBulkWriteTool: Tool = {
   name: "facts_bulkwrite",
@@ -71,12 +72,17 @@ export async function handleFactsBulkWrite(args: {
   }));
 
   const facts = await Fact.bulkWrite(factInputs);
+  const sanitizedFacts = stripEmbeddingsArray(facts);
 
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify({ facts, count: facts.length }, null, 2),
+        text: JSON.stringify(
+          { facts: sanitizedFacts, count: sanitizedFacts.length },
+          null,
+          2,
+        ),
       },
     ],
   };

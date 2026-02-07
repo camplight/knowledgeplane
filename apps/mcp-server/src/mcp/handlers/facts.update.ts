@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { Fact, WorkspaceMember } from "@knowledgeplane/db";
+import { stripEmbeddings } from "./strip-embeddings.js";
 
 export const factsUpdateTool: Tool = {
   name: "facts_update",
@@ -54,12 +55,13 @@ export async function handleFactsUpdate(args: {
     metadata: args.metadata,
     last_updated_by: args.last_updated_by,
   });
+  const sanitizedFact = stripEmbeddings(fact);
 
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify({ fact }, null, 2),
+        text: JSON.stringify({ fact: sanitizedFact }, null, 2),
       },
     ],
   };

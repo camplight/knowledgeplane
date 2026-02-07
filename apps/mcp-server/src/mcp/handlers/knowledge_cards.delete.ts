@@ -42,7 +42,8 @@ export async function handleKnowledgeCardsDelete(args: {
     }
   }
 
-  await KnowledgeCard.delete(args.id);
+  const deletedBy = args.user_id || "system";
+  await KnowledgeCard.delete(args.id, deletedBy);
 
   return {
     content: [

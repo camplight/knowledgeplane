@@ -18,8 +18,7 @@
   "dependencies": {
     "@knowledgeplane/aimodel": "*",
     "@knowledgeplane/db": "*",
-    "@types/xlsx": "^0.0.35",
-    "xlsx": "^0.18.5"
+    "exceljs": "^4.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

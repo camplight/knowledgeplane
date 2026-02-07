@@ -439,6 +439,8 @@ KnowledgePlane supports three types of authentication:
 - `updated_at` (string): Last update timestamp (ISO 8601)
 - `created_by` (string): Reference to user ID
 - `last_updated_by` (string): Reference to user ID
+- `deleted_by` (string, optional): Reference to user ID who deleted the fact
+- `deleted_at` (string, optional): Deletion timestamp (ISO 8601)
 - `trashed` (boolean): Whether the fact has been trashed (default: false)
 
 **FactRelation Collection (Edges):**
@@ -453,6 +455,10 @@ KnowledgePlane supports three types of authentication:
 - `metadata` (object): Additional relation metadata
 - `created_by` (string): Reference to user ID
 - `created_at` (string): Creation timestamp (ISO 8601)
+- `last_updated_by` (string): Reference to user ID
+- `updated_at` (string): Last update timestamp (ISO 8601)
+- `deleted_by` (string, optional): Reference to user ID who deleted the relation
+- `deleted_at` (string, optional): Deletion timestamp (ISO 8601)
 
 Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are nodes.
 
@@ -466,6 +472,11 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `workspace_id` (string): Reference to workspace ID
 - `created_by` (string): Reference to user ID
 - `last_updated_by` (string): Reference to user ID
+- `created_by_worker` (string, optional): Worker name if created by a worker
+- `last_updated_by_worker` (string, optional): Worker name if updated by a worker
+- `deleted_by` (string, optional): Reference to user ID who deleted the card
+- `deleted_by_worker` (string, optional): Worker name if deleted by a worker
+- `deleted_at` (string, optional): Deletion timestamp (ISO 8601)
 - `metadata` (object): Key-value metadata
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
@@ -492,6 +503,10 @@ Note: FactRelations are stored as edges in the ArangoDB graph, where Facts are n
 - `storage_path` (string): Path where file is stored on disk
 - `workspace_id` (string): Reference to workspace ID
 - `uploaded_by` (string): Reference to user ID
+- `created_by` (string): Reference to user ID
+- `last_updated_by` (string): Reference to user ID
+- `deleted_by` (string, optional): Reference to user ID who deleted the file
+- `deleted_at` (string, optional): Deletion timestamp (ISO 8601)
 - `metadata` (object): Additional metadata
   - For data source definition files: `content` (text for .md/.txt files) or `zip_content` (base64 for .zip files)
   - For zip files: `is_zip` (boolean), `files` (array of extracted files with filename and content)
@@ -636,6 +651,7 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Statistics overview (total facts, knowledge cards, active facts, categories)
   - Facts list with pagination and metadata display
   - Knowledge cards list with pagination, showing title, summary, fact count, and last updated date
+  - Facts and cards click through to the editor with the related item selected
   - Logout functionality
   - Automatic redirect to landing page for unauthenticated users
 - User profile page (`/profile`) with:
@@ -653,6 +669,8 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Files view with uploaded files list display and detailed file information sidebar
   - Card details sidebar showing title, summary, full content, fact count, timestamps, and metadata
   - File details sidebar showing filename, MIME type, size, storage path, fact count, extracted facts list (clickable to navigate to facts), timestamps, and metadata
+  - Fact details sidebar showing content, timestamps, and metadata
+  - Fact and card lists surface metadata counts when available
   - Card deletion functionality with confirmation dialog
   - Fact details sidebar with relations management (create and view outgoing/incoming relations)
   - Fact deletion functionality with confirmation dialog (marks facts as trashed)
@@ -1659,6 +1677,7 @@ KnowledgePlane includes background workers that automatically maintain and organ
 - Processes items in batches for efficiency
 - Updates embeddings when model changes or embeddings are missing
 - Stores embeddings directly in ArangoDB documents
+- Embeddings and internal ArangoDB IDs (`_id`, `_key`) are internal-only fields and are stripped from MCP and REST/tRPC API responses (including AQL query results)
 - Can be manually triggered via the worker logs page or tRPC API
 
 **Data Source Runner:**
@@ -1923,7 +1942,7 @@ KnowledgePlane supports file uploads with automatic fact and relation extraction
 1. User uploads a file through the web interface
 2. File is processed and passed to the AI model:
    - PDF files: Converted to base64 and passed via OpenAI's file input format (supports PDF natively)
-   - Excel files (.xlsx, .xls): Converted to text format locally using xlsx library, then passed as text content
+   - Excel files (.xlsx): Converted to text format locally using exceljs, then passed as text content
    - Other files (Word, text, etc.): Converted to text and passed as text content
    - No local file storage - files are only stored as metadata in the database
    - Based on OpenAI's file input format: https://gist.github.com/outbounder/14c0c5df7f902b49a8219c05f3053a22
@@ -1939,7 +1958,7 @@ KnowledgePlane supports file uploads with automatic fact and relation extraction
 - JSON files (.json)
 - PDF documents (.pdf) - requires additional processing
 - Word documents (.doc, .docx) - requires additional processing
-- Excel spreadsheets (.xlsx, .xls) - requires additional processing
+- Excel spreadsheets (.xlsx) - requires additional processing
 - Other text-based formats
 
 **File Model:**

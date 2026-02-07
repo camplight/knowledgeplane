@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { KnowledgeCard, WorkspaceMember } from "@knowledgeplane/db";
+import { stripEmbeddings } from "./strip-embeddings.js";
 
 export const knowledgeCardsUpdateTool: Tool = {
   name: "knowledge_cards_update",
@@ -92,12 +93,13 @@ export async function handleKnowledgeCardsUpdate(args: {
     metadata: args.metadata,
     last_updated_by: args.last_updated_by,
   });
+  const sanitizedCard = stripEmbeddings(card);
 
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify({ card }, null, 2),
+        text: JSON.stringify({ card: sanitizedCard }, null, 2),
       },
     ],
   };

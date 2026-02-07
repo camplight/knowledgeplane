@@ -147,7 +147,11 @@ export default function DashboardPage() {
             <>
               <div className="divide-y divide-slate-200">
                 {facts.map((fact) => (
-                  <div key={fact.id} className="p-6 hover:bg-slate-50 transition-colors">
+                  <div
+                    key={fact.id}
+                    onClick={() => router.push(`/editor?view=facts&factId=${encodeURIComponent(fact.id)}`)}
+                    className="p-6 hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <p className="text-slate-900 mb-2 leading-relaxed">{fact.content}</p>
@@ -225,7 +229,11 @@ export default function DashboardPage() {
             <>
               <div className="divide-y divide-slate-200">
                 {cards.map((card) => (
-                  <div key={card.id} className="p-6 hover:bg-slate-50 transition-colors">
+                  <div
+                    key={card.id}
+                    onClick={() => router.push(`/editor?view=cards&cardId=${encodeURIComponent(card.id)}`)}
+                    className="p-6 hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-slate-900 mb-2">{card.title}</h3>

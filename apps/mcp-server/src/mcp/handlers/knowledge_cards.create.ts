@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { KnowledgeCard } from "@knowledgeplane/db";
+import { stripEmbeddings } from "./strip-embeddings.js";
 
 export const knowledgeCardsCreateTool: Tool = {
   name: "knowledge_cards_create",
@@ -65,12 +66,13 @@ export async function handleKnowledgeCardsCreate(args: {
     last_updated_by: args.last_updated_by,
     metadata: args.metadata,
   });
+  const sanitizedCard = stripEmbeddings(card);
 
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify({ card }, null, 2),
+        text: JSON.stringify({ card: sanitizedCard }, null, 2),
       },
     ],
   };

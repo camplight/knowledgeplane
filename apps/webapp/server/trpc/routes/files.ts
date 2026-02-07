@@ -2,6 +2,7 @@ import { router, protectedProcedure } from "../router";
 import { File, Fact, WorkspaceMember } from "@knowledgeplane/db/next";
 import { processFileUpload } from "@knowledgeplane/file-processor";
 import { z } from "zod";
+import { stripEmbeddingsArray } from "../strip-embeddings";
 
 export const filesRouter = router({
   upload: protectedProcedure
@@ -140,7 +141,39 @@ export const filesRouter = router({
       );
 
       return {
-        facts: workspaceFacts,
+        facts: stripEmbeddingsArray(workspaceFacts),
       };
+    }),
+
+  delete: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      if (!ctx.user || !ctx.workspaceId) {
+        throw new Error("User must be authenticated and have a workspace");
+      }
+
+      const file = await File.findById(input.id);
+      if (!file) {
+        throw new Error("File not found");
+      }
+
+      if (file.workspace_id !== ctx.workspaceId) {
+        throw new Error("File does not belong to your workspace");
+      }
+
+      const member = await WorkspaceMember.findByWorkspaceAndUser(
+        ctx.workspaceId,
+        ctx.user.userId,
+      );
+      if (!member) {
+        throw new Error("You are not a member of this workspace");
+      }
+
+      await File.delete(input.id, ctx.user.userId);
+      return { success: true };
     }),
 });

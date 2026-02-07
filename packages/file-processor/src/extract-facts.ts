@@ -3,7 +3,7 @@ import {
   type ChatMessage,
   type ChatCompletionOptions,
 } from "@knowledgeplane/aimodel";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 export interface ExtractedFact {
   content: string;
@@ -92,41 +92,61 @@ Return your response as JSON with this structure:
   // Handle different file types
   let messages: ChatMessage[];
 
-  // Check if it's an Excel file
+  // Check if it's an Excel file (.xlsx only)
   const isExcelFile =
     mimeType.includes("excel") ||
     mimeType.includes("spreadsheet") ||
-    mimeType.includes("ms-excel") ||
     filename.endsWith(".xlsx") ||
     filename.endsWith(".xls");
 
   if (isExcelFile) {
     // Convert Excel file to text format
+    if (filename.endsWith(".xls") || mimeType.includes("ms-excel")) {
+      throw new Error(
+        "Legacy .xls files are not supported. Please convert to .xlsx.",
+      );
+    }
     try {
-      const workbook = XLSX.read(buffer, { type: "buffer" });
-      const sheetNames = workbook.SheetNames;
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+      const worksheets = workbook.worksheets;
       let textContent = `Excel Spreadsheet: ${filename}\n\n`;
 
-      for (const sheetName of sheetNames) {
-        const sheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      for (const sheet of worksheets) {
+        const sheetName = sheet.name || "Sheet";
 
         textContent += `\n=== Sheet: ${sheetName} ===\n`;
-        if (jsonData.length > 0) {
-          // Convert to a readable text format
-          const headers = Object.keys(jsonData[0] as any);
-          textContent += `Headers: ${headers.join(", ")}\n\n`;
+        if (sheet.rowCount > 0) {
+          const headerRow = sheet.getRow(1);
+          const headerValues = (headerRow.values || []) as Array<any>;
+          const headers = headerValues
+            .map((value, index) => ({
+              index,
+              name:
+                value !== undefined && value !== null && String(value).trim() !== ""
+                  ? String(value).trim()
+                  : "",
+            }))
+            .filter((header) => header.index > 0 && header.name !== "");
 
-          jsonData.forEach((row: any, index: number) => {
-            textContent += `Row ${index + 1}:\n`;
-            headers.forEach((header) => {
-              const value = row[header] !== undefined ? String(row[header]) : "";
-              if (value) {
-                textContent += `  ${header}: ${value}\n`;
+          textContent += `Headers: ${headers.map((h) => h.name).join(", ")}\n\n`;
+
+          for (let rowIndex = 2; rowIndex <= sheet.rowCount; rowIndex += 1) {
+            const row = sheet.getRow(rowIndex);
+            let rowOutput = "";
+            for (const header of headers) {
+              const cell = row.getCell(header.index);
+              const value = cell?.value;
+              const textValue =
+                value === undefined || value === null ? "" : String(value);
+              if (textValue.trim() !== "") {
+                rowOutput += `  ${header.name}: ${textValue}\n`;
               }
-            });
-            textContent += "\n";
-          });
+            }
+            if (rowOutput.trim() !== "") {
+              textContent += `Row ${rowIndex - 1}:\n${rowOutput}\n`;
+            }
+          }
         } else {
           textContent += "(Empty sheet)\n";
         }

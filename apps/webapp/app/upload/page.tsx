@@ -117,7 +117,7 @@ export default function UploadPage() {
                 type="file"
                 onChange={handleFileSelect}
                 className="hidden"
-                accept=".txt,.md,.json,.pdf,.doc,.docx,.xlsx,.xls"
+                accept=".txt,.md,.json,.pdf,.doc,.docx,.xlsx"
               />
               {selectedFile ? (
                 <div>

@@ -213,7 +213,7 @@ Provide your response as JSON with the following structure:
     newCards.push(newCard);
   }
 
-  await KnowledgeCard.delete(args.id);
+  await KnowledgeCard.delete(args.id, args.last_updated_by);
 
   return {
     success: true,
@@ -337,7 +337,7 @@ Provide your response as JSON with the following structure:
   });
 
   for (const cardId of args.card_ids) {
-    await KnowledgeCard.delete(cardId);
+    await KnowledgeCard.delete(cardId, args.last_updated_by);
   }
 
   return {
@@ -361,11 +361,14 @@ function normalizeCardRecord(doc: any): KnowledgeCardRecord {
     workspace_id: doc.workspace_id,
     created_by: doc.created_by,
     last_updated_by: doc.last_updated_by,
+    created_by_worker: doc.created_by_worker || null,
+    last_updated_by_worker: doc.last_updated_by_worker || null,
+    deleted_by: doc.deleted_by || null,
+    deleted_by_worker: doc.deleted_by_worker || null,
+    deleted_at: doc.deleted_at || null,
     metadata: doc.metadata || {},
     created_at: doc.created_at,
     updated_at: doc.updated_at,
-    embedding: doc.embedding,
-    embedding_model: doc.embedding_model,
   };
 }
 
@@ -384,6 +387,7 @@ async function knowledgeCardsFullTextSearch(
     filters.push(`card.workspace_id == @workspaceId`);
     bindVars.workspaceId = workspaceId;
   }
+  filters.push(`card.deleted_at == null`);
   const filterClause =
     filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
 
@@ -423,6 +427,7 @@ async function knowledgeCardsFullTextSearch(
       if (workspaceId) {
         fallbackFilters.push(`card.workspace_id == @workspaceId`);
       }
+      fallbackFilters.push(`card.deleted_at == null`);
       fallbackFilters.push(`(LOWER(card.title) LIKE LOWER(CONCAT("%", @query, "%"))
              OR LOWER(card.summary) LIKE LOWER(CONCAT("%", @query, "%"))
              OR LOWER(card.content) LIKE LOWER(CONCAT("%", @query, "%")))`);
@@ -465,7 +470,7 @@ async function knowledgeCardsVectorSearch(
 
   try {
     const queryEmbedding = await generateQueryEmbedding(query, provider);
-    const filters: string[] = [`card.embedding != null`];
+    const filters: string[] = [`card.embedding != null`, `card.deleted_at == null`];
     const bindVars: any = {};
     if (workspaceId) {
       filters.push(`card.workspace_id == @workspaceId`);

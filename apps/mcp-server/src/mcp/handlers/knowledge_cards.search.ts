@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { searchKnowledgeCards } from "@knowledgeplane/api-core";
+import { stripEmbeddings } from "./strip-embeddings.js";
 
 export const knowledgeCardsSearchTool: Tool = {
   name: "knowledge_cards_search",
@@ -45,11 +46,15 @@ export async function handleKnowledgeCardsSearch(args: {
     offset: args.offset,
     use_vector_search: args.use_vector_search,
   });
+  const sanitizedResults = results.map((hit) => ({
+    ...hit,
+    card: stripEmbeddings(hit.card),
+  }));
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify({ hits: results }, null, 2),
+        text: JSON.stringify({ hits: sanitizedResults }, null, 2),
       },
     ],
   };

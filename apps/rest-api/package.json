@@ -11,11 +11,12 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@fastify/cors": "^10.0.0",
     "@knowledgeplane/api-core": "*",
     "@knowledgeplane/db": "*",
     "dotenv": "^16.4.5",
     "fastify": "^5.0.0",
-    "@fastify/cors": "^10.0.0"
+    "undici": "7.21.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -23,7 +24,6 @@
     "eslint": "^9.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.3",
-    "vitest": "^2.1.0"
+    "vitest": "^4.0.18"
   }
 }
-

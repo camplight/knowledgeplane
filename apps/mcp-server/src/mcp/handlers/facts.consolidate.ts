@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { Fact, KnowledgeCard, FactRelation, WorkspaceMember } from "@knowledgeplane/db";
+import { stripEmbeddings } from "./strip-embeddings.js";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
 import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
 
@@ -164,12 +165,13 @@ Consider the relationships between these facts when consolidating. Provide your 
       include_related: args.include_related || false,
     },
   });
+  const sanitizedCard = stripEmbeddings(knowledgeCard);
 
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify({ card: knowledgeCard }, null, 2),
+        text: JSON.stringify({ card: sanitizedCard }, null, 2),
       },
     ],
   };

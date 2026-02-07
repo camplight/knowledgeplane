@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { FactRelation } from "@knowledgeplane/db";
+import { stripEmbeddingsArray } from "./strip-embeddings.js";
 
 export const factRelationsSearchTool: Tool = {
   name: "fact_relations_search",
@@ -48,12 +49,17 @@ export async function handleFactRelationsSearch(args: {
     limit: args.limit,
     offset: args.offset,
   });
+  const sanitizedRelations = stripEmbeddingsArray(relations);
 
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify({ relations, total: relations.length }, null, 2),
+        text: JSON.stringify(
+          { relations: sanitizedRelations, total: sanitizedRelations.length },
+          null,
+          2,
+        ),
       },
     ],
   };

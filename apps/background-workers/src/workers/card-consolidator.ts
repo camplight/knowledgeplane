@@ -532,6 +532,8 @@ Identify relationships that would be useful for organizing and understanding the
       workspace_id: workspaceId,
       created_by: "system",
       last_updated_by: "system",
+            created_by_worker: "card-consolidator",
+            last_updated_by_worker: "card-consolidator",
     });
 
     console.log(`Created knowledge card: ${knowledgeCard.id}`);

@@ -1,6 +1,7 @@
 import { router, protectedProcedure } from "../router";
 import { KnowledgeCard, WorkspaceMember } from "@knowledgeplane/db/next";
 import { z } from "zod";
+import { stripEmbeddings, stripEmbeddingsArray } from "../strip-embeddings";
 
 export const cardsRouter = router({
   list: protectedProcedure
@@ -27,7 +28,7 @@ export const cardsRouter = router({
       const offset = input?.offset || 0;
       const cards = await KnowledgeCard.list(ctx.workspaceId, limit, offset);
       const total = await KnowledgeCard.count(ctx.workspaceId);
-      return { cards, total, limit, offset };
+      return { cards: stripEmbeddingsArray(cards), total, limit, offset };
     }),
   getById: protectedProcedure
     .input(
@@ -56,7 +57,7 @@ export const cardsRouter = router({
         throw new Error("You are not a member of this workspace");
       }
 
-      return { card };
+      return { card: stripEmbeddings(card) };
     }),
   delete: protectedProcedure
     .input(
@@ -86,7 +87,7 @@ export const cardsRouter = router({
         throw new Error("You are not a member of this workspace");
       }
 
-      await KnowledgeCard.delete(input.id);
+      await KnowledgeCard.delete(input.id, ctx.user.userId);
       return { success: true };
     }),
 });

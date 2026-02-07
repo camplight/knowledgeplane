@@ -9,6 +9,8 @@ export interface KnowledgeCardInput {
   workspace_id: string; // Workspace ID
   created_by: string;
   last_updated_by: string;
+  created_by_worker?: string;
+  last_updated_by_worker?: string;
   metadata?: Record<string, any>;
 }
 
@@ -23,6 +25,11 @@ export interface KnowledgeCardRecord {
   workspace_id: string; // Workspace ID
   created_by: string;
   last_updated_by: string;
+  created_by_worker?: string | null;
+  last_updated_by_worker?: string | null;
+  deleted_by?: string | null;
+  deleted_by_worker?: string | null;
+  deleted_at?: string | null;
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -37,6 +44,7 @@ export interface KnowledgeCardUpdateInput {
   content?: string;
   fact_ids?: string[];
   last_updated_by: string;
+  last_updated_by_worker?: string;
   metadata?: Record<string, any>;
 }
 
@@ -51,6 +59,8 @@ export class KnowledgeCard {
       workspace_id: input.workspace_id,
       created_by: input.created_by,
       last_updated_by: input.last_updated_by,
+      created_by_worker: input.created_by_worker,
+      last_updated_by_worker: input.last_updated_by_worker,
       metadata: input.metadata || {},
       created_at: now,
       updated_at: now,
@@ -72,6 +82,9 @@ export class KnowledgeCard {
       last_updated_by: input.last_updated_by,
       updated_at: new Date().toISOString(),
     };
+    if (input.last_updated_by_worker !== undefined) {
+      updates.last_updated_by_worker = input.last_updated_by_worker;
+    }
 
     if (input.title !== undefined) updates.title = input.title;
     if (input.summary !== undefined) updates.summary = input.summary;
@@ -98,25 +111,46 @@ export class KnowledgeCard {
     return record;
   }
 
-  static async delete(id: string): Promise<void> {
+  static async delete(
+    id: string,
+    deleted_by: string,
+    deleted_by_worker?: string,
+  ): Promise<KnowledgeCardRecord> {
     if (!id || id.trim() === "") {
       throw new Error("KnowledgeCard ID is required");
+    }
+    if (!deleted_by || deleted_by.trim() === "") {
+      throw new Error("deleted_by is required");
     }
 
     const key = this.extractKey(id);
     try {
       // Get the card before deletion to trigger webhook
-      const card = await this.findById(id);
+      const card = await this.findById(id, true);
       if (!card) {
         throw new Error(`KnowledgeCard with id ${id} not found`);
       }
 
-      await collections.knowledge_cards.remove(key);
+      const now = new Date().toISOString();
+      const result = await collections.knowledge_cards.update(
+        key,
+        {
+          deleted_at: now,
+          deleted_by,
+          deleted_by_worker,
+          last_updated_by: deleted_by,
+          last_updated_by_worker: deleted_by_worker,
+          updated_at: now,
+        },
+        { returnNew: true },
+      );
+      const updated = result?.new ? this._normalizeRecord(result.new) : card;
       
       // Trigger webhook
-      triggerWebhook("knowledge_card.deleted", card).catch((error) => {
+      triggerWebhook("knowledge_card.deleted", updated).catch((error) => {
         console.error("Failed to trigger knowledge_card.deleted webhook:", error);
       });
+      return updated;
     } catch (error: any) {
       if (error.errorNum === 1202) {
         throw new Error(`KnowledgeCard with id ${id} (key: ${key}) not found`);
@@ -125,11 +159,18 @@ export class KnowledgeCard {
     }
   }
 
-  static async findById(id: string): Promise<KnowledgeCardRecord | null> {
+  static async findById(
+    id: string,
+    includeDeleted: boolean = false,
+  ): Promise<KnowledgeCardRecord | null> {
     const key = this.extractKey(id);
     try {
       const doc = await collections.knowledge_cards.document(key);
-      return this._normalizeRecord(doc);
+      const record = this._normalizeRecord(doc);
+      if (!includeDeleted && record.deleted_at) {
+        return null;
+      }
+      return record;
     } catch (error: any) {
       if (error.errorNum === 1202) {
         return null;
@@ -154,6 +195,7 @@ export class KnowledgeCard {
       filters.push(`card.workspace_id == @workspaceId`);
       bindVars.workspaceId = workspaceId;
     }
+    filters.push(`card.deleted_at == null`);
     
     const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
     const aql = `
@@ -178,6 +220,7 @@ export class KnowledgeCard {
       filters.push(`card.workspace_id == @workspaceId`);
       bindVars.workspaceId = workspaceId;
     }
+    filters.push(`card.deleted_at == null`);
     
     const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
     const aql = `
@@ -219,6 +262,11 @@ export class KnowledgeCard {
       workspace_id: doc.workspace_id,
       created_by: doc.created_by,
       last_updated_by: doc.last_updated_by,
+      created_by_worker: doc.created_by_worker || null,
+      last_updated_by_worker: doc.last_updated_by_worker || null,
+      deleted_by: doc.deleted_by || null,
+      deleted_by_worker: doc.deleted_by_worker || null,
+      deleted_at: doc.deleted_at || null,
       metadata: doc.metadata || {},
       created_at: doc.created_at,
       updated_at: doc.updated_at,

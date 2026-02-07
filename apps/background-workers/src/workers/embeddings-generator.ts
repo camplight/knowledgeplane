@@ -350,6 +350,9 @@ export class EmbeddingsGenerator {
                 await collections.knowledge_cards.update(key, {
                   embedding,
                   embedding_model: this.embeddingModel,
+                  last_updated_by: "system",
+                  last_updated_by_worker: "embeddings-generator",
+                  updated_at: new Date().toISOString(),
                 });
                 workspaceCardsUpdated++;
               }

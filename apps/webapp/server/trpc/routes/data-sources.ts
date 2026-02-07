@@ -141,6 +141,8 @@ export const dataSourcesRouter = router({
         storage_path: "", // No local storage
         workspace_id: ctx.workspaceId,
         uploaded_by: ctx.user.userId,
+        created_by: ctx.user.userId,
+        last_updated_by: ctx.user.userId,
         metadata: fileMetadata,
       });
 

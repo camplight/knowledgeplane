@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { Fact } from "@knowledgeplane/db";
+import { stripEmbeddings } from "./strip-embeddings.js";
 
 export const factsWriteTool: Tool = {
   name: "facts_write",
@@ -42,12 +43,13 @@ export async function handleFactsWrite(args: {
     created_by: args.created_by,
     last_updated_by: args.last_updated_by,
   });
+  const sanitizedFact = stripEmbeddings(fact);
 
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify({ fact }, null, 2),
+        text: JSON.stringify({ fact: sanitizedFact }, null, 2),
       },
     ],
   };

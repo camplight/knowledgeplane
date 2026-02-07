@@ -48,7 +48,8 @@ export async function handleFactRelationsDelete(args: {
     }
   }
 
-  await FactRelation.delete(args.id);
+  const deletedBy = args.user_id || "system";
+  await FactRelation.delete(args.id, deletedBy);
 
   return {
     content: [

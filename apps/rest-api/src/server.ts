@@ -26,6 +26,52 @@ type RequestContext = {
   authContext?: AuthContext;
 };
 
+type EmbeddingRecord = {
+  embedding?: unknown;
+  embedding_model?: unknown;
+  _id?: unknown;
+  _key?: unknown;
+};
+
+function stripEmbeddings<T extends EmbeddingRecord>(
+  record: T,
+): Omit<T, "embedding" | "embedding_model" | "_id" | "_key"> {
+  if (!record) {
+    return record as Omit<T, "embedding" | "embedding_model" | "_id" | "_key">;
+  }
+  const { embedding, embedding_model, _id, _key, ...rest } = record as EmbeddingRecord &
+    Record<string, unknown>;
+  return rest as Omit<T, "embedding" | "embedding_model" | "_id" | "_key">;
+}
+
+function stripEmbeddingsArray<T extends EmbeddingRecord>(
+  records: T[],
+): Array<Omit<T, "embedding" | "embedding_model" | "_id" | "_key">> {
+  return records.map((record) => stripEmbeddings(record));
+}
+
+function stripEmbeddingsDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripEmbeddingsDeep(item)) as T;
+  }
+  if (value && typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (
+        key === "embedding" ||
+        key === "embedding_model" ||
+        key === "_id" ||
+        key === "_key"
+      ) {
+        continue;
+      }
+      result[key] = stripEmbeddingsDeep(val);
+    }
+    return result as T;
+  }
+  return value;
+}
+
 async function resolveContext(
   request: any,
   reply: any,
@@ -106,7 +152,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       offset,
       include_trashed === "true",
     );
-    return { facts };
+    return { facts: stripEmbeddingsArray(facts) };
   });
 
   server.get("/api/facts/:id", async (request, reply) => {
@@ -118,7 +164,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       return { error: "Fact not found" };
     }
 
-    return { fact };
+    return { fact: stripEmbeddings(fact) };
   });
 
   server.post("/api/facts", async (request, reply) => {
@@ -144,7 +190,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       last_updated_by: lastUpdatedBy,
     });
 
-    return { fact };
+    return { fact: stripEmbeddings(fact) };
   });
 
   server.put("/api/facts/:id", async (request, reply) => {
@@ -165,7 +211,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       last_updated_by: lastUpdatedBy,
     });
 
-    return { fact };
+    return { fact: stripEmbeddings(fact) };
   });
 
   server.delete("/api/facts/:id", async (request, reply) => {
@@ -180,7 +226,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
     }
 
     const fact = await Fact.trash(id, lastUpdatedBy);
-    return { fact };
+    return { fact: stripEmbeddings(fact) };
   });
 
   server.post("/api/facts/search", async (request, reply) => {
@@ -189,13 +235,17 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
     const workspaceError = requireWorkspace(ctx, reply);
     if (workspaceError) return workspaceError;
     const body = request.body as any;
-    return searchFacts({
+    const results = await searchFacts({
       query: body.query || "*",
       workspace_id: ctx.workspaceId,
       k: body.k || 10,
       offset: body.offset || 0,
       include_trashed: body.include_trashed || false,
     });
+    return {
+      ...results,
+      hits: stripEmbeddingsArray(results.hits as EmbeddingRecord[]),
+    };
   });
 
   server.get("/api/relations", async (request, reply) => {
@@ -215,7 +265,27 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       offset,
     });
 
-    return { relations };
+    return { relations: stripEmbeddingsArray(relations) };
+  });
+
+  server.delete("/api/relations/:id", async (request, reply) => {
+    const ctx = await resolveContext(request, reply);
+    if (!ctx) return;
+    const { id } = request.params as { id: string };
+    const { deleted_by } = request.query as any;
+    const deletedBy = deleted_by || ctx.userId;
+    if (!deletedBy) {
+      reply.code(401);
+      return { error: "User ID is required for deletes" };
+    }
+
+    try {
+      const relation = await FactRelation.delete(id, deletedBy);
+      return { relation: stripEmbeddings(relation) };
+    } catch (error: any) {
+      reply.code(404);
+      return { error: error.message };
+    }
   });
 
   server.post("/api/relations", async (request, reply) => {
@@ -241,7 +311,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       created_by: createdBy,
     });
 
-    return { relation };
+    return { relation: stripEmbeddings(relation) };
   });
 
   server.get("/api/facts/:id/relations", async (request, reply) => {
@@ -252,8 +322,14 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
     const incoming = await FactRelation.getIncomingRelations(id, type);
 
     return {
-      outgoing,
-      incoming,
+      outgoing: outgoing.map((r) => ({
+        relation: stripEmbeddings(r.relation),
+        fact: stripEmbeddings(r.fact),
+      })),
+      incoming: incoming.map((r) => ({
+        relation: stripEmbeddings(r.relation),
+        fact: stripEmbeddings(r.fact),
+      })),
     };
   });
 
@@ -274,7 +350,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
         bindVars || {},
       );
       const results = await cursor.all();
-      return { results };
+      return { results: stripEmbeddingsDeep(results) };
     } catch (error: any) {
       reply.code(400);
       return { error: error.message };
@@ -289,7 +365,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
     const { limit = 50, offset = 0 } = request.query as any;
 
     const cards = await KnowledgeCard.list(ctx.workspaceId, limit, offset);
-    return { cards };
+    return { cards: stripEmbeddingsArray(cards) };
   });
 
   server.get("/api/knowledge-cards/:id", async (request, reply) => {
@@ -301,7 +377,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       return { error: "Knowledge card not found" };
     }
 
-    return { card };
+    return { card: stripEmbeddings(card) };
   });
 
   server.post("/api/knowledge-cards", async (request, reply) => {
@@ -331,7 +407,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       metadata: body.metadata,
     });
 
-    return { card };
+    return { card: stripEmbeddings(card) };
   });
 
   server.put("/api/knowledge-cards/:id", async (request, reply) => {
@@ -355,7 +431,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       last_updated_by: lastUpdatedBy,
     });
 
-    return { card };
+    return { card: stripEmbeddings(card) };
   });
 
   server.post("/api/knowledge-cards/search", async (request, reply) => {
@@ -371,7 +447,12 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       offset: body.offset || 0,
       use_vector_search: body.use_vector_search,
     });
-    return { hits };
+    return {
+      hits: hits.map((hit) => ({
+        ...hit,
+        card: stripEmbeddings(hit.card),
+      })),
+    };
   });
 
   server.post("/api/knowledge-cards/split", async (request, reply) => {
@@ -398,7 +479,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       workspace_id: workspaceId,
     });
 
-    return result;
+    return stripEmbeddingsDeep(result);
   });
 
   server.post("/api/knowledge-cards/combine", async (request, reply) => {
@@ -424,14 +505,21 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       workspace_id: workspaceId,
     });
 
-    return result;
+    return stripEmbeddingsDeep(result);
   });
 
   server.delete("/api/knowledge-cards/:id", async (request, reply) => {
+    const ctx = await resolveContext(request, reply);
+    if (!ctx) return;
     const { id } = request.params as { id: string };
+    const deletedBy = ctx.userId || (request.query as any)?.deleted_by;
+    if (!deletedBy) {
+      reply.code(401);
+      return { error: "User ID is required for deletes" };
+    }
 
     try {
-      await KnowledgeCard.delete(id);
+      await KnowledgeCard.delete(id, deletedBy);
       return { success: true };
     } catch (error: any) {
       reply.code(404);

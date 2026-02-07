@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { FactRelation, Fact } from "@knowledgeplane/db";
+import { stripEmbeddings } from "./strip-embeddings.js";
 
 export const factRelationsGetRelatedTool: Tool = {
   name: "fact_relations_get_related",
@@ -60,8 +61,8 @@ export async function handleFactRelationsGetRelated(args: {
           {
             fact_id: args.fact_id,
             relations: filteredResults.map((r) => ({
-              relation: r.relation,
-              related_fact: r.fact,
+              relation: stripEmbeddings(r.relation),
+              related_fact: stripEmbeddings(r.fact),
             })),
             total: filteredResults.length,
           },

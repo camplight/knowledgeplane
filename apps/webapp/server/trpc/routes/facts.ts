@@ -2,6 +2,7 @@ import { router, protectedProcedure } from "../router";
 import { Fact, WorkspaceMember } from "@knowledgeplane/db/next";
 import { z } from "zod";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
+import { stripEmbeddings, stripEmbeddingsArray } from "../strip-embeddings";
 
 export const factsRouter = router({
   list: protectedProcedure
@@ -28,7 +29,7 @@ export const factsRouter = router({
       const includeTrashed = input?.includeTrashed || false;
       const facts = await Fact.list(ctx.workspaceId, limit, offset, includeTrashed);
       const total = await Fact.count(ctx.workspaceId, includeTrashed);
-      return { facts, total, limit, offset };
+      return { facts: stripEmbeddingsArray(facts), total, limit, offset };
     }),
   search: protectedProcedure
     .input(
@@ -74,7 +75,7 @@ export const factsRouter = router({
         use_vector_search: input.use_vector_search,
         embeddingProvider,
       });
-      return { results };
+      return { results: stripEmbeddingsArray(results) };
     }),
   create: protectedProcedure
     .input(
@@ -101,7 +102,7 @@ export const factsRouter = router({
         created_by: ctx.user.userId,
         last_updated_by: ctx.user.userId,
       });
-      return { fact };
+      return { fact: stripEmbeddings(fact) };
     }),
   update: protectedProcedure
     .input(
@@ -139,7 +140,7 @@ export const factsRouter = router({
         metadata: input.metadata,
         last_updated_by: ctx.user.userId,
       });
-      return { fact };
+      return { fact: stripEmbeddings(fact) };
     }),
   getById: protectedProcedure
     .input(
@@ -168,7 +169,7 @@ export const factsRouter = router({
         throw new Error("You are not a member of this workspace");
       }
 
-      return { fact };
+      return { fact: stripEmbeddings(fact) };
     }),
   trash: protectedProcedure
     .input(
@@ -199,7 +200,7 @@ export const factsRouter = router({
       }
 
       const fact = await Fact.trash(input.id, ctx.user.userId);
-      return { fact };
+      return { fact: stripEmbeddings(fact) };
     }),
 });
 

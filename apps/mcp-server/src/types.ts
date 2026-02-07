@@ -15,4 +15,6 @@ export interface Fact {
   updated_at: string;
   created_by: UserID;
   last_updated_by: UserID;
+  deleted_by?: UserID | null;
+  deleted_at?: string | null;
 }

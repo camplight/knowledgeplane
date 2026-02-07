@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { KnowledgeCard } from "@knowledgeplane/db";
+import { stripEmbeddingsArray } from "./strip-embeddings.js";
 
 export const knowledgeCardsListTool: Tool = {
   name: "knowledge_cards_list",
@@ -28,12 +29,13 @@ export async function handleKnowledgeCardsList(args: {
   const offset = args.offset || 0;
 
   const cards = await KnowledgeCard.list(args.workspace_id, limit, offset); // workspace_id maps to workspaceId
+  const sanitizedCards = stripEmbeddingsArray(cards);
 
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify({ cards }, null, 2),
+        text: JSON.stringify({ cards: sanitizedCards }, null, 2),
       },
     ],
   };

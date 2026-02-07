@@ -57,6 +57,8 @@ export async function processFileUpload(
     storage_path: "", // No local storage path
     workspace_id: workspaceId,
     uploaded_by: uploadedBy,
+    created_by: uploadedBy,
+    last_updated_by: uploadedBy,
     metadata: {
       original_filename: filename,
     },
@@ -142,6 +144,7 @@ export async function processFileUpload(
   await File.update({
     id: fileRecord.id,
     fact_ids: createdFacts.map((f) => f.id),
+    last_updated_by: uploadedBy,
   });
 
   return {

@@ -67,6 +67,7 @@ export async function handleFilesUpdate(args: {
     id: args.id,
     metadata: args.metadata,
     fact_ids: args.fact_ids,
+    last_updated_by: args.user_id || "system",
   });
 
   return {

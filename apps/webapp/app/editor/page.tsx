@@ -1,7 +1,7 @@
 "use client";
 
 import { trpc } from "../../utils/trpc";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Navigation } from "../components/Navigation";
 import { FactEditForm } from "./components/FactEditForm";
@@ -10,6 +10,7 @@ import { TruncatedContent } from "./components/TruncatedContent";
 
 export default function EditorPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [selectedView, setSelectedView] = useState<"facts" | "cards" | "files" | "graph">("facts");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
@@ -190,11 +191,49 @@ export default function EditorPage() {
     },
   });
 
+  // Delete file mutation
+  const deleteFileMutation = trpc.files.delete.useMutation({
+    onSuccess: () => {
+      setSelectedFile(null);
+      refetchFiles();
+    },
+    onError: (error) => {
+      console.error("Failed to delete file:", error);
+      alert(`Failed to delete file: ${error.message}`);
+    },
+  });
+
   useEffect(() => {
     if (!userLoading && !userData?.user) {
       router.push("/");
     }
   }, [userLoading, userData, router]);
+
+  useEffect(() => {
+    const viewParam = searchParams.get("view");
+    const factIdParam = searchParams.get("factId");
+    const cardIdParam = searchParams.get("cardId");
+
+    if (factIdParam) {
+      setSelectedView("facts");
+      setSelectedFact(factIdParam);
+      setSelectedCard(null);
+      setSelectedFile(null);
+      return;
+    }
+
+    if (cardIdParam) {
+      setSelectedView("cards");
+      setSelectedCard(cardIdParam);
+      setSelectedFact(null);
+      setSelectedFile(null);
+      return;
+    }
+
+    if (viewParam === "facts" || viewParam === "cards" || viewParam === "files" || viewParam === "graph") {
+      setSelectedView(viewParam);
+    }
+  }, [searchParams]);
 
   const handleSearch = () => {
     if (searchQuery && searchQuery.trim().length > 0) {
@@ -422,6 +461,18 @@ export default function EditorPage() {
     }
   };
 
+  const handleDeleteFile = (fileId: string) => {
+    if (!fileId || fileId.trim() === "") {
+      console.error("Missing file ID");
+      alert("Missing file ID");
+      return;
+    }
+
+    if (confirm("Are you sure you want to delete this file? This action cannot be undone.")) {
+      deleteFileMutation.mutate({ id: fileId });
+    }
+  };
+
   if (userLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -441,6 +492,9 @@ export default function EditorPage() {
   
   // Apply client-side filter to facts
   const facts = filterItems(allFacts, searchQuery);
+  const selectedFactData = selectedFact
+    ? allFacts.find((fact: any) => fact.id === selectedFact || fact._id === selectedFact) || null
+    : null;
   
   const isLoadingFacts = activeSearchQuery && activeSearchQuery.trim().length > 0 
     ? searchLoading 
@@ -663,6 +717,11 @@ export default function EditorPage() {
                               ID: {factIdDisplay}
                             </span>
                             <span>{new Date(fact.created_at).toLocaleString()}</span>
+                            {fact.metadata && Object.keys(fact.metadata).length > 0 && (
+                              <span className="text-xs text-slate-400">
+                                {Object.keys(fact.metadata).length} metadata field{Object.keys(fact.metadata).length !== 1 ? "s" : ""}
+                              </span>
+                            )}
                           </div>
                         </div>
                       );
@@ -723,6 +782,11 @@ export default function EditorPage() {
                             </svg>
                             {card.fact_ids.length} fact{card.fact_ids.length !== 1 ? "s" : ""}
                           </span>
+                          {card.metadata && Object.keys(card.metadata).length > 0 && (
+                            <span className="text-xs text-slate-400">
+                              {Object.keys(card.metadata).length} metadata field{Object.keys(card.metadata).length !== 1 ? "s" : ""}
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -841,7 +905,7 @@ export default function EditorPage() {
                         <p className="text-sm font-medium text-slate-600 mb-1">Content</p>
                         <div className="text-slate-900">
                           <TruncatedContent
-                            content={facts.find((f: any) => f.id === selectedFact)?.content || ""}
+                            content={selectedFactData?.content || ""}
                             maxLength={500}
                           />
                         </div>
@@ -849,9 +913,19 @@ export default function EditorPage() {
                       <div>
                         <p className="text-sm font-medium text-slate-600 mb-1">Created</p>
                         <p className="text-slate-900">
-                          {new Date(facts.find((f: any) => f.id === selectedFact)?.created_at || "").toLocaleString()}
+                          {new Date(selectedFactData?.created_at || "").toLocaleString()}
                         </p>
                       </div>
+                      {selectedFactData?.metadata && Object.keys(selectedFactData.metadata).length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium text-slate-600 mb-1">Metadata</p>
+                          <div className="bg-slate-50 rounded-lg p-3">
+                            <pre className="text-xs text-slate-700 whitespace-pre-wrap">
+                              {JSON.stringify(selectedFactData.metadata, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -1292,12 +1366,21 @@ export default function EditorPage() {
                   )}
                 </div>
 
-                <button
-                  onClick={() => setSelectedFile(null)}
-                  className="w-full px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-                >
-                  Close
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedFile(null)}
+                    className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={() => handleDeleteFile(selectedFile)}
+                    disabled={deleteFileMutation.isPending}
+                    className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deleteFileMutation.isPending ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
