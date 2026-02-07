@@ -67,6 +67,9 @@ envs:
 #   - domain: mcp.your-domain.com
 #     type: PRIMARY
 #     zone: your-domain.com
+#   - domain: rest.your-domain.com
+#     type: PRIMARY
+#     zone: your-domain.com
 #
 # ingress:
 #   rules:
@@ -75,6 +78,13 @@ envs:
 #       match:
 #         authority:
 #           exact: mcp.your-domain.com
+#         path:
+#           prefix: /
+#     - component:
+#         name: rest-api
+#       match:
+#         authority:
+#           exact: rest.your-domain.com
 #         path:
 #           prefix: /
 #     - component:
@@ -130,9 +140,9 @@ services:
     http_port: 8081
     routes:
       # Path-based routing for REST API.
-      # Note: App Platform strips the /api prefix by default. If you need to
-      # preserve /api, use a dedicated subdomain or adjust routing behavior.
-      - path: /api
+      # Note: App Platform strips the /rest prefix by default. If you need to
+      # preserve /rest, use a dedicated subdomain or adjust routing behavior.
+      - path: /rest
     health_check:
       http_path: /health
       initial_delay_seconds: 10

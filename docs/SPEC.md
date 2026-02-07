@@ -331,9 +331,9 @@ and should be treated as underscore equivalents.
 | `DELETE /api/knowledge-cards/:id` | Delete a knowledge card |
 
 **Deployment Note (DigitalOcean App Platform):**
-If you route the REST API via a path prefix (e.g., `/api`), App Platform strips
+If you route the REST API via a path prefix (e.g., `/rest`), App Platform strips
 the prefix by default. Use a dedicated subdomain for the REST API or configure
-routing so the `/api` prefix is preserved.
+routing so the `/rest` prefix is preserved.
 
 **Skill Rendering Note:**
 `/skill.md` is served by the webapp only and renders subpaths endpoints.
