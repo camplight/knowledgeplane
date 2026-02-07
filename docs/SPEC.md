@@ -675,6 +675,7 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Files view with uploaded files list display and detailed file information sidebar
   - Card details sidebar showing title, summary, full content, fact count, timestamps, and metadata
   - File details sidebar showing filename, MIME type, size, storage path, fact count, extracted facts list (clickable to navigate to facts), timestamps, and metadata
+  - Extracted facts lists omit missing facts and strip embedding fields
   - Fact details sidebar showing content, timestamps, and metadata
   - Fact and card lists surface metadata counts when available
   - Card deletion functionality with confirmation dialog

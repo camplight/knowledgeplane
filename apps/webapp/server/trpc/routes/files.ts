@@ -137,7 +137,8 @@ export const filesRouter = router({
 
       // Filter facts to only return those belonging to the workspace
       const workspaceFacts = facts.filter(
-        (f) => f !== null && f.workspace_id === ctx.workspaceId,
+        (fact): fact is NonNullable<typeof fact> =>
+          Boolean(fact) && fact.workspace_id === ctx.workspaceId,
       );
 
       return {
