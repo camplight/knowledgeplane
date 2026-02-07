@@ -90,8 +90,8 @@ async function validateGoogleToken(token: string): Promise<AuthContext> {
       );
     }
 
-    const userInfo = await userInfoResponse.json();
-    const email = userInfo.email;
+    const userInfo = (await userInfoResponse.json()) as Record<string, any>;
+    const email = userInfo.email as string | undefined;
     const username = email?.split("@")[0] || userInfo.id;
     const user = await User.getOrCreate({ username, email });
 
@@ -121,8 +121,8 @@ async function validateGitHubToken(token: string): Promise<AuthContext> {
       );
     }
 
-    const userInfo = await userInfoResponse.json();
-    let email = userInfo.email;
+    const userInfo = (await userInfoResponse.json()) as Record<string, any>;
+    let email = userInfo.email as string | undefined;
     if (!email) {
       const emailsResponse = await fetch("https://api.github.com/user/emails", {
         headers: {
@@ -131,8 +131,11 @@ async function validateGitHubToken(token: string): Promise<AuthContext> {
         },
       });
       if (emailsResponse.ok) {
-        const emails = await emailsResponse.json();
-        const primaryEmail = emails.find((e: any) => e.primary);
+        const emails = (await emailsResponse.json()) as Array<{
+          email?: string;
+          primary?: boolean;
+        }>;
+        const primaryEmail = emails.find((e) => e.primary);
         email = primaryEmail?.email || emails[0]?.email;
       }
     }

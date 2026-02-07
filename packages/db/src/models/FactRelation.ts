@@ -153,11 +153,11 @@ export class FactRelation {
           
           // Try to completely disable validation
           try {
-            await collection.properties({ 
-              schema: null, 
+            await collection.properties({
+              schema: null,
               level: "none",
-              waitForSync: false 
-            });
+              waitForSync: false,
+            } as any);
             console.log("Disabled all validation, retrying save...");
             const retryResult = await collection.save(doc, { returnNew: true });
             return this._normalizeRecord(retryResult.new!);
@@ -191,7 +191,7 @@ export class FactRelation {
             // but with our data to see if structure is the issue
             try {
               console.log("Testing if we can insert a relation with sample structure...");
-              const testDoc = {
+              const testDoc: any = {
                 _from: doc._from,
                 _to: doc._to,
                 from_fact: doc.from_fact,
