@@ -31,6 +31,9 @@ COPY packages ./packages
 # Copy all webapp source files
 COPY apps/webapp ./apps/webapp
 
+# Copy workspace node_modules for webapp dependencies
+COPY --from=deps /app/apps/webapp/node_modules ./apps/webapp/node_modules
+
 ENV NEXT_TELEMETRY_DISABLED=1
 # Use production mode for build to prevent static page generation issues
 ENV NODE_ENV=production
