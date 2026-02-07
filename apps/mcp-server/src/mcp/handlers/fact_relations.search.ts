@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { FactRelation } from "@knowledgeplane/db";
 
 export const factRelationsSearchTool: Tool = {
-  name: "fact_relations.search",
+  name: "fact_relations_search",
   description:
     "Search fact relations with filtering. Supports filtering by from_fact, to_fact, and type. Supports pagination.",
   inputSchema: {

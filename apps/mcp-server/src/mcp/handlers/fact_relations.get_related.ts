@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { FactRelation, Fact } from "@knowledgeplane/db";
 
 export const factRelationsGetRelatedTool: Tool = {
-  name: "fact_relations.get_related",
+  name: "fact_relations_get_related",
   description:
     "Get facts related to a given fact via outgoing relations. Returns relations and the related facts. Optionally filter by relation type.",
   inputSchema: {

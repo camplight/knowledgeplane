@@ -72,38 +72,41 @@ ArangoDB (graph database with full-text search)
 
 🔐 MCP Tools
 
+Tool names use underscores (`facts_write`). Dotted names shown elsewhere are legacy
+and should be treated as underscore equivalents.
+
 | Tool | Description |
 |------|-------------|
-| `facts.write` | Write a fact with content, metadata, and user tracking |
-| `facts.bulkwrite` | Write multiple facts to the knowledge base in a single operation |
-| `facts.search` | Search facts using hybrid search (combines full-text and vector search) with pagination. Trashed facts are excluded by default |
-| `facts.update` | Update a fact in the knowledge base. Only provided fields will be updated |
-| `facts.trash` | Mark a fact as trashed. Trashed facts are excluded from search results unless explicitly included |
-| `facts.consolidate` | Consolidate a set of facts into a knowledge card using AI. Optionally includes related facts via graph traversal |
-| `knowledge_cards.create` | Create a new knowledge card with title, summary, content, and associated fact IDs |
-| `knowledge_cards.update` | Update a knowledge card. Only provided fields will be updated |
-| `knowledge_cards.delete` | Delete a knowledge card by ID |
-| `knowledge_cards.search` | Search knowledge cards using hybrid search (combines full-text and vector search) with pagination |
-| `knowledge_cards.list` | List knowledge cards with pagination |
-| `knowledge_cards.split` | Split a knowledge card into multiple cards using AI |
-| `knowledge_cards.combine` | Combine multiple knowledge cards into a single card using AI |
-| `users.register` | Register a new user or update an existing user's email if the username already exists |
-| `files.upload` | Upload a file and automatically extract facts and FactRelations using AI. The file content is analyzed using OpenAI to identify key information and relationships |
-| `files.list` | List files with pagination |
-| `files.get` | Get a file by ID |
-| `files.search` | Search files by fact ID. Returns all files that contain the specified fact ID in their fact_ids array |
-| `files.update` | Update a file. Only provided fields will be updated. Metadata and fact_ids can be updated |
-| `files.delete` | Delete a file by ID |
-| `fact_relations.create` | Create a relation between two facts. Relations are typed edges in the knowledge graph |
-| `fact_relations.update` | Update a fact relation. Only provided fields will be updated. Type and metadata can be updated |
-| `fact_relations.delete` | Delete a fact relation by ID |
-| `fact_relations.search` | Search fact relations with filtering. Supports filtering by from_fact, to_fact, and type. Supports pagination |
-| `fact_relations.get` | Get a fact relation by ID |
-| `fact_relations.get_related` | Get facts related to a given fact via outgoing relations. Returns relations and the related facts. Optionally filter by relation type |
-| `fact_relations.get_incoming` | Get facts that have relations pointing to a given fact (incoming relations). Returns relations and the source facts. Optionally filter by relation type |
-| `workers.trigger` | Trigger a background worker to run (card-consolidator or embeddings-generator) |
+| `facts_write` | Write a fact with content, metadata, and user tracking |
+| `facts_bulkwrite` | Write multiple facts to the knowledge base in a single operation |
+| `facts_search` | Search facts using hybrid search (combines full-text and vector search) with pagination. Trashed facts are excluded by default |
+| `facts_update` | Update a fact in the knowledge base. Only provided fields will be updated |
+| `facts_trash` | Mark a fact as trashed. Trashed facts are excluded from search results unless explicitly included |
+| `facts_consolidate` | Consolidate a set of facts into a knowledge card using AI. Optionally includes related facts via graph traversal |
+| `knowledge_cards_create` | Create a new knowledge card with title, summary, content, and associated fact IDs |
+| `knowledge_cards_update` | Update a knowledge card. Only provided fields will be updated |
+| `knowledge_cards_delete` | Delete a knowledge card by ID |
+| `knowledge_cards_search` | Search knowledge cards using hybrid search (combines full-text and vector search) with pagination |
+| `knowledge_cards_list` | List knowledge cards with pagination |
+| `knowledge_cards_split` | Split a knowledge card into multiple cards using AI |
+| `knowledge_cards_combine` | Combine multiple knowledge cards into a single card using AI |
+| `users_register` | Register a new user or update an existing user's email if the username already exists |
+| `files_upload` | Upload a file and automatically extract facts and FactRelations using AI. The file content is analyzed using OpenAI to identify key information and relationships |
+| `files_list` | List files with pagination |
+| `files_get` | Get a file by ID |
+| `files_search` | Search files by fact ID. Returns all files that contain the specified fact ID in their fact_ids array |
+| `files_update` | Update a file. Only provided fields will be updated. Metadata and fact_ids can be updated |
+| `files_delete` | Delete a file by ID |
+| `fact_relations_create` | Create a relation between two facts. Relations are typed edges in the knowledge graph |
+| `fact_relations_update` | Update a fact relation. Only provided fields will be updated. Type and metadata can be updated |
+| `fact_relations_delete` | Delete a fact relation by ID |
+| `fact_relations_search` | Search fact relations with filtering. Supports filtering by from_fact, to_fact, and type. Supports pagination |
+| `fact_relations_get` | Get a fact relation by ID |
+| `fact_relations_get_related` | Get facts related to a given fact via outgoing relations. Returns relations and the related facts. Optionally filter by relation type |
+| `fact_relations_get_incoming` | Get facts that have relations pointing to a given fact (incoming relations). Returns relations and the source facts. Optionally filter by relation type |
+| `workers_trigger` | Trigger a background worker to run (card-consolidator or embeddings-generator) |
 
-**facts.write Parameters:**
+**facts_write Parameters:**
 - `content` (required): The content of the fact
 - `metadata` (optional): Key-value pairs of metadata
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
@@ -111,8 +114,8 @@ ArangoDB (graph database with full-text search)
 
 **Note:** `workspace_id` is NOT accepted as a parameter. It is automatically set from the authenticated session context. Any `workspace_id` provided in tool arguments will be ignored and replaced with the workspace ID from the session context.
 
-**facts.bulkwrite Parameters:**
-- `facts` (required): Array of fact objects to write. Each fact object has the same parameters as `facts.write`:
+**facts_bulkwrite Parameters:**
+- `facts` (required): Array of fact objects to write. Each fact object has the same parameters as `facts_write`:
   - `content` (required): The content of the fact
   - `metadata` (optional): Key-value pairs of metadata
   - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
@@ -120,7 +123,7 @@ ArangoDB (graph database with full-text search)
 
 **Note:** `workspace_id` is NOT accepted as a parameter in any fact object. It is automatically set from the authenticated session context for all facts. Any `workspace_id` provided in tool arguments will be ignored and replaced with the workspace ID from the session context.
 
-**facts.search Parameters:**
+**facts_search Parameters:**
 - `query` (required): Search query for hybrid search (combines full-text and vector search). Use '*' to search all facts
 - `k` (optional): Limit for number of results (default: 5, max: 20). Results are optimized to prevent context window issues
 - `offset` (optional): Offset for pagination (default: 0)
@@ -128,33 +131,33 @@ ArangoDB (graph database with full-text search)
 
 **Note:** `workspace_id` is NOT accepted as a parameter. It is automatically set from the authenticated session context. Any `workspace_id` provided in tool arguments will be ignored and replaced with the workspace ID from the session context.
 
-**facts.search Response Optimization:**
+**facts_search Response Optimization:**
 - Content is automatically truncated to 500 characters to prevent context window issues
 - Embeddings and internal database fields (_key, _id, embedding_model) are excluded from results
 - Maximum 20 results per request (k is capped at 20)
 - Response includes a `content_truncated` flag for each fact if content was truncated
-- Use `facts.update` or fetch individual facts if full content is needed
+- Use `facts_update` or fetch individual facts if full content is needed
 
-**facts.update Parameters:**
+**facts_update Parameters:**
 - `id` (required): The ID of the fact to update
 - `content` (optional): The updated content of the fact
 - `metadata` (optional): Updated key-value pairs of metadata
 - `last_updated_by` (required): User ID of the person updating the fact
 
-**workers.trigger Parameters:**
+**workers_trigger Parameters:**
 - `worker` (required): The name of the worker to trigger ("card-consolidator" or "embeddings-generator")
 
-**facts.trash Parameters:**
+**facts_trash Parameters:**
 - `id` (required): The ID of the fact to trash
 - `last_updated_by` (required): User ID of the person trashing the fact
 
-**facts.consolidate Parameters:**
+**facts_consolidate Parameters:**
 - `fact_ids` (required): Array of fact IDs to consolidate
 - `include_related` (optional): If true, includes related facts via graph traversal (default: false)
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 
-**knowledge_cards.create Parameters:**
+**knowledge_cards_create Parameters:**
 - `title` (required): Title of the knowledge card
 - `summary` (required): Brief summary of the knowledge card
 - `content` (required): Full content of the knowledge card
@@ -164,7 +167,7 @@ ArangoDB (graph database with full-text search)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 - `metadata` (optional): Key-value pairs of metadata
 
-**knowledge_cards.update Parameters:**
+**knowledge_cards_update Parameters:**
 - `id` (required): The ID of the knowledge card to update
 - `title` (optional): Updated title of the knowledge card
 - `summary` (optional): Updated summary of the knowledge card
@@ -173,66 +176,66 @@ ArangoDB (graph database with full-text search)
 - `metadata` (optional): Updated key-value pairs of metadata
 - `last_updated_by` (optional): User ID of the person updating the card. If not provided, inferred from authenticated session (OAuth token or API key)
 
-**knowledge_cards.delete Parameters:**
+**knowledge_cards_delete Parameters:**
 - `id` (required): The ID of the knowledge card to delete
 
-**knowledge_cards.search Parameters:**
+**knowledge_cards_search Parameters:**
 - `query` (required): Search query for hybrid search. Use '*' to search all cards
 - `workspace_id` (optional): Workspace ID for filtering. If not provided, inferred from authenticated session (uses user's first workspace)
 - `k` (optional): Limit for number of results (default: 5)
 - `offset` (optional): Offset for pagination (default: 0)
 - `use_vector_search` (optional): If true, use vector search only; if false, use full-text only; if undefined, use hybrid
 
-**knowledge_cards.list Parameters:**
+**knowledge_cards_list Parameters:**
 - `workspace_id` (optional): Workspace ID for filtering. If not provided, inferred from authenticated session (uses user's first workspace)
 - `limit` (optional): Maximum number of cards to return (default: 50)
 - `offset` (optional): Offset for pagination (default: 0)
 
-**knowledge_cards.split Parameters:**
+**knowledge_cards_split Parameters:**
 - `id` (required): The ID of the knowledge card to split
 - `num_cards` (optional): Number of cards to split into (default: 2)
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 
-**knowledge_cards.combine Parameters:**
+**knowledge_cards_combine Parameters:**
 - `card_ids` (required): Array of knowledge card IDs to combine (at least 2 cards required)
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 
-**users.register Parameters:**
+**users_register Parameters:**
 - `username` (required): Unique username for the user
 - `email` (required): Email address for the user
 
-**knowledgecontexts.list Parameters:**
+**knowledgecontexts_list Parameters:**
 - `include_trashed` (optional): If true, includes trashed facts in search results (default: false)
 
-**files.upload Parameters:**
+**files_upload Parameters:**
 - `filename` (required): Original filename of the file being uploaded
 - `mimeType` (required): MIME type of the file (e.g., 'text/plain', 'application/json')
 - `data` (required): Base64-encoded file content
 - `workspace_id` (optional): Workspace ID. If not provided, inferred from authenticated session (uses user's first workspace)
 - `created_by` (optional): User ID of the uploader. If not provided, inferred from authenticated session (OAuth token or API key)
 
-**files.list Parameters:**
+**files_list Parameters:**
 - `workspace_id` (optional): Workspace ID for filtering. If not provided, inferred from authenticated session (uses user's first workspace)
 - `limit` (optional): Maximum number of files to return (default: 50)
 - `offset` (optional): Offset for pagination (default: 0)
 
-**files.get Parameters:**
+**files_get Parameters:**
 - `id` (required): The ID of the file to retrieve
 
-**files.search Parameters:**
+**files_search Parameters:**
 - `fact_id` (required): The fact ID to search for in files. Returns all files that contain this fact ID in their fact_ids array
 
-**files.update Parameters:**
+**files_update Parameters:**
 - `id` (required): The ID of the file to update
 - `metadata` (optional): Updated metadata (key-value pairs)
 - `fact_ids` (optional): Updated array of fact IDs extracted from this file
 
-**files.delete Parameters:**
+**files_delete Parameters:**
 - `id` (required): The ID of the file to delete
 
-**fact_relations.create Parameters:**
+**fact_relations_create Parameters:**
 - `from_fact` (required): Source fact ID
 - `to_fact` (required): Target fact ID
 - `type` (required): Relation type (e.g., 'references', 'depends_on', 'related_to', 'part_of')
@@ -240,15 +243,15 @@ ArangoDB (graph database with full-text search)
 - `metadata` (optional): Additional relation metadata
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 
-**fact_relations.update Parameters:**
+**fact_relations_update Parameters:**
 - `id` (required): The ID of the relation to update
 - `type` (optional): Updated relation type
 - `metadata` (optional): Updated metadata (key-value pairs)
 
-**fact_relations.delete Parameters:**
+**fact_relations_delete Parameters:**
 - `id` (required): The ID of the relation to delete
 
-**fact_relations.search Parameters:**
+**fact_relations_search Parameters:**
 - `workspace_id` (optional): Workspace ID for filtering. If not provided, inferred from authenticated session (uses user's first workspace)
 - `from_fact` (optional): Filter by source fact ID
 - `to_fact` (optional): Filter by target fact ID
@@ -256,14 +259,14 @@ ArangoDB (graph database with full-text search)
 - `limit` (optional): Maximum number of relations to return (default: 50)
 - `offset` (optional): Offset for pagination (default: 0)
 
-**fact_relations.get Parameters:**
+**fact_relations_get Parameters:**
 - `id` (required): The ID of the relation to retrieve
 
-**fact_relations.get_related Parameters:**
+**fact_relations_get_related Parameters:**
 - `fact_id` (required): The fact ID to get related facts for
 - `relation_type` (optional): Optional filter by relation type
 
-**fact_relations.get_incoming Parameters:**
+**fact_relations_get_incoming Parameters:**
 - `fact_id` (required): The fact ID to get incoming relations for
 - `relation_type` (optional): Optional filter by relation type
 
@@ -275,6 +278,7 @@ ArangoDB (graph database with full-text search)
 | `POST /mcp` | MCP protocol endpoint (StreamableHTTPServerTransport) |
 | `GET /health` | Health check endpoint |
 | `GET /docs` | Swagger UI documentation |
+| `GET /skill.md` | Rendered agent instructions (served by webapp only) |
 | `GET /` | Landing page with features overview and authentication options |
 | `GET /use-cases` | Use cases page showcasing three main use cases for KnowledgePlane |
 | `GET /auth/google` | React login page for Google OAuth |
@@ -317,6 +321,22 @@ ArangoDB (graph database with full-text search)
 | `POST /api/relations` | Create a new relation |
 | `GET /api/facts/:id/relations` | Get relations for a fact |
 | `POST /api/query` | Execute AQL query |
+| `GET /api/knowledge-cards` | List knowledge cards |
+| `GET /api/knowledge-cards/:id` | Get a knowledge card |
+| `POST /api/knowledge-cards` | Create a knowledge card |
+| `PUT /api/knowledge-cards/:id` | Update a knowledge card |
+| `POST /api/knowledge-cards/search` | Search knowledge cards |
+| `POST /api/knowledge-cards/split` | Split a knowledge card |
+| `POST /api/knowledge-cards/combine` | Combine knowledge cards |
+| `DELETE /api/knowledge-cards/:id` | Delete a knowledge card |
+
+**Deployment Note (DigitalOcean App Platform):**
+If you route the REST API via a path prefix (e.g., `/api`), App Platform strips
+the prefix by default. Use a dedicated subdomain for the REST API or configure
+routing so the `/api` prefix is preserved.
+
+**Skill Rendering Note:**
+`/skill.md` is served by the webapp only and renders subpaths endpoints.
 | `GET /api/knowledge-cards` | List knowledge cards |
 | `GET /api/knowledge-cards/:id` | Get a specific knowledge card |
 | `DELETE /api/knowledge-cards/:id` | Delete a knowledge card |
@@ -373,7 +393,7 @@ KnowledgePlane supports three types of authentication:
 - Authentication via `Authorization: Bearer <token>` header (OAuth), `knowledgeplane-key` header (API key), or `api_key` query parameter (for internal use)
 - **Workspace ID Auto-Inference**: All MCP tool handlers automatically infer `workspace_id` from the authenticated user's session context. Tools do NOT accept `workspace_id` as a parameter - it is automatically set from the user's workspace context. If a user is authenticated, their `workspace_id` is automatically inferred from their first workspace or from the `workspace_id` query parameter.
 - **Workspace ID Not Accepted in Args**: `workspace_id` is NOT accepted in tool handler arguments. Any `workspace_id` provided in tool arguments will be automatically removed and replaced with the workspace ID from the authenticated session context. This ensures that authenticated users always operate within their authorized workspace context, preventing incorrect workspace_id values (e.g., workspace names instead of IDs) from being used.
-- For `facts.write` and other creation operations, `created_by`, `last_updated_by`, and `workspace_id` are automatically set from the authenticated session if not explicitly provided
+- For `facts_write` and other creation operations, `created_by`, `last_updated_by`, and `workspace_id` are automatically set from the authenticated session if not explicitly provided
 - All MCP operations are scoped to the workspace context (either from query param or user's first workspace)
 - **Personal MCP URL**: Users can generate and copy their personal MCP server URL with their API key included via the profile page. This URL includes the API key as a query parameter and can be used to connect AI agents and tools.
 - **Workspace-Aware Chat**: The chat interface is workspace-aware and automatically passes the current workspace's `workspace_id` to the MCP server URL. When users switch workspaces, the chat automatically uses the correct workspace context for MCP operations.
@@ -846,10 +866,11 @@ This project uses npm workspaces with multiple packages:
 - `apps/mcp-server` - Backend MCP server (Fastify + TypeScript)
 - `apps/webapp` - Frontend web application (Next.js + React + TypeScript)
 - `apps/background-workers` - Background workers for card consolidation, embeddings generation, and data source execution
-- `apps/rest-api` - REST API server (optional)
+- `apps/rest-api` - REST API server (optional, `src/server.ts` exports testable server)
 - `packages/db` - Shared database package
 - `packages/file-processor` - File processing utilities
 - `packages/aimodel` - AI model client abstraction
+- `packages/api-core` - Shared REST/MCP logic (search + card ops)
 
 **Installation:**
 ```bash
@@ -933,7 +954,7 @@ curl -X POST "http://localhost:8080/mcp" \
     "id":2,
     "method":"tools/call",
     "params":{
-      "name":"facts.write",
+      "name":"facts_write",
       "arguments":{
         "content":"Project Apollo uses port 9090"
       }
@@ -954,7 +975,7 @@ curl -X POST "http://localhost:8080/mcp" \
     "id":3,
     "method":"tools/call",
     "params":{
-      "name":"facts.bulkwrite",
+      "name":"facts_bulkwrite",
       "arguments":{
         "facts":[
           {
@@ -986,7 +1007,7 @@ curl -X POST "http://localhost:8080/mcp" \
     "id":2,
     "method":"tools/call",
     "params":{
-      "name":"facts.write",
+      "name":"facts_write",
       "arguments":{
         "content":"Project Apollo uses port 9090"
       }
@@ -1006,7 +1027,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
     "id":2,
     "method":"tools/call",
     "params":{
-      "name":"facts.write",
+      "name":"facts_write",
       "arguments":{
         "content":"Project Apollo uses port 9090"
       }
@@ -1024,7 +1045,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":2,
     "method":"tools/call",
     "params":{
-      "name":"facts.write",
+      "name":"facts_write",
       "arguments":{
         "content":"Project Apollo uses port 9090",
         "created_by":"<user-uuid>",
@@ -1044,7 +1065,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":3,
     "method":"tools/call",
     "params":{
-      "name":"facts.search",
+      "name":"facts_search",
       "arguments":{
         "query":"Apollo",
         "k":10
@@ -1063,7 +1084,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
     "id":4,
     "method":"tools/call",
     "params":{
-      "name":"facts.update",
+      "name":"facts_update",
       "arguments":{
         "id":"<fact-uuid>",
         "content":"Updated project information: Apollo uses port 9090 and connects to Redis",
@@ -1086,7 +1107,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":5,
     "method":"tools/call",
     "params":{
-      "name":"users.register",
+      "name":"users_register",
       "arguments":{
         "username":"alice",
         "email":"alice@example.com"
@@ -1105,7 +1126,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
     "id":6,
     "method":"tools/call",
     "params":{
-      "name":"facts.trash",
+      "name":"facts_trash",
       "arguments":{
         "id":"<fact-uuid>"
       }
@@ -1123,7 +1144,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":7,
     "method":"tools/call",
     "params":{
-      "name":"facts.search",
+      "name":"facts_search",
       "arguments":{
         "query":"*",
         "include_trashed":true
@@ -1145,7 +1166,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
     "id":8,
     "method":"tools/call",
     "params":{
-      "name":"files.upload",
+      "name":"files_upload",
       "arguments":{
         "filename":"document.txt",
         "mimeType":"text/plain",
@@ -1171,7 +1192,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
     "id":9,
     "method":"tools/call",
     "params":{
-      "name":"facts.consolidate",
+      "name":"facts_consolidate",
       "arguments":{
         "fact_ids":["facts/123", "facts/456", "facts/789"],
         "include_related":true
@@ -1190,7 +1211,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
     "id":10,
     "method":"tools/call",
     "params":{
-      "name":"knowledge_cards.create",
+      "name":"knowledge_cards_create",
       "arguments":{
         "title":"Project Architecture Overview",
         "summary":"Overview of the project architecture and key components",
@@ -1211,7 +1232,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":11,
     "method":"tools/call",
     "params":{
-      "name":"knowledge_cards.search",
+      "name":"knowledge_cards_search",
       "arguments":{
         "query":"architecture",
         "k":10
@@ -1230,7 +1251,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":12,
     "method":"tools/call",
     "params":{
-      "name":"knowledge_cards.list",
+      "name":"knowledge_cards_list",
       "arguments":{
         "limit":20,
         "offset":0
@@ -1249,7 +1270,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
     "id":13,
     "method":"tools/call",
     "params":{
-      "name":"knowledge_cards.update",
+      "name":"knowledge_cards_update",
       "arguments":{
         "id":"knowledge_cards/123",
         "title":"Updated Project Architecture Overview",
@@ -1269,7 +1290,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
     "id":14,
     "method":"tools/call",
     "params":{
-      "name":"knowledge_cards.split",
+      "name":"knowledge_cards_split",
       "arguments":{
         "id":"knowledge_cards/123",
         "num_cards":3
@@ -1288,7 +1309,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
     "id":15,
     "method":"tools/call",
     "params":{
-      "name":"knowledge_cards.combine",
+      "name":"knowledge_cards_combine",
       "arguments":{
         "card_ids":["knowledge_cards/123", "knowledge_cards/456", "knowledge_cards/789"]
       }
@@ -1306,7 +1327,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":16,
     "method":"tools/call",
     "params":{
-      "name":"knowledge_cards.delete",
+      "name":"knowledge_cards_delete",
       "arguments":{
         "id":"knowledge_cards/123"
       }
@@ -1324,7 +1345,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":17,
     "method":"tools/call",
     "params":{
-      "name":"files.list",
+      "name":"files_list",
       "arguments":{
         "limit":20,
         "offset":0
@@ -1343,7 +1364,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":18,
     "method":"tools/call",
     "params":{
-      "name":"files.get",
+      "name":"files_get",
       "arguments":{
         "id":"files/123"
       }
@@ -1361,7 +1382,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":19,
     "method":"tools/call",
     "params":{
-      "name":"files.search",
+      "name":"files_search",
       "arguments":{
         "fact_id":"facts/456"
       }
@@ -1379,7 +1400,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
     "id":20,
     "method":"tools/call",
     "params":{
-      "name":"files.update",
+      "name":"files_update",
       "arguments":{
         "id":"files/123",
         "metadata":{"source":"manual-update"},
@@ -1399,7 +1420,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":21,
     "method":"tools/call",
     "params":{
-      "name":"files.delete",
+      "name":"files_delete",
       "arguments":{
         "id":"files/123"
       }
@@ -1417,7 +1438,7 @@ curl -X POST "http://localhost:8080/mcp?username=alice&email=alice@example.com" 
     "id":22,
     "method":"tools/call",
     "params":{
-      "name":"fact_relations.create",
+      "name":"fact_relations_create",
       "arguments":{
         "from_fact":"facts/123",
         "to_fact":"facts/456",
@@ -1438,7 +1459,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":23,
     "method":"tools/call",
     "params":{
-      "name":"fact_relations.update",
+      "name":"fact_relations_update",
       "arguments":{
         "id":"fact_relations/789",
         "type":"depends_on",
@@ -1458,7 +1479,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":24,
     "method":"tools/call",
     "params":{
-      "name":"fact_relations.delete",
+      "name":"fact_relations_delete",
       "arguments":{
         "id":"fact_relations/789"
       }
@@ -1476,7 +1497,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":25,
     "method":"tools/call",
     "params":{
-      "name":"fact_relations.search",
+      "name":"fact_relations_search",
       "arguments":{
         "from_fact":"facts/123",
         "type":"references",
@@ -1496,7 +1517,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":26,
     "method":"tools/call",
     "params":{
-      "name":"fact_relations.get",
+      "name":"fact_relations_get",
       "arguments":{
         "id":"fact_relations/789"
       }
@@ -1514,7 +1535,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":27,
     "method":"tools/call",
     "params":{
-      "name":"fact_relations.get_related",
+      "name":"fact_relations_get_related",
       "arguments":{
         "fact_id":"facts/123",
         "relation_type":"references"
@@ -1533,7 +1554,7 @@ curl -X POST http://localhost:8080/mcp \
     "id":28,
     "method":"tools/call",
     "params":{
-      "name":"fact_relations.get_incoming",
+      "name":"fact_relations_get_incoming",
       "arguments":{
         "fact_id":"facts/456",
         "relation_type":"depends_on"
@@ -1835,7 +1856,7 @@ KnowledgePlane includes an AI chat interface that combines OpenAI's language mod
 3. User message is stored in the thread
 4. System retrieves thread messages (with smart truncation if needed)
 5. System configures OpenAI with MCP tools to access the knowledge base, passing the current workspace's `workspace_id` in the MCP server URL
-6. AI model uses MCP tools (e.g., `facts.search`) to retrieve relevant facts from the current workspace's knowledge base as needed
+6. AI model uses MCP tools (e.g., `facts_search`) to retrieve relevant facts from the current workspace's knowledge base as needed
 7. AI generates a response using both its training and the knowledge base facts accessed via MCP tools
 8. AI returns JSON response with `content` (the response text) and `usedFacts` (array of fact IDs actually used)
 9. System parses the JSON response and fetches the actual fact objects by IDs
@@ -1942,7 +1963,7 @@ Navigate to `/upload` in the web application (requires authentication).
 
 **Current Features:**
 - ✅ MCP server implementation (HTTP transport)
-- ✅ User management (auto-create from username/email, explicit registration via `users.register` tool)
+- ✅ User management (auto-create from username/email, explicit registration via `users_register` tool)
 - ✅ OAuth2 authentication with Google (Gmail) and GitHub
 - ✅ Token-based authentication for API endpoints
 - ✅ Facts write/read operations

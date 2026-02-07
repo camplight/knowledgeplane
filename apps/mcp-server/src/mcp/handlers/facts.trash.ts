@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { Fact, WorkspaceMember } from "@knowledgeplane/db";
 
 export const factsTrashTool: Tool = {
-  name: "facts.trash",
+  name: "facts_trash",
   description: "Mark a fact as trashed. Trashed facts are excluded from search results by default.",
   inputSchema: {
     type: "object",

@@ -174,13 +174,13 @@ Supported OAuth providers:
 ## MCP Protocol
 
 The server implements the Model Context Protocol with the following tools:
-- `facts.write` - Write facts to the knowledge base
-- `facts.search` - Search facts
-- `facts.update` - Update existing facts
-- `facts.trash` - Trash facts
-- `facts.bulkwrite` - Bulk write facts
-- `knowledgecontexts.list` - List knowledge contexts
-- `files.upload` - Upload files
+- `facts_write` - Write facts to the knowledge base
+- `facts_search` - Search facts
+- `facts_update` - Update existing facts
+- `facts_trash` - Trash facts
+- `facts_bulkwrite` - Bulk write facts
+- `knowledgecontexts_list` - List knowledge contexts
+- `files_upload` - Upload files
 
 ## Health Check
 

@@ -4,7 +4,7 @@ import { createAIModelClient } from "@knowledgeplane/aimodel";
 import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
 
 export const factsConsolidateTool: Tool = {
-  name: "facts.consolidate",
+  name: "facts_consolidate",
   description:
     "Consolidate a set of facts into a knowledge card. Uses AI to analyze relationships and create a comprehensive knowledge card. Optionally includes related facts via graph traversal.",
   inputSchema: {

@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { File } from "@knowledgeplane/db";
 
 export const filesSearchTool: Tool = {
-  name: "files.search",
+  name: "files_search",
   description:
     "Search files by fact ID. Returns all files that contain the specified fact ID in their fact_ids array.",
   inputSchema: {

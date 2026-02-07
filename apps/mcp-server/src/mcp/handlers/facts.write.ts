@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { Fact } from "@knowledgeplane/db";
 
 export const factsWriteTool: Tool = {
-  name: "facts.write",
+  name: "facts_write",
   description: "Write a fact to the knowledge base",
   inputSchema: {
     type: "object",

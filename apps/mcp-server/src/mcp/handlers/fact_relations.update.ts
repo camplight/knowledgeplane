@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { FactRelation, WorkspaceMember } from "@knowledgeplane/db";
 
 export const factRelationsUpdateTool: Tool = {
-  name: "fact_relations.update",
+  name: "fact_relations_update",
   description:
     "Update a fact relation. Only provided fields will be updated. Type and metadata can be updated.",
   inputSchema: {

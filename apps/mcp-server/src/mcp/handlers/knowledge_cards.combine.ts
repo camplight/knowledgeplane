@@ -1,10 +1,8 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { KnowledgeCard, Fact, WorkspaceMember } from "@knowledgeplane/db";
-import { createAIModelClient } from "@knowledgeplane/aimodel";
-import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
+import { combineKnowledgeCards } from "@knowledgeplane/api-core";
 
 export const knowledgeCardsCombineTool: Tool = {
-  name: "knowledge_cards.combine",
+  name: "knowledge_cards_combine",
   description:
     "Combine multiple knowledge cards into a single card. Uses AI to intelligently merge the content and facts.",
   inputSchema: {
@@ -44,147 +42,22 @@ export async function handleKnowledgeCardsCombine(args: {
     throw new Error("At least 2 cards are required to combine");
   }
 
-  // Get all the cards to combine
-  const cards = await Promise.all(
-    args.card_ids.map((id) => KnowledgeCard.findById(id)),
-  );
-
-  const validCards = cards.filter((c) => c !== null) as any[];
-  if (validCards.length !== args.card_ids.length) {
-    throw new Error("One or more cards not found");
-  }
-
-  // Validate that all cards belong to the same workspace
-  const workspaceIds = new Set(validCards.map((c) => c.workspace_id));
-  if (workspaceIds.size > 1) {
-    throw new Error("All cards must belong to the same workspace");
-  }
-
-  const cardWorkspaceId = validCards[0].workspace_id;
-
-  // Validate workspace_id (should be set from context) - map to workspace_id
+  // Validate workspace_id (should be set from context)
   if (!args.workspace_id) {
     throw new Error("Workspace ID is required. Workspace ID should be automatically inferred from authenticated session context.");
   }
-  
-  if (cardWorkspaceId !== args.workspace_id) {
-    throw new Error("Cards do not belong to the specified workspace");
-  }
-
-  // Validate workspace membership
-  const member = await WorkspaceMember.findByWorkspaceAndUser(cardWorkspaceId, args.last_updated_by);
-  if (!member) {
-    throw new Error("You are not a member of this workspace");
-  }
-
-  // Collect all unique fact IDs
-  const allFactIds = new Set<string>();
-  for (const card of validCards) {
-    for (const factId of card.fact_ids) {
-      allFactIds.add(factId);
-    }
-  }
-
-  // Get all facts
-  const facts = await Promise.all(
-    Array.from(allFactIds).map((factId) => Fact.findById(factId)),
-  );
-  const validFacts = facts.filter((f) => f !== null) as any[];
-
-  // Use AI to combine the cards
-  const client = createAIModelClient(
-    (process.env.AI_PROVIDER as any) || "openai",
-    process.env.OPENAI_API_KEY,
-  );
-  const provider = client.getProvider();
-
-  const cardSummaries = validCards
-    .map(
-      (c) =>
-        `Card: ${c.title}\nSummary: ${c.summary}\nContent: ${c.content}\nFact IDs: ${c.fact_ids.join(", ")}`,
-    )
-    .join("\n\n---\n\n");
-
-  const factContents = validFacts.map((f) => `- ${f.content}`).join("\n");
-
-  const systemPrompt = `You are a knowledge consolidation agent. Your task is to combine multiple knowledge cards into a single, well-organized card.
-
-The combined card should:
-1. Have a clear, descriptive title (max 100 characters) that captures the essence of all cards
-2. Have a concise summary (2-3 sentences, max 200 characters) that synthesizes the key points
-3. Have comprehensive content that organizes and synthesizes information from all cards
-4. Remove redundancy while preserving important details
-5. Reference all the facts from the original cards
-
-The content should be well-structured and logically organized.`;
-
-  const userPrompt = `Please combine the following knowledge cards into a single card:
-
-${cardSummaries}
-
-Associated Facts:
-${factContents}
-
-Provide your response as JSON with the following structure:
-{
-  "title": "Combined card title",
-  "summary": "Brief summary",
-  "content": "Full consolidated content"
-}`;
-
-  const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: userPrompt },
-  ];
-
-  const chatOptions: ChatCompletionOptions = {
-    model:
-      process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || "gpt-4o",
-    temperature: 0.7,
-    responseFormat: "json_object",
-  };
-
-  const response = await provider.chatCompletion(messages, chatOptions);
-
-  if (!response.content) {
-    throw new Error("No response from AI model");
-  }
-
-  const parsed = JSON.parse(response.content);
-
-  // Create the combined card
-  const combinedCard = await KnowledgeCard.create({
-    title: parsed.title || "Combined Card",
-    summary: parsed.summary || "",
-    content: parsed.content || "",
-    fact_ids: Array.from(allFactIds),
-    workspace_id: cardWorkspaceId,
-    created_by: args.created_by!,
-    last_updated_by: args.last_updated_by!,
-    metadata: {
-      combined_from: args.card_ids,
-      combined_at: new Date().toISOString(),
-    },
+  const result = await combineKnowledgeCards({
+    card_ids: args.card_ids,
+    created_by: args.created_by,
+    last_updated_by: args.last_updated_by,
+    workspace_id: args.workspace_id,
   });
-
-  // Delete the original cards
-  for (const cardId of args.card_ids) {
-    await KnowledgeCard.delete(cardId);
-  }
 
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify(
-          {
-            success: true,
-            original_card_ids: args.card_ids,
-            combined_card: combinedCard,
-          },
-          null,
-          2,
-        ),
+        text: JSON.stringify(result, null, 2),
       },
     ],
   };

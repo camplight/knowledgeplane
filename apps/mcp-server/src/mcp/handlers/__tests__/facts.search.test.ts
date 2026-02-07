@@ -1,17 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { handleFactsSearch } from "../facts.search.js";
-import { Fact } from "@knowledgeplane/db";
+import { searchFacts } from "@knowledgeplane/api-core";
 
-vi.mock("@knowledgeplane/db", () => ({
-  Fact: {
-    search: vi.fn(),
-  },
-}));
-
-vi.mock("@knowledgeplane/aimodel", () => ({
-  createAIModelClient: vi.fn(() => ({
-    getProvider: vi.fn(() => ({} as any)),
-  })),
+vi.mock("@knowledgeplane/api-core", () => ({
+  searchFacts: vi.fn(),
 }));
 
 describe("handleFactsSearch", () => {
@@ -34,7 +26,11 @@ describe("handleFactsSearch", () => {
       },
     ];
 
-    vi.mocked(Fact.search).mockResolvedValueOnce(mockHits);
+    vi.mocked(searchFacts).mockResolvedValueOnce({
+      hits: mockHits,
+      total_returned: 1,
+      limit_used: 5,
+    });
 
     const result = await handleFactsSearch({
       query: "test query",
@@ -53,13 +49,12 @@ describe("handleFactsSearch", () => {
     expect(parsed.hits[0]._id).toBeUndefined();
     expect(parsed.total_returned).toBe(1);
     expect(parsed.limit_used).toBe(5); // default limit
-    expect(Fact.search).toHaveBeenCalledWith({
+    expect(searchFacts).toHaveBeenCalledWith({
       query: "test query",
-      k: 5,
+      k: undefined,
       offset: undefined,
       include_trashed: undefined,
-      use_vector_search: undefined,
-      embeddingProvider: expect.anything(),
+      workspace_id: undefined,
     });
   });
 
@@ -79,7 +74,17 @@ describe("handleFactsSearch", () => {
       },
     ];
 
-    vi.mocked(Fact.search).mockResolvedValueOnce(mockHits);
+    vi.mocked(searchFacts).mockResolvedValueOnce({
+      hits: [
+        {
+          ...mockHits[0],
+          content: longContent.substring(0, 500) + "...",
+          content_truncated: true,
+        },
+      ],
+      total_returned: 1,
+      limit_used: 10,
+    });
 
     const result = await handleFactsSearch({
       query: "test query",
@@ -88,24 +93,30 @@ describe("handleFactsSearch", () => {
 
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.hits[0].content).toHaveLength(503); // 500 + "..."
-    expect(parsed.hits[0].content).toEndWith("...");
+    expect(parsed.hits[0].content.endsWith("...")).toBe(true);
     expect(parsed.hits[0].content_truncated).toBe(true);
     expect(parsed.note).toContain("truncated");
   });
 
-  it("should limit k to maximum 20", async () => {
-    vi.mocked(Fact.search).mockResolvedValueOnce([]);
+  it("should pass k through to searchFacts", async () => {
+    vi.mocked(searchFacts).mockResolvedValueOnce({
+      hits: [],
+      total_returned: 0,
+      limit_used: 20,
+    });
 
     await handleFactsSearch({
       query: "test query",
       k: 50, // Request 50, but should be limited to 20
     });
 
-    expect(Fact.search).toHaveBeenCalledWith(
-      expect.objectContaining({
-        k: 20, // Should be capped at 20
-      }),
-    );
+    expect(searchFacts).toHaveBeenCalledWith({
+      query: "test query",
+      k: 50,
+      offset: undefined,
+      include_trashed: undefined,
+      workspace_id: undefined,
+    });
   });
 
   it("should handle facts.search with all parameters", async () => {
@@ -123,7 +134,11 @@ describe("handleFactsSearch", () => {
       },
     ];
 
-    vi.mocked(Fact.search).mockResolvedValueOnce(mockHits);
+    vi.mocked(searchFacts).mockResolvedValueOnce({
+      hits: mockHits,
+      total_returned: 1,
+      limit_used: 10,
+    });
 
     const result = await handleFactsSearch({
       query: "test query",
@@ -137,18 +152,21 @@ describe("handleFactsSearch", () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.hits).toHaveLength(1);
     expect(parsed.limit_used).toBe(10);
-    expect(Fact.search).toHaveBeenCalledWith({
+    expect(searchFacts).toHaveBeenCalledWith({
       query: "test query",
       k: 10,
       offset: 5,
       include_trashed: true,
-      use_vector_search: undefined,
-      embeddingProvider: expect.anything(),
+      workspace_id: undefined,
     });
   });
 
   it("should handle empty search results", async () => {
-    vi.mocked(Fact.search).mockResolvedValueOnce([]);
+    vi.mocked(searchFacts).mockResolvedValueOnce({
+      hits: [],
+      total_returned: 0,
+      limit_used: 5,
+    });
 
     const result = await handleFactsSearch({
       query: "test query",
@@ -180,7 +198,19 @@ describe("handleFactsSearch", () => {
       },
     ];
 
-    vi.mocked(Fact.search).mockResolvedValueOnce(mockHits);
+    vi.mocked(searchFacts).mockResolvedValueOnce({
+      hits: [
+        {
+          ...mockHits[0],
+          embedding: undefined,
+          embedding_model: undefined,
+          _id: undefined,
+          _key: undefined,
+        },
+      ],
+      total_returned: 1,
+      limit_used: 5,
+    });
 
     const result = await handleFactsSearch({
       query: "test query",
@@ -221,7 +251,11 @@ describe("handleFactsSearch", () => {
       },
     ];
 
-    vi.mocked(Fact.search).mockResolvedValueOnce(mockHits);
+    vi.mocked(searchFacts).mockResolvedValueOnce({
+      hits: mockHits,
+      total_returned: 2,
+      limit_used: 5,
+    });
 
     const result = await handleFactsSearch({
       query: "*",
@@ -232,13 +266,12 @@ describe("handleFactsSearch", () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.hits).toHaveLength(2);
     expect(parsed.total_returned).toBe(2);
-    expect(Fact.search).toHaveBeenCalledWith({
+    expect(searchFacts).toHaveBeenCalledWith({
       query: "*",
-      k: 5,
+      k: undefined,
       offset: undefined,
       include_trashed: undefined,
-      use_vector_search: undefined,
-      embeddingProvider: expect.anything(),
+      workspace_id: undefined,
     });
   });
 });

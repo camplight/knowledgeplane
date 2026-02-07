@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer, type McpContext } from "../mcp/server.js";
-import { requireAuth, type AuthContext } from "../lib/auth.js";
+import { requireAuth, type AuthContext } from "@knowledgeplane/db";
 import { User, WorkspaceMember } from "@knowledgeplane/db";
 
 // AsyncLocalStorage for per-request context tracking

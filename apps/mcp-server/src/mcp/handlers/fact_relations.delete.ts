@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { FactRelation, WorkspaceMember } from "@knowledgeplane/db";
 
 export const factRelationsDeleteTool: Tool = {
-  name: "fact_relations.delete",
+  name: "fact_relations_delete",
   description: "Delete a fact relation by ID",
   inputSchema: {
     type: "object",

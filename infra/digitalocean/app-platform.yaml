@@ -118,6 +118,32 @@ services:
         scope: RUN_AND_BUILD_TIME
         type: SECRET
 
+  - name: rest-api
+    github:
+      repo: camplight/knowledgeplane
+      branch: main
+      deploy_on_push: true
+    source_dir: .
+    dockerfile_path: apps/rest-api/Dockerfile
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 8081
+    routes:
+      # Path-based routing for REST API.
+      # Note: App Platform strips the /api prefix by default. If you need to
+      # preserve /api, use a dedicated subdomain or adjust routing behavior.
+      - path: /api
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 10
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    envs:
+      - key: PORT
+        value: "8081"
+
   - name: webapp
     github:
       repo: camplight/knowledgeplane

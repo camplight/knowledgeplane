@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { File } from "@knowledgeplane/db";
 
 export const filesListTool: Tool = {
-  name: "files.list",
+  name: "files_list",
   description: "List files with pagination",
   inputSchema: {
     type: "object",

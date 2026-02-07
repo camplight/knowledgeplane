@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { KnowledgeCard } from "@knowledgeplane/db";
 
 export const knowledgeCardsListTool: Tool = {
-  name: "knowledge_cards.list",
+  name: "knowledge_cards_list",
   description: "List knowledge cards with pagination",
   inputSchema: {
     type: "object",

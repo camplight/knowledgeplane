@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { KnowledgeCard, WorkspaceMember } from "@knowledgeplane/db";
 
 export const knowledgeCardsDeleteTool: Tool = {
-  name: "knowledge_cards.delete",
+  name: "knowledge_cards_delete",
   description: "Delete a knowledge card by ID",
   inputSchema: {
     type: "object",

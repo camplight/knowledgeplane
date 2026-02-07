@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { FactRelation, WorkspaceMember } from "@knowledgeplane/db";
 
 export const factRelationsGetTool: Tool = {
-  name: "fact_relations.get",
+  name: "fact_relations_get",
   description: "Get a fact relation by ID",
   inputSchema: {
     type: "object",

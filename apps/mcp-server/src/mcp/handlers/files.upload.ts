@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { processFileUpload } from "@knowledgeplane/file-processor";
 
 export const filesUploadTool: Tool = {
-  name: "files.upload",
+  name: "files_upload",
   description:
     "Upload a file and automatically extract facts and relations using AI. The file content is analyzed using OpenAI to identify key information and relationships, which are then stored in the knowledge base with links back to the source file.",
   inputSchema: {

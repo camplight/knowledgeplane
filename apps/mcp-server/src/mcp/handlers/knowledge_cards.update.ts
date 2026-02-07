@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { KnowledgeCard, WorkspaceMember } from "@knowledgeplane/db";
 
 export const knowledgeCardsUpdateTool: Tool = {
-  name: "knowledge_cards.update",
+  name: "knowledge_cards_update",
   description: "Update a knowledge card. Only provided fields will be updated.",
   inputSchema: {
     type: "object",

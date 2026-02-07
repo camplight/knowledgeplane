@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { Fact } from "@knowledgeplane/db";
 
 export const factsBulkWriteTool: Tool = {
-  name: "facts.bulkwrite",
+  name: "facts_bulkwrite",
   description: "Write multiple facts to the knowledge base in a single operation",
   inputSchema: {
     type: "object",

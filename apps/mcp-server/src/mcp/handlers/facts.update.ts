@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { Fact, WorkspaceMember } from "@knowledgeplane/db";
 
 export const factsUpdateTool: Tool = {
-  name: "facts.update",
+  name: "facts_update",
   description: "Update a fact in the knowledge base. Only provided fields will be updated.",
   inputSchema: {
     type: "object",

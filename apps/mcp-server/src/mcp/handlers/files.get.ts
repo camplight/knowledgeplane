@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { File, WorkspaceMember } from "@knowledgeplane/db";
 
 export const filesGetTool: Tool = {
-  name: "files.get",
+  name: "files_get",
   description: "Get a file by ID",
   inputSchema: {
     type: "object",

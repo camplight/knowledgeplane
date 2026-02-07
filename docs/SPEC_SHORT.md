@@ -29,12 +29,12 @@ KnowledgePlane is an open-core MCP server that provides shared, persistent memor
 Web UI (Next.js) and tRPC API -> MCP server -> Background workers -> ArangoDB
 
 ## MCP Tools (Key)
-- Facts: `facts.write`, `facts.bulkwrite`, `facts.search`, `facts.update`, `facts.trash`, `facts.consolidate`
-- Knowledge cards: `knowledge_cards.create`, `knowledge_cards.update`, `knowledge_cards.delete`, `knowledge_cards.search`, `knowledge_cards.list`, `knowledge_cards.split`, `knowledge_cards.combine`
-- Files: `files.upload`, `files.list`, `files.get`, `files.search`, `files.update`, `files.delete`
-- Relations: `fact_relations.create`, `fact_relations.update`, `fact_relations.delete`, `fact_relations.search`, `fact_relations.get`, `fact_relations.get_related`, `fact_relations.get_incoming`
-- Users: `users.register`
-- Workers: `workers.trigger`
+- Facts: `facts_write`, `facts_bulkwrite`, `facts_search`, `facts_update`, `facts_trash`, `facts_consolidate`
+- Knowledge cards: `knowledge_cards_create`, `knowledge_cards_update`, `knowledge_cards_delete`, `knowledge_cards_search`, `knowledge_cards_list`, `knowledge_cards_split`, `knowledge_cards_combine`
+- Files: `files_upload`, `files_list`, `files_get`, `files_search`, `files_update`, `files_delete`
+- Relations: `fact_relations_create`, `fact_relations_update`, `fact_relations_delete`, `fact_relations_search`, `fact_relations_get`, `fact_relations_get_related`, `fact_relations_get_incoming`
+- Users: `users_register`
+- Workers: `workers_trigger`
 
 Notes:
 - `workspace_id` is inferred from the authenticated session and is not accepted in tool arguments.

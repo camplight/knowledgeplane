@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { File, WorkspaceMember } from "@knowledgeplane/db";
 
 export const filesUpdateTool: Tool = {
-  name: "files.update",
+  name: "files_update",
   description:
     "Update a file. Only provided fields will be updated. Metadata and fact_ids can be updated.",
   inputSchema: {

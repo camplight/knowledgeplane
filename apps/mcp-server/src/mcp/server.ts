@@ -136,7 +136,7 @@ function prepareHandlerArgs(
 }
 
 /**
- * Prepares handler arguments for bulk operations (e.g., facts.bulkwrite)
+ * Prepares handler arguments for bulk operations (e.g., facts_bulkwrite)
  * where workspace_id needs to be removed from nested fact objects
  */
 function prepareBulkHandlerArgs(
@@ -182,7 +182,7 @@ function prepareBulkHandlerArgs(
 }
 
 // Tool definitions from handlers
-const tools = [
+export const mcpTools = [
   factsWriteTool,
   factsBulkWriteTool,
   factsSearchTool,
@@ -233,7 +233,7 @@ export function createMcpServer(
     if (logger) {
       logger.info("MCP: ListTools request received");
     }
-    return { tools };
+    return { tools: mcpTools };
   });
 
   // Call tool handler
@@ -266,121 +266,121 @@ export function createMcpServer(
     let handler;
     let handlerArgs: any;
 
-    if (name === "facts.write") {
+    if (name === "facts_write") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setCreatedBy: true,
         setLastUpdatedBy: true,
       });
       handler = handleFactsWrite;
-    } else if (name === "facts.bulkwrite") {
+    } else if (name === "facts_bulkwrite") {
       handlerArgs = prepareBulkHandlerArgs(args, context, {
         setCreatedBy: true,
         setLastUpdatedBy: true,
       });
       handler = handleFactsBulkWrite;
-    } else if (name === "facts.search") {
+    } else if (name === "facts_search") {
       handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFactsSearch;
-    } else if (name === "facts.update") {
+    } else if (name === "facts_update") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setLastUpdatedBy: true,
       });
       handler = handleFactsUpdate;
-    } else if (name === "facts.trash") {
+    } else if (name === "facts_trash") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setLastUpdatedBy: true,
       });
       handler = handleFactsTrash;
-    } else if (name === "files.upload") {
+    } else if (name === "files_upload") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setCreatedBy: true,
       });
       handler = handleFilesUpload;
-    } else if (name === "files.list") {
+    } else if (name === "files_list") {
       handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFilesList;
-    } else if (name === "files.get") {
+    } else if (name === "files_get") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setUserId: true,
       });
       handler = handleFilesGet;
-    } else if (name === "files.search") {
+    } else if (name === "files_search") {
       handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFilesSearch;
-    } else if (name === "files.update") {
+    } else if (name === "files_update") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setUserId: true,
       });
       handler = handleFilesUpdate;
-    } else if (name === "files.delete") {
+    } else if (name === "files_delete") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setUserId: true,
       });
       handler = handleFilesDelete;
-    } else if (name === "fact_relations.create") {
+    } else if (name === "fact_relations_create") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setCreatedBy: true,
       });
       handler = handleFactRelationsCreate;
-    } else if (name === "fact_relations.update") {
+    } else if (name === "fact_relations_update") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setUserId: true,
       });
       handler = handleFactRelationsUpdate;
-    } else if (name === "fact_relations.delete") {
+    } else if (name === "fact_relations_delete") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setUserId: true,
       });
       handler = handleFactRelationsDelete;
-    } else if (name === "fact_relations.search") {
+    } else if (name === "fact_relations_search") {
       handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFactRelationsSearch;
-    } else if (name === "fact_relations.get") {
+    } else if (name === "fact_relations_get") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setUserId: true,
       });
       handler = handleFactRelationsGet;
-    } else if (name === "fact_relations.get_related") {
+    } else if (name === "fact_relations_get_related") {
       handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFactRelationsGetRelated;
-    } else if (name === "fact_relations.get_incoming") {
+    } else if (name === "fact_relations_get_incoming") {
       handlerArgs = prepareHandlerArgs(args, context);
       handler = handleFactRelationsGetIncoming;
-    } else if (name === "facts.consolidate") {
+    } else if (name === "facts_consolidate") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setCreatedBy: true,
         setLastUpdatedBy: true,
       });
       handler = handleFactsConsolidate;
-    } else if (name === "knowledge_cards.create") {
+    } else if (name === "knowledge_cards_create") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setCreatedBy: true,
         setLastUpdatedBy: true,
       });
       handler = handleKnowledgeCardsCreate;
-    } else if (name === "knowledge_cards.update") {
+    } else if (name === "knowledge_cards_update") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setLastUpdatedBy: true,
       });
       handler = handleKnowledgeCardsUpdate;
-    } else if (name === "knowledge_cards.list") {
+    } else if (name === "knowledge_cards_list") {
       handlerArgs = prepareHandlerArgs(args, context);
       handler = handleKnowledgeCardsList;
-    } else if (name === "knowledge_cards.search") {
+    } else if (name === "knowledge_cards_search") {
       handlerArgs = prepareHandlerArgs(args, context);
       handler = handleKnowledgeCardsSearch;
-    } else if (name === "knowledge_cards.delete") {
+    } else if (name === "knowledge_cards_delete") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setUserId: true,
       });
       handler = handleKnowledgeCardsDelete;
-    } else if (name === "knowledge_cards.split") {
+    } else if (name === "knowledge_cards_split") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setCreatedBy: true,
         setLastUpdatedBy: true,
       });
       handler = handleKnowledgeCardsSplit;
-    } else if (name === "knowledge_cards.combine") {
+    } else if (name === "knowledge_cards_combine") {
       handlerArgs = prepareHandlerArgs(args, context, {
         setCreatedBy: true,
         setLastUpdatedBy: true,

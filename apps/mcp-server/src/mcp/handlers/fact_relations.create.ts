@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { FactRelation, Fact, WorkspaceMember } from "@knowledgeplane/db";
 
 export const factRelationsCreateTool: Tool = {
-  name: "fact_relations.create",
+  name: "fact_relations_create",
   description:
     "Create a relation between two facts. Relations are typed edges in the knowledge graph.",
   inputSchema: {

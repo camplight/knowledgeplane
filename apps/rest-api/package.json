@@ -7,9 +7,11 @@
     "dev": "dotenv -e .env.dev -- tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "tsx src/index.ts",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest"
   },
   "dependencies": {
+    "@knowledgeplane/api-core": "*",
     "@knowledgeplane/db": "*",
     "dotenv": "^16.4.5",
     "fastify": "^5.0.0",
@@ -20,7 +22,8 @@
     "dotenv-cli": "^7.4.2",
     "eslint": "^9.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.0"
   }
 }
 

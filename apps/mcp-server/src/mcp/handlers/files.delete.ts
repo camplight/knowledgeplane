@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { collections, File, WorkspaceMember } from "@knowledgeplane/db";
 
 export const filesDeleteTool: Tool = {
-  name: "files.delete",
+  name: "files_delete",
   description: "Delete a file by ID",
   inputSchema: {
     type: "object",

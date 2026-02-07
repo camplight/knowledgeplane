@@ -2,7 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { KnowledgeCard } from "@knowledgeplane/db";
 
 export const knowledgeCardsCreateTool: Tool = {
-  name: "knowledge_cards.create",
+  name: "knowledge_cards_create",
   description: "Create a new knowledge card with title, summary, content, and associated fact IDs",
   inputSchema: {
     type: "object",

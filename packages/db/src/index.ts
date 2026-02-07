@@ -14,3 +14,4 @@ export * from "./models/WorkspaceMember";
 export * from "./models/DataSource";
 export * from "./lib/webhook-trigger";
 export * from "./lib/vector-search";
+export * from "./lib/auth";

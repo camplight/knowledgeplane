@@ -15,20 +15,24 @@ describe("handleFactsWrite", () => {
 
   it("should handle facts.write with minimal fields", async () => {
     const mockFact = {
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      namespace: "test-namespace",
+      id: "facts/123",
       content: "Test content",
-      tags: [],
       metadata: {},
+      workspace_id: "workspaces/1",
+      created_by: "users/1",
+      last_updated_by: "users/1",
       created_at: "2024-01-01T00:00:00Z",
-      expires_at: null,
+      updated_at: "2024-01-01T00:00:00Z",
+      trashed: false,
     };
 
     vi.mocked(Fact.write).mockResolvedValueOnce(mockFact);
 
     const result = await handleFactsWrite({
-      namespace: "test-namespace",
       content: "Test content",
+      workspace_id: "workspaces/1",
+      created_by: "users/1",
+      last_updated_by: "users/1",
     });
 
     expect(result.content).toHaveLength(1);
@@ -36,33 +40,35 @@ describe("handleFactsWrite", () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.fact).toEqual(mockFact);
     expect(Fact.write).toHaveBeenCalledWith({
-      namespace: "test-namespace",
       content: "Test content",
-      tags: undefined,
       metadata: undefined,
-      ttl: undefined,
+      workspace_id: "workspaces/1",
+      created_by: "users/1",
+      last_updated_by: "users/1",
     });
   });
 
   it("should handle facts.write with all fields", async () => {
     const mockFact = {
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      namespace: "test-namespace",
+      id: "facts/123",
       content: "Test content",
-      tags: ["tag1", "tag2"],
       metadata: { key: "value" },
+      workspace_id: "workspaces/1",
+      created_by: "users/1",
+      last_updated_by: "users/2",
       created_at: "2024-01-01T00:00:00Z",
-      expires_at: "2024-01-02T00:00:00Z",
+      updated_at: "2024-01-01T00:00:00Z",
+      trashed: false,
     };
 
     vi.mocked(Fact.write).mockResolvedValueOnce(mockFact);
 
     const result = await handleFactsWrite({
-      namespace: "test-namespace",
       content: "Test content",
-      tags: ["tag1", "tag2"],
       metadata: { key: "value" },
-      ttl: 86400,
+      workspace_id: "workspaces/1",
+      created_by: "users/1",
+      last_updated_by: "users/2",
     });
 
     expect(result.content).toHaveLength(1);
@@ -70,11 +76,11 @@ describe("handleFactsWrite", () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.fact).toEqual(mockFact);
     expect(Fact.write).toHaveBeenCalledWith({
-      namespace: "test-namespace",
       content: "Test content",
-      tags: ["tag1", "tag2"],
       metadata: { key: "value" },
-      ttl: 86400,
+      workspace_id: "workspaces/1",
+      created_by: "users/1",
+      last_updated_by: "users/2",
     });
   });
 });

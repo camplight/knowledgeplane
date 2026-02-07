@@ -1,5 +1,5 @@
 {
-  "name": "@knowledgeplane/db",
+  "name": "@knowledgeplane/api-core",
   "version": "0.1.0",
   "type": "module",
   "main": "src/index.ts",
@@ -8,10 +8,6 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
-    },
-    "./next": {
-      "types": "./src/next.ts",
-      "default": "./src/next.ts"
     }
   },
   "scripts": {
@@ -20,14 +16,10 @@
     "dev": "tsc --noEmit --watch"
   },
   "dependencies": {
-    "arangojs": "^10.0.0",
-    "jsonwebtoken": "^9.0.2",
-    "jwks-rsa": "^3.2.0",
-    "server-only": "^0.0.1",
-    "undici": "^5.21.0"
+    "@knowledgeplane/aimodel": "*",
+    "@knowledgeplane/db": "*"
   },
   "devDependencies": {
-    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.0.0",
     "typescript": "^5.6.3"
   }

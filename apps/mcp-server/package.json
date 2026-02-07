@@ -19,6 +19,7 @@
     "@fastify/session": "^11.0.0",
     "@fastify/swagger": "^9.0.0",
     "@fastify/swagger-ui": "^5.0.0",
+    "@knowledgeplane/api-core": "*",
     "@knowledgeplane/db": "*",
     "@knowledgeplane/file-processor": "*",
     "@modelcontextprotocol/sdk": "^1.20.2",
