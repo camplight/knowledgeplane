@@ -1,25 +1,13 @@
 import { renderSkillMarkdown } from "@knowledgeplane/api-core";
 
-function getOriginBase(request: Request) {
-  const forwardedProto = request.headers.get("x-forwarded-proto") || "http";
-  const forwardedHost =
-    request.headers.get("x-forwarded-host") ||
-    request.headers.get("host") ||
-    "localhost";
-
-  const base = forwardedHost.includes("://")
-    ? new URL(forwardedHost)
-    : new URL(`${forwardedProto}://${forwardedHost}`);
-
-  base.port = "";
-  return base.toString().replace(/\/$/, "");
-}
-
 // Subpaths mode only: keep single origin
 
 export async function GET(request: Request) {
   try {
-    const originBase = getOriginBase(request);
+    const originBase = (process.env.APP_URL || "http://localhost:3000").replace(
+      /\/$/,
+      ""
+    );
 
     const rendered = await renderSkillMarkdown({
       originBase,

@@ -633,9 +633,10 @@ KnowledgePlane implements OAuth 2.0 Authorization Server Metadata discovery per 
 3. Token can be used in `Authorization: Bearer <token>` header for MCP API calls
 
 **Docker Deployment Notes:**
-When deploying in Docker containers behind reverse proxies (e.g., DigitalOcean App Platform), the webapp automatically handles base URL detection:
+When deploying in Docker containers behind reverse proxies (e.g., DigitalOcean App Platform), the webapp handles base URL detection:
 - `APP_URL` is used if set (automatically provided by DigitalOcean App Platform as `${APP_URL}`)
-- If `APP_URL` is not set, the webapp extracts the base URL from `X-Forwarded-Host` and `X-Forwarded-Proto` headers (set by reverse proxies)
+- OAuth redirects fall back to `X-Forwarded-Host` and `X-Forwarded-Proto` headers when `APP_URL` is not set
+- The `GET /skill.md` endpoint uses `APP_URL` (defaulting to `http://localhost:3000`) and does not derive from request headers
 - This prevents OAuth redirects from using `0.0.0.0` or internal Docker hostnames
 - **Recommended**: Use `APP_URL` when available (e.g., DigitalOcean App Platform), or ensure proper reverse proxy headers are set
 
