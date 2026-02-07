@@ -16,7 +16,7 @@ COPY apps/webapp/package.json ./apps/webapp/
 
 # Install all dependencies (including devDependencies for build)
 ENV NODE_ENV=development
-RUN npm ci
+RUN npm ci --workspaces --include-workspace-root
 
 # Rebuild the source code only when needed
 FROM base AS builder
