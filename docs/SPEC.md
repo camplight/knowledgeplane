@@ -338,7 +338,8 @@ routing so the `/rest` prefix is preserved.
 **Skill Rendering Note:**
 `/skill.md` is served by the webapp only and renders subpaths endpoints.
 The webapp Docker image includes `packages/api-core/skill-template.md` so the
-rendered output always uses the shared template.
+rendered output always uses the shared template, with the REST API mounted at
+`/rest` and endpoints under `/api`.
 | `GET /api/knowledge-cards` | List knowledge cards |
 | `GET /api/knowledge-cards/:id` | Get a specific knowledge card |
 | `DELETE /api/knowledge-cards/:id` | Delete a knowledge card |

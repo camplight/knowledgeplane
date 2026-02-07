@@ -7,7 +7,7 @@ Use the rendered endpoints below for your requests.
 
 ### Subpaths Mode (single domain)
 - MCP server: `{{ORIGIN_BASE}}/mcp`
-- REST API: `{{ORIGIN_BASE}}/api`
+- REST API: `{{ORIGIN_BASE}}/rest`
 - Webapp: `{{ORIGIN_BASE}}`
 
 ## Authentication (Both MCP and REST)
@@ -36,7 +36,7 @@ Workspace context is inferred from the authenticated session.
 
 ## REST API Endpoints
 
-Base: `{{ORIGIN_BASE}}/api`
+Base: `{{ORIGIN_BASE}}/rest`
 
 - `GET /health`
 - `GET /skill.md`
