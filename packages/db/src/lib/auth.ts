@@ -92,7 +92,13 @@ async function validateGoogleToken(token: string): Promise<AuthContext> {
 
     const userInfo = (await userInfoResponse.json()) as Record<string, any>;
     const email = userInfo.email as string | undefined;
-    const username = email?.split("@")[0] || userInfo.id;
+    if (!email) {
+      throw new Error("Email is required but not provided by Google");
+    }
+    const username = email.split("@")[0] || userInfo.id?.toString();
+    if (!username) {
+      throw new Error("Username is required but not provided by Google");
+    }
     const user = await User.getOrCreate({ username, email });
 
     return {
