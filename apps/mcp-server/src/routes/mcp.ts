@@ -17,26 +17,22 @@ export default async function mcpRoutes(app: FastifyInstance) {
   const sessionAuth = new Map<string, AuthContext>();
 
   const transports = new Map<string, StreamableHTTPServerTransport>();
+  const sessionServers = new Map<string, ReturnType<typeof createMcpServer>>();
 
-  // Create a single MCP server instance with dynamic context getter
-  const mcpServer = createMcpServer(
-    app.log,
-    () => {
-      // First, try to get context from AsyncLocalStorage (for current request)
-      const storedContext = contextStorage.getStore();
-      if (storedContext && typeof storedContext === "object") {
-        return storedContext as McpContext;
-      }
+  const getContextFromStorage = () => {
+    // First, try to get context from AsyncLocalStorage (for current request)
+    const storedContext = contextStorage.getStore();
+    if (storedContext && typeof storedContext === "object") {
+      return storedContext as McpContext;
+    }
 
-      // If stored value is a string, treat it as sessionId and look up in map
-      if (storedContext && typeof storedContext === "string") {
-        return sessionContexts.get(storedContext);
-      }
+    // If stored value is a string, treat it as sessionId and look up in map
+    if (storedContext && typeof storedContext === "string") {
+      return sessionContexts.get(storedContext);
+    }
 
-      return undefined;
-    },
-    sessionContexts,
-  );
+    return undefined;
+  };
 
   // Streamable HTTP endpoint for MCP protocol
   // Register at both /mcp and / to support different routing scenarios:
@@ -252,10 +248,17 @@ export default async function mcpRoutes(app: FastifyInstance) {
       }
 
       isNewTransport = true;
+      const transportServer = createMcpServer(
+        app.log,
+        getContextFromStorage,
+        sessionContexts,
+      );
+
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => newSessionId,
         onsessioninitialized: (id: string) => {
           transports.set(id, transport);
+          sessionServers.set(id, transportServer);
           // Set context for new session if available
           if (userId) {
             sessionContexts.set(id, {
@@ -268,6 +271,7 @@ export default async function mcpRoutes(app: FastifyInstance) {
         onsessionclosed: (id: string) => {
           transports.delete(id);
           sessionContexts.delete(id);
+          sessionServers.delete(id);
           app.log.info({ sessionId: id }, "MCP: Session closed");
         },
       });
@@ -277,6 +281,7 @@ export default async function mcpRoutes(app: FastifyInstance) {
         if (transport.sessionId) {
           transports.delete(transport.sessionId);
           sessionContexts.delete(transport.sessionId);
+          sessionServers.delete(transport.sessionId);
           app.log.debug(
             { sessionId: transport.sessionId },
             "MCP: Transport closed",
@@ -284,8 +289,8 @@ export default async function mcpRoutes(app: FastifyInstance) {
         }
       };
 
-      // Connect transport to shared server
-      await mcpServer.connect(transport);
+      // Connect transport to a dedicated server instance
+      await transportServer.connect(transport);
       app.log.debug(
         {
           sessionId: transport.sessionId || newSessionId,

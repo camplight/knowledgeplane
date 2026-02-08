@@ -1,11 +1,12 @@
 import Link from "next/link";
 
-export default function HomePage({
+export default async function HomePage({
   searchParams,
 }: {
-  searchParams?: { redirect?: string };
+  searchParams?: Promise<{ redirect?: string }>;
 }) {
-  const redirectParam = searchParams?.redirect;
+  const resolvedSearchParams = await searchParams;
+  const redirectParam = resolvedSearchParams?.redirect;
   const googleAuthUrl = redirectParam
     ? `/api/auth/google?redirect=${encodeURIComponent(redirectParam)}`
     : "/api/auth/google";

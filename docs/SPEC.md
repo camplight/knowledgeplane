@@ -396,6 +396,7 @@ KnowledgePlane supports three types of authentication:
 - Workspace context is automatically inferred from authenticated user's first workspace, or can be provided via query params: `?workspace_id=workspaces/123`
 - User context can also be provided via query params: `?username=user&email=user@example.com` (fallback if not authenticated)
 - Authentication via `Authorization: Bearer <token>` header (OAuth), `knowledgeplane-key` header (API key), or `api_key` query parameter (for internal use)
+- Each StreamableHTTP transport gets its own MCP server instance to prevent cross-session transport conflicts
 - **Workspace ID Auto-Inference**: All MCP tool handlers automatically infer `workspace_id` from the authenticated user's session context. Tools do NOT accept `workspace_id` as a parameter - it is automatically set from the user's workspace context. If a user is authenticated, their `workspace_id` is automatically inferred from their first workspace or from the `workspace_id` query parameter.
 - **Workspace ID Not Accepted in Args**: `workspace_id` is NOT accepted in tool handler arguments. Any `workspace_id` provided in tool arguments will be automatically removed and replaced with the workspace ID from the authenticated session context. This ensures that authenticated users always operate within their authorized workspace context, preventing incorrect workspace_id values (e.g., workspace names instead of IDs) from being used.
 - For `facts_write` and other creation operations, `created_by`, `last_updated_by`, and `workspace_id` are automatically set from the authenticated session if not explicitly provided
@@ -614,6 +615,7 @@ KnowledgePlane implements OAuth 2.0 Authorization Server Metadata discovery per 
 
 **Redirect Parameter Handling:**
 - The home page (`/`) accepts an optional `redirect` query parameter (e.g., `/?redirect=/invite/token123`)
+- The home page awaits `searchParams` to satisfy Next.js async dynamic API requirements
 - When present, this parameter is passed to OAuth routes (`/api/auth/google?redirect=...` or `/api/auth/github?redirect=...`)
 - OAuth routes store the redirect parameter in a secure cookie during the OAuth flow
 - After successful authentication, the callback handler retrieves the redirect parameter and redirects the user accordingly
