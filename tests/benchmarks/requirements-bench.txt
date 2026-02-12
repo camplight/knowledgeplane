@@ -1,0 +1,43 @@
+# KnowledgePlane Benchmarking Suite Dependencies
+
+# Core data science libraries
+datasets>=2.14.0          # HuggingFace datasets for benchmark data
+pandas>=2.0.0             # Data manipulation and CSV output
+numpy>=1.24.0             # Numerical operations
+tqdm>=4.65.0              # Progress bars
+
+# Vector search and embeddings
+faiss-cpu>=1.7.4          # FAISS for vector baseline (CPU version)
+scikit-learn>=1.3.0       # Metrics and utilities
+sentence-transformers>=2.2.2  # Local embeddings (optional)
+
+# OpenAI for embeddings and LLM calls
+openai>=1.3.0             # OpenAI API client
+
+# Anthropic for LLM calls (optional)
+anthropic>=0.7.0          # Anthropic API client
+
+# MCP (Model Context Protocol) client
+# Note: Install from source or npm package
+# pip install mcp  # Uncomment when available via pip
+
+# Additional utilities
+python-dotenv>=1.0.0      # Load environment variables from .env
+requests>=2.31.0          # HTTP requests for REST API fallback
+aiohttp>=3.9.0            # Async HTTP for MCP SSE transport
+
+# Testing and validation
+pytest>=7.4.0             # Testing framework
+pytest-asyncio>=0.21.0    # Async test support
+
+# Metrics computation
+rouge-score>=0.1.2        # ROUGE metrics for text similarity
+bert-score>=0.3.13        # BERTScore for semantic similarity (optional)
+
+# Data processing
+beautifulsoup4>=4.12.0    # HTML parsing (for web documents)
+lxml>=4.9.0               # XML/HTML parser
+
+# Logging and monitoring
+colorama>=0.4.6           # Colored terminal output
+rich>=13.5.0              # Rich text and beautiful formatting

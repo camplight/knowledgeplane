@@ -1,0 +1,65 @@
+# Output directory
+output/
+!output/.gitkeep
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+
+# FAISS indexes
+*.index
+*.bin
+*.pkl
+*.pickle
+
+# Datasets cache
+.cache/
+datasets_cache/
+
+# Environment variables
+.env
+.env.local
+
+# Jupyter notebooks (if any)
+.ipynb_checkpoints/
+*.ipynb
+
+# Coverage reports
+.coverage
+htmlcov/
+coverage.xml
+
+# Benchmark results (keep tracked results in output/)
+results_*.json
+results_*.csv
+benchmark_*.json
+benchmark_*.csv
