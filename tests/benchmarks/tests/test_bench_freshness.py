@@ -6,6 +6,15 @@ Tests the freshness benchmark implementation without requiring
 a live KnowledgePlane instance by using the mock adapter.
 """
 
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+parent_dir = Path(__file__).parent.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
+
+
 import json
 import tempfile
 import unittest

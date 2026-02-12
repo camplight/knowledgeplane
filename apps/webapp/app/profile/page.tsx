@@ -3,7 +3,7 @@
 import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Navigation } from "../components/Navigation";
+import { AppLayout } from "../components/AppLayout";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -259,11 +259,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <Navigation />
-
-      {/* Main Content */}
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-4xl">
+    <AppLayout>
+      <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-slate-900 mb-2">Profile Settings</h1>
           <p className="text-lg text-slate-600">
@@ -646,8 +643,8 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
 

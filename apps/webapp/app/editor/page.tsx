@@ -3,7 +3,7 @@
 import { trpc } from "../../utils/trpc";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Navigation } from "../components/Navigation";
+import { AppLayout } from "../components/AppLayout";
 import { FactEditForm } from "./components/FactEditForm";
 import { RelationItem } from "./components/RelationItem";
 import { TruncatedContent } from "./components/TruncatedContent";
@@ -510,10 +510,7 @@ export default function EditorPage() {
   const filteredFiles = filterItems(allFiles, searchQuery);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Navigation />
-
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <AppLayout>
         {/* Search Bar */}
         <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-6">
           <div className="flex gap-4">
@@ -1385,7 +1382,6 @@ export default function EditorPage() {
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </AppLayout>
   );
 }

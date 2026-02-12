@@ -3,7 +3,7 @@
 import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Navigation } from "../components/Navigation";
+import { AppLayout } from "../components/AppLayout";
 
 export default function WorkspacesPage() {
   const router = useRouter();
@@ -165,8 +165,7 @@ export default function WorkspacesPage() {
   const canManage = currentMember?.role === "owner" || currentMember?.role === "admin";
 
   return (
-    <div className="min-h-screen bg-white">
-      <Navigation />
+    <AppLayout>
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-5">
@@ -541,7 +540,7 @@ export default function WorkspacesPage() {
           </div>
         </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }
 

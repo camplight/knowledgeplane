@@ -3,7 +3,7 @@
 import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Navigation } from "../components/Navigation";
+import { AppLayout } from "../components/AppLayout";
 
 export default function WorkerLogsPage() {
   const router = useRouter();
@@ -73,10 +73,7 @@ export default function WorkerLogsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Navigation />
-
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <AppLayout>
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Background Worker Logs</h1>
@@ -279,8 +276,7 @@ export default function WorkerLogsPage() {
             </>
           )}
         </div>
-      </div>
-    </div>
+    </AppLayout>
   );
 }
 

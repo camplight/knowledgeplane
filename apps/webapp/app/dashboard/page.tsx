@@ -3,7 +3,7 @@
 import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Navigation } from "../components/Navigation";
+import { AppLayout } from "../components/AppLayout";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -55,11 +55,7 @@ export default function DashboardPage() {
   const totalRelations = relationsData?.total || 0;
 
   return (
-    <div className="min-h-screen bg-white">
-      <Navigation />
-
-      {/* Main Content */}
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <AppLayout>
         {/* Welcome Section */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
@@ -285,8 +281,7 @@ export default function DashboardPage() {
             </>
           )}
         </div>
-      </main>
-    </div>
+    </AppLayout>
   );
 }
 

@@ -3,7 +3,7 @@
 import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
 import { useState, useRef } from "react";
-import { Navigation } from "../components/Navigation";
+import { AppLayout } from "../components/AppLayout";
 
 export default function UploadPage() {
   const router = useRouter();
@@ -91,11 +91,8 @@ export default function UploadPage() {
   const user = userData.user;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Navigation />
-
-      {/* Main Content */}
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-3xl">
+    <AppLayout>
+      <div className="max-w-3xl mx-auto">
         <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-8">
           <h1 className="text-3xl font-bold text-slate-900 mb-2">
             Upload File
@@ -279,7 +276,7 @@ export default function UploadPage() {
           </p>
         </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }
 

@@ -6,6 +6,15 @@ This script demonstrates how to use the benchmark programmatically
 and customize evaluation for specific use cases.
 """
 
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+parent_dir = Path(__file__).parent.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
+
+
 import json
 from pathlib import Path
 from bench_hotpotqa import (

@@ -3,7 +3,7 @@
 import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { Navigation } from "../components/Navigation";
+import { AppLayout } from "../components/AppLayout";
 
 interface Message {
   role: "user" | "assistant";
@@ -105,8 +105,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <Navigation />
+    <AppLayout>
 
       {/* Chat Container */}
       <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
@@ -218,7 +217,7 @@ export default function ChatPage() {
           </p>
         </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }
 

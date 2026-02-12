@@ -47,140 +47,67 @@ export function Navigation() {
   const user = userData.user;
 
   return (
-    <nav className="border-b border-slate-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="flex justify-between items-center">
+    <nav className="fixed top-0 left-0 right-0 h-16 border-b border-slate-200 bg-white/80 backdrop-blur-sm z-50">
+      <div className="h-full px-6 flex items-center justify-between">
+        {/* Left side: Logo, Title, Workspace Selector */}
+        <div className="flex items-center gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 bg-clip-text text-transparent">
+            <img
+              src="/logo.png"
+              alt="KnowledgePlane Logo"
+              className="w-10 h-10 object-contain"
+            />
+            <span className="text-xl font-bold font-display bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-900 bg-clip-text text-transparent">
               KnowledgePlane
             </span>
-            <WorkspaceSelector />
           </div>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                isActive("/dashboard")
-                  ? "bg-blue-600 text-white hover:bg-blue-700"
-                  : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/upload"
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                isActive("/upload")
-                  ? "bg-blue-600 text-white hover:bg-blue-700"
-                  : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              Upload Files
-            </Link>
-            <Link
-              href="/editor"
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                isActive("/editor")
-                  ? "bg-blue-600 text-white hover:bg-blue-700"
-                  : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              Editor
-            </Link>
-            <Link
-              href="/chat"
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                isActive("/chat")
-                  ? "bg-blue-600 text-white hover:bg-blue-700"
-                  : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              Chat
-            </Link>
-            <Link
-              href="/workspaces"
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                isActive("/workspaces")
-                  ? "bg-blue-600 text-white hover:bg-blue-700"
-                  : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              Workspaces
-            </Link>
-            <Link
-              href="/worker-logs"
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                isActive("/worker-logs")
-                  ? "bg-blue-600 text-white hover:bg-blue-700"
-                  : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              Worker Logs
-            </Link>
-            <Link
-              href="/data-sources"
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                isActive("/data-sources")
-                  ? "bg-blue-600 text-white hover:bg-blue-700"
-                  : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-              }`}
-            >
-              Data Sources
-            </Link>
-            
-            {/* User Menu with Dropdown */}
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <div className="text-sm text-slate-600">
-                  <span className="font-medium">{user.username}</span>
-                  {user.email && (
-                    <>
-                      <span className="text-slate-400 mx-2">•</span>
-                      <span className="text-slate-500">{user.email}</span>
-                    </>
-                  )}
-                </div>
-                <svg
-                  className={`w-4 h-4 text-slate-500 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              
-              {isDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
-                  <Link
-                    href="/profile"
-                    onClick={() => setIsDropdownOpen(false)}
-                    className={`w-full text-left px-4 py-2 text-sm transition-colors block ${
-                      isActive("/profile")
-                        ? "bg-blue-50 text-blue-700 font-medium"
-                        : "text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    Profile
-                  </Link>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 transition-colors"
-                  >
-                    Logout
-                  </button>
-                </div>
+          <div className="h-8 w-px bg-slate-200" />
+          <WorkspaceSelector />
+        </div>
+
+        {/* Right side: User Menu */}
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50 rounded-lg transition-colors"
+          >
+            <div className="flex flex-col items-end">
+              <span className="font-display font-medium text-slate-900">{user.username}</span>
+              {user.email && (
+                <span className="text-xs text-slate-500">{user.email}</span>
               )}
             </div>
-          </div>
+            <svg
+              className={`w-4 h-4 text-slate-500 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {isDropdownOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1">
+              <Link
+                href="/profile"
+                onClick={() => setIsDropdownOpen(false)}
+                className={`w-full text-left px-4 py-2 text-sm transition-colors block font-display ${
+                  isActive("/profile")
+                    ? "bg-blue-50 text-blue-700 font-medium"
+                    : "text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                Profile
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors font-display"
+              >
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </nav>

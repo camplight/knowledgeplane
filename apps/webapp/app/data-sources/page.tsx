@@ -3,7 +3,7 @@
 import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { Navigation } from "../components/Navigation";
+import { AppLayout } from "../components/AppLayout";
 
 export default function DataSourcesPage() {
   const router = useRouter();
@@ -380,8 +380,7 @@ export default function DataSourcesPage() {
   const totalPages = Math.ceil(total / limit);
 
   return (
-    <div className="min-h-screen bg-white">
-      <Navigation />
+    <AppLayout>
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-5">
@@ -1163,7 +1162,7 @@ export default function DataSourcesPage() {
           </div>
         </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }
 
