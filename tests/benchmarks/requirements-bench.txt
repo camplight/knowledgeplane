@@ -34,6 +34,9 @@ pytest-asyncio>=0.21.0    # Async test support
 rouge-score>=0.1.2        # ROUGE metrics for text similarity
 bert-score>=0.3.13        # BERTScore for semantic similarity (optional)
 
+# Statistical analysis
+scipy>=1.11.0             # Statistical tests and distributions
+
 # Data processing
 beautifulsoup4>=4.12.0    # HTML parsing (for web documents)
 lxml>=4.9.0               # XML/HTML parser

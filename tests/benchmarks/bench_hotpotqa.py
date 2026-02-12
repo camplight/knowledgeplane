@@ -18,11 +18,13 @@ import csv
 import json
 import logging
 import os
+import random
 import re
 import string
 import time
 from collections import Counter
 from dataclasses import dataclass, field, asdict
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Any, Tuple
 
@@ -81,6 +83,8 @@ class BenchmarkSummary:
     vector: SystemMetrics = field(default_factory=SystemMetrics)
     improvement: Dict[str, float] = field(default_factory=dict)
     config: Dict[str, Any] = field(default_factory=dict)
+    timing: Dict[str, float] = field(default_factory=dict)
+    statistical_analysis: Optional[Dict[str, Any]] = None
 
 
 class HotpotQABenchmark:
@@ -99,7 +103,10 @@ class HotpotQABenchmark:
         run_kp: bool = True,
         run_vector: bool = True,
         mock_kp: bool = False,
-        output_dir: str = "output"
+        output_dir: str = "output",
+        sample_method: str = "random",
+        batch_size: Optional[int] = None,
+        statistical_analysis: bool = False
     ):
         """
         Initialize the benchmark.
@@ -112,6 +119,9 @@ class HotpotQABenchmark:
             run_vector: Whether to run vector baseline
             mock_kp: Use mock KP adapter (no server required)
             output_dir: Directory for output files
+            sample_method: Sampling method ("random", "first", "stratified")
+            batch_size: Process in batches (None = all at once)
+            statistical_analysis: Run full statistical analysis
         """
         self.n_questions = n_questions
         self.top_k = top_k
@@ -120,12 +130,16 @@ class HotpotQABenchmark:
         self.run_vector = run_vector
         self.mock_kp = mock_kp
         self.output_dir = Path(output_dir)
+        self.sample_method = sample_method
+        self.batch_size = batch_size
+        self.statistical_analysis = statistical_analysis
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Set random seed for reproducibility
         np.random.seed(seed)
+        random.seed(seed)
 
         # Initialize adapters
         self.kp_adapter: Optional[KnowledgePlaneAdapter] = None
@@ -134,7 +148,13 @@ class HotpotQABenchmark:
         # Results storage
         self.results: List[QuestionResult] = []
 
-        logger.info(f"Initialized HotpotQA benchmark: n={n_questions}, k={top_k}, seed={seed}")
+        # Timing storage
+        self.question_times: List[float] = []
+
+        logger.info(
+            f"Initialized HotpotQA benchmark: n={n_questions}, k={top_k}, "
+            f"seed={seed}, sample_method={sample_method}"
+        )
 
     def load_dataset(self) -> List[Dict[str, Any]]:
         """
@@ -148,26 +168,107 @@ class HotpotQABenchmark:
         # Load dataset
         dataset = load_dataset("hotpot_qa", "distractor", split="validation")
 
-        # Sample n questions deterministically
-        indices = np.arange(len(dataset))
-        np.random.shuffle(indices)
-        selected_indices = indices[:self.n_questions]
-
-        questions = []
-        for idx in selected_indices:
-            item = dataset[int(idx)]
-            questions.append({
+        # Convert to list for sampling
+        all_items = []
+        for item in dataset:
+            all_items.append({
                 'id': item['id'],
                 'question': item['question'],
                 'answer': item['answer'],
                 'type': item['type'],
                 'level': item['level'],
-                'context': item['context'],  # List of [title, [sentences]]
-                'supporting_facts': item['supporting_facts']  # List of [title, sent_idx]
+                'context': item['context'],
+                'supporting_facts': item['supporting_facts']
             })
 
-        logger.info(f"Loaded {len(questions)} questions from HotpotQA")
+        # Sample questions based on method
+        if self.sample_method == "first":
+            questions = all_items[:self.n_questions]
+        elif self.sample_method == "stratified":
+            questions = self._stratified_sample(all_items, self.n_questions)
+        else:  # random
+            questions = self._random_sample(all_items, self.n_questions)
+
+        logger.info(
+            f"Loaded {len(questions)} questions from HotpotQA "
+            f"using {self.sample_method} sampling"
+        )
         return questions
+
+    def _random_sample(
+        self,
+        items: List[Dict[str, Any]],
+        n: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Random sampling of questions.
+
+        Args:
+            items: All available items
+            n: Number to sample
+
+        Returns:
+            Sampled items
+        """
+        if n >= len(items):
+            return items
+
+        indices = list(range(len(items)))
+        random.shuffle(indices)
+        return [items[i] for i in indices[:n]]
+
+    def _stratified_sample(
+        self,
+        items: List[Dict[str, Any]],
+        n: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Stratified sampling ensuring diversity in difficulty/type.
+
+        HotpotQA has 'level' field: easy, medium, hard
+        Sample proportionally from each level.
+
+        Args:
+            items: All available items
+            n: Number to sample
+
+        Returns:
+            Stratified sample of items
+        """
+        # Group by level
+        by_level = {}
+        for item in items:
+            level = item.get('level', 'medium')
+            if level not in by_level:
+                by_level[level] = []
+            by_level[level].append(item)
+
+        # Calculate samples per level (proportional)
+        samples = []
+        for level, level_items in by_level.items():
+            level_proportion = len(level_items) / len(items)
+            level_n = int(n * level_proportion)
+
+            # Sample from this level
+            if level_n > 0:
+                if level_n >= len(level_items):
+                    samples.extend(level_items)
+                else:
+                    samples.extend(random.sample(level_items, level_n))
+
+        # If we need more samples to reach n, randomly sample remaining
+        if len(samples) < n:
+            remaining = [item for item in items if item not in samples]
+            additional_needed = n - len(samples)
+            if additional_needed <= len(remaining):
+                samples.extend(random.sample(remaining, additional_needed))
+            else:
+                samples.extend(remaining)
+
+        # Shuffle to avoid grouping by level
+        random.shuffle(samples)
+
+        return samples[:n]
 
     def prepare_documents(
         self,
@@ -486,6 +587,8 @@ class HotpotQABenchmark:
         Returns:
             BenchmarkSummary with all results
         """
+        benchmark_start_time = time.time()
+
         logger.info("=" * 60)
         logger.info("Starting HotpotQA Benchmark")
         logger.info("=" * 60)
@@ -528,14 +631,50 @@ class HotpotQABenchmark:
                 logger.warning("Vector ingestion failed, skipping vector evaluation")
                 self.run_vector = False
 
-        # Evaluate questions
+        # Evaluate questions (with or without batching)
         logger.info(f"Evaluating {len(questions)} questions...")
-        for question_data in tqdm(questions, desc="Evaluating"):
-            result = self.evaluate_question(question_data, namespace)
-            self.results.append(result)
+
+        if self.batch_size and self.batch_size < len(questions):
+            self._evaluate_in_batches(questions, namespace)
+        else:
+            self._evaluate_all_questions(questions, namespace)
 
         # Compute summary metrics
         summary = self._compute_summary()
+
+        # Add timing information
+        benchmark_elapsed = time.time() - benchmark_start_time
+        summary.timing = {
+            'total_seconds': benchmark_elapsed,
+            'avg_per_question': benchmark_elapsed / len(questions) if questions else 0
+        }
+
+        # Run statistical analysis if requested
+        if self.statistical_analysis and self.run_kp and self.run_vector:
+            try:
+                from statistical_analysis import BenchmarkAnalysis
+
+                # Collect F1 scores
+                kp_f1_scores = [r.kp_f1 for r in self.results if r.kp_f1 is not None]
+                vector_f1_scores = [r.vector_f1 for r in self.results if r.vector_f1 is not None]
+
+                if len(kp_f1_scores) >= 2 and len(vector_f1_scores) >= 2:
+                    analyzer = BenchmarkAnalysis(
+                        kp_f1_scores,
+                        vector_f1_scores,
+                        metric_name="F1"
+                    )
+                    stats = analyzer.full_analysis()
+                    summary.statistical_analysis = stats
+
+                    logger.info("\nStatistical analysis complete")
+                else:
+                    logger.warning("Insufficient data for statistical analysis (need >= 2 samples)")
+            except ImportError:
+                logger.warning(
+                    "Statistical analysis requested but statistical_analysis.py not available. "
+                    "Skipping statistical analysis."
+                )
 
         # Save results
         self._save_results(summary)
@@ -546,6 +685,112 @@ class HotpotQABenchmark:
 
         logger.info("Benchmark complete!")
         return summary
+
+    def _evaluate_all_questions(
+        self,
+        questions: List[Dict[str, Any]],
+        namespace: str
+    ) -> None:
+        """
+        Evaluate all questions at once with progress tracking.
+
+        Args:
+            questions: List of questions to evaluate
+            namespace: Namespace for KP queries
+        """
+        for i, question_data in enumerate(tqdm(questions, desc="Evaluating")):
+            q_start = time.time()
+            result = self.evaluate_question(question_data, namespace)
+            self.results.append(result)
+
+            q_elapsed = time.time() - q_start
+            self.question_times.append(q_elapsed)
+
+            # Print ETA every 10 questions (for large runs)
+            if i > 0 and (i + 1) % 10 == 0 and len(questions) > 50:
+                avg_time = np.mean(self.question_times)
+                remaining = len(questions) - (i + 1)
+                eta_seconds = remaining * avg_time
+                eta_minutes = eta_seconds / 60
+                logger.info(
+                    f"  Progress: {i+1}/{len(questions)} questions "
+                    f"({(i+1)/len(questions)*100:.1f}%) - "
+                    f"ETA: {eta_minutes:.1f} minutes"
+                )
+
+    def _evaluate_in_batches(
+        self,
+        questions: List[Dict[str, Any]],
+        namespace: str
+    ) -> None:
+        """
+        Evaluate questions in batches to manage memory.
+
+        Args:
+            questions: List of questions to evaluate
+            namespace: Namespace for KP queries
+        """
+        logger.info(f"Processing in batches of {self.batch_size}...")
+
+        for batch_idx in range(0, len(questions), self.batch_size):
+            batch_end = min(batch_idx + self.batch_size, len(questions))
+            batch = questions[batch_idx:batch_end]
+
+            logger.info(
+                f"Processing batch {batch_idx // self.batch_size + 1}: "
+                f"questions {batch_idx+1}-{batch_end}"
+            )
+
+            for question_data in tqdm(batch, desc=f"Batch {batch_idx // self.batch_size + 1}"):
+                q_start = time.time()
+                result = self.evaluate_question(question_data, namespace)
+                self.results.append(result)
+
+                q_elapsed = time.time() - q_start
+                self.question_times.append(q_elapsed)
+
+            # Save intermediate results
+            if batch_end < len(questions):
+                self._save_intermediate_results(batch_idx, batch_end)
+
+    def _save_intermediate_results(self, batch_start: int, batch_end: int) -> None:
+        """
+        Save intermediate results during batch processing.
+
+        Args:
+            batch_start: Start index of batch
+            batch_end: End index of batch
+        """
+        csv_path = self.output_dir / f"hotpotqa_partial_{batch_end}.csv"
+        logger.info(f"Saving intermediate results to {csv_path}")
+
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+
+            # Header
+            writer.writerow([
+                'question_id', 'question', 'ground_truth',
+                'kp_answer', 'kp_em', 'kp_f1', 'kp_latency_ms',
+                'vector_answer', 'vector_em', 'vector_f1', 'vector_latency_ms',
+                'error'
+            ])
+
+            # Data rows
+            for result in self.results:
+                writer.writerow([
+                    result.question_id,
+                    result.question,
+                    result.ground_truth,
+                    result.kp_answer or '',
+                    f"{result.kp_em:.4f}" if result.kp_em is not None else '',
+                    f"{result.kp_f1:.4f}" if result.kp_f1 is not None else '',
+                    f"{result.kp_latency_ms:.2f}" if result.kp_latency_ms is not None else '',
+                    result.vector_answer or '',
+                    f"{result.vector_em:.4f}" if result.vector_em is not None else '',
+                    f"{result.vector_f1:.4f}" if result.vector_f1 is not None else '',
+                    f"{result.vector_latency_ms:.2f}" if result.vector_latency_ms is not None else '',
+                    result.error or ''
+                ])
 
     def _compute_summary(self) -> BenchmarkSummary:
         """
@@ -602,7 +847,11 @@ class HotpotQABenchmark:
             'seed': self.seed,
             'run_kp': self.run_kp,
             'run_vector': self.run_vector,
-            'mock_kp': self.mock_kp
+            'mock_kp': self.mock_kp,
+            'sample_method': self.sample_method,
+            'batch_size': self.batch_size,
+            'statistical_analysis': self.statistical_analysis,
+            'timestamp': datetime.now().isoformat()
         }
 
         return summary
@@ -663,7 +912,9 @@ class HotpotQABenchmark:
             'kp': asdict(summary.kp) if self.run_kp else None,
             'vector': asdict(summary.vector) if self.run_vector else None,
             'improvement': summary.improvement,
-            'config': summary.config
+            'config': summary.config,
+            'timing': summary.timing,
+            'statistical_analysis': summary.statistical_analysis
         }
 
         with open(json_path, 'w', encoding='utf-8') as f:
@@ -712,7 +963,31 @@ class HotpotQABenchmark:
             else:
                 print("\n✗ Vector baseline outperforms KP on this benchmark")
 
+        # Print timing information
+        if summary.timing:
+            print("\nTiming:")
+            print(f"  Total Time:     {summary.timing['total_seconds']:.1f}s")
+            print(f"  Avg/Question:   {summary.timing['avg_per_question']:.2f}s")
+
         print("\n" + "=" * 60)
+
+        # Print statistical analysis if available
+        if summary.statistical_analysis:
+            try:
+                from statistical_analysis import BenchmarkAnalysis
+
+                # Reconstruct analyzer for printing
+                kp_f1_scores = [r.kp_f1 for r in self.results if r.kp_f1 is not None]
+                vector_f1_scores = [r.vector_f1 for r in self.results if r.vector_f1 is not None]
+
+                analyzer = BenchmarkAnalysis(
+                    kp_f1_scores,
+                    vector_f1_scores,
+                    metric_name="F1"
+                )
+                analyzer.print_report()
+            except ImportError:
+                logger.warning("Cannot print statistical analysis report (module not available)")
 
 
 # Scoring Functions
@@ -813,7 +1088,7 @@ def parse_args() -> argparse.Namespace:
         '--n',
         type=int,
         default=20,
-        help='Number of questions to evaluate'
+        help='Number of questions to evaluate (20=quick test, 100=moderate, 500+=statistical)'
     )
 
     parser.add_argument(
@@ -828,6 +1103,27 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=42,
         help='Random seed for reproducibility'
+    )
+
+    parser.add_argument(
+        '--sample-method',
+        type=str,
+        choices=['random', 'first', 'stratified'],
+        default='random',
+        help='Sampling method: random (shuffled), first (sequential), stratified (balanced by difficulty)'
+    )
+
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=None,
+        help='Process in batches for memory efficiency (default: process all at once)'
+    )
+
+    parser.add_argument(
+        '--statistical-analysis',
+        action='store_true',
+        help='Run full statistical analysis with confidence intervals and hypothesis testing'
     )
 
     parser.add_argument(
@@ -881,7 +1177,10 @@ def main():
         run_kp=args.run_kp,
         run_vector=args.run_vector,
         mock_kp=args.mock_kp,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
+        sample_method=args.sample_method,
+        batch_size=args.batch_size,
+        statistical_analysis=args.statistical_analysis
     )
 
     # Run benchmark

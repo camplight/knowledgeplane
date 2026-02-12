@@ -27,7 +27,22 @@ We compare KnowledgePlane against a controlled vector-RAG baseline (FAISS + simp
 - Query latency
 - Retrieved document relevance
 
-### Benchmark 2: Freshness (Time-to-Truth)
+### Benchmark 2: MS MARCO (Passage Ranking)
+**Purpose**: Evaluate core passage retrieval and ranking quality on single-hop queries
+
+**Dataset**: MS MARCO (v2.1 validation) - passage ranking with relevance labels
+
+**Systems**:
+- KnowledgePlane (semantic understanding with relations)
+- Vector Baseline (FAISS with chunking)
+
+**Metrics**:
+- Mean Reciprocal Rank (MRR)
+- Recall@k
+- NDCG@k (Normalized Discounted Cumulative Gain)
+- Query latency
+
+### Benchmark 3: Freshness (Time-to-Truth)
 **Purpose**: Measure how quickly KnowledgePlane reflects updated information
 
 **Test**: Inject a new fact, poll until system returns it
@@ -70,8 +85,11 @@ python run_all.py --n-hotpot 20 --freshness-mode skip
 # Run HotpotQA benchmark (20 questions, both systems)
 python bench_hotpotqa.py --n 20 --run_kp true --run_vector true
 
-# Run HotpotQA with KP only (faster)
-python bench_hotpotqa.py --n 50 --run_kp true --run_vector false
+# Run MS MARCO benchmark (100 queries, both systems)
+python bench_msmarco.py --n 100 --k 10 --run_kp true --run_vector true
+
+# Run MS MARCO with mock KP (no server needed)
+python bench_msmarco.py --n 20 --k 10 --mock_kp
 
 # Run freshness benchmark (manual mode)
 python bench_freshness.py --mode manual
@@ -240,6 +258,57 @@ Options:
 }
 ```
 
+### MS MARCO Passage Ranking Benchmark
+
+**📚 See [MSMARCO_USAGE.md](docs/MSMARCO_USAGE.md) for detailed usage guide**
+
+```bash
+python bench_msmarco.py [OPTIONS]
+
+Options:
+  --n              Number of queries to evaluate (default: 100)
+  --k              Number of passages to retrieve (default: 10)
+  --run_kp         Run KnowledgePlane system (default: true)
+  --run_vector     Run vector baseline (default: true)
+  --seed           Random seed for reproducibility (default: 42)
+  --mock_kp        Use mock KP adapter (no server required)
+  --output_dir     Output directory (default: output/)
+```
+
+**Example outputs**:
+- `output/msmarco_results.csv` - Per-query results with MRR, Recall@k, NDCG@k
+- `output/msmarco_summary.json` - Aggregate ranking metrics
+
+**Sample output**:
+```json
+{
+  "kp": {
+    "avg_mrr": 0.7234,
+    "avg_recall_at_k": 0.8456,
+    "avg_ndcg_at_k": 0.8012,
+    "avg_latency_ms": 245,
+    "queries_evaluated": 100
+  },
+  "vector": {
+    "avg_mrr": 0.6512,
+    "avg_recall_at_k": 0.7823,
+    "avg_ndcg_at_k": 0.7234,
+    "avg_latency_ms": 157,
+    "queries_evaluated": 100
+  },
+  "improvement": {
+    "mrr_delta": 0.0722,
+    "recall_delta": 0.0633,
+    "ndcg_delta": 0.0778
+  }
+}
+```
+
+**Metrics explained**:
+- **MRR (Mean Reciprocal Rank)**: Position of first relevant passage (higher is better)
+- **Recall@k**: Fraction of relevant passages in top k (higher is better)
+- **NDCG@k**: Ranking quality with position discount (higher is better)
+
 ### Freshness Benchmark
 
 ```bash
@@ -337,12 +406,25 @@ tests/benchmarks/
 │   ├── .gitkeep
 │   ├── hotpotqa_results.csv
 │   ├── hotpotqa_summary.json
+│   ├── msmarco_results.csv
+│   ├── msmarco_summary.json
 │   └── freshness_run.json
 ├── bench_hotpotqa.py          # HotpotQA benchmark script
+├── bench_msmarco.py           # MS MARCO benchmark script
 ├── bench_freshness.py         # Freshness benchmark script
 ├── kp_adapter.py              # KnowledgePlane adapter interface
 ├── vector_baseline.py         # FAISS baseline implementation
-└── run_all.py                 # Run all benchmarks
+├── run_all.py                 # Run all benchmarks
+├── docs/                       # Documentation
+│   ├── HOTPOTQA_USAGE.md      # HotpotQA guide
+│   ├── MSMARCO_USAGE.md       # MS MARCO guide
+│   ├── MSMARCO_QUICKREF.md    # MS MARCO quick reference
+│   └── FRESHNESS_BENCHMARK.md # Freshness guide
+├── demos/                      # Demo scripts
+│   ├── demo_msmarco.py        # MS MARCO interactive demo
+│   └── demo_freshness.py      # Freshness demo
+└── tests/                      # Unit tests
+    └── test_msmarco_metrics.py # MS MARCO metric tests
 ```
 
 ### Component Overview
