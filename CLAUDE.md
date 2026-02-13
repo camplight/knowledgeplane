@@ -7,6 +7,198 @@ A warm, scholarly interface that evokes the feeling of a well-organized knowledg
 
 ---
 
+## 🎯 Frontend Aesthetics Philosophy
+
+### Core Principle: Opinionated Craftsmanship
+We reject generic, templated "AI slop" design in favor of **deliberate, distinctive choices** that create a memorable, cohesive experience. Every decision is intentional, documented, and serves the "Digital Archive" vision.
+
+### What We Avoid (The "AI Slop" Pattern)
+
+**Generic Font Stacks:**
+- ❌ Inter, Roboto, Open Sans, Lato, Helvetica
+- ❌ "Modern, clean, minimal" sans-serif templates
+- ❌ Default system fonts with no personality
+- **Why**: These are overused, forgettable, and signal "I didn't think about design"
+
+**Template Color Palettes:**
+- ❌ Pure white/black high-contrast
+- ❌ Oversaturated neon accents (#00FF00, #FF00FF)
+- ❌ Generic blue (#007BFF) with no warmth
+- ❌ Gradient rainbow backgrounds
+- **Why**: These lack cohesion and don't support a specific mood or brand
+
+**Overdone Effects:**
+- ❌ Heavy glassmorphism (blur + transparency everywhere)
+- ❌ Excessive drop shadows (box-shadow: 0 10px 50px rgba...)
+- ❌ Animated gradients on every surface
+- ❌ Particle.js backgrounds
+- **Why**: They distract from content and feel dated quickly
+
+**Copy-Paste Component Libraries:**
+- ❌ Using Bootstrap/Material UI without customization
+- ❌ Keeping default button styles
+- ❌ Generic card layouts with no spacing personality
+- **Why**: Your app looks like every other app
+
+### What We Do Instead
+
+#### 1. **Distinctive Typography System**
+```typescript
+// JetBrains Mono for ALL interface text
+// - Monospace creates consistent, technical rhythm
+// - Highly readable at small sizes
+// - Programmer aesthetic without feeling "code-only"
+// - Excellent for numbers, data, technical content
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
+// Space Grotesk ONLY for brand/logo
+// - Geometric, modern, distinctive
+// - Separates brand identity from UI chrome
+// - Never used for body text
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-brand",
+  display: "swap",
+});
+```
+
+**Rationale**: Monospace creates a **unique, technical-scholarly vibe** that stands out from generic sans-serif apps. It signals precision, attention to detail, and intellectual rigor—perfect for a knowledge management system.
+
+#### 2. **Warm, Muted Color Palette**
+```css
+/* Light Theme - Inspired by aged paper and warm lighting */
+Primary:   #f59e0b  /* Amber - like aged book pages */
+Secondary: #6366f1  /* Indigo - deep, scholarly ink */
+Accent:    #14b8a6  /* Teal - technical accent */
+Base-100:  #faf8f5  /* Warm off-white, not stark white */
+
+/* Dark Theme - Warm blacks, not cold grays */
+Base-100:  #111827  /* Warm dark blue-gray, not #000000 */
+Primary:   #fbbf24  /* Brighter amber for contrast */
+```
+
+**Rationale**:
+- **Warm tones** reduce eye strain and feel more human than cold whites/blues
+- **Amber/Indigo/Teal** palette is distinctive and cohesive
+- **Avoids pure white/black** - too harsh, lacks sophistication
+- **Evokes physical archives** - paper, ink, warm library lighting
+
+#### 3. **Subtle, Layered Backgrounds**
+```css
+body {
+  background-image:
+    radial-gradient(circle at 20% 80%, rgba(251, 191, 36, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(79, 70, 229, 0.05) 0%, transparent 50%);
+}
+```
+
+**Rationale**:
+- **Multiple subtle gradients** create depth without being distracting
+- **Very low opacity (0.05)** - barely visible, adds warmth
+- **Positioned off-center** - asymmetry feels more organic
+- **No animation** - gradients are static for performance
+
+#### 4. **Thoughtful Motion (DaisyUI Transitions)**
+```css
+/* All transitions: */
+duration-300 ease-in-out
+
+/* Consistent across: */
+- Sidebar collapse/expand
+- Button hover states
+- Card hover effects
+- Theme switching
+- Dropdown animations
+```
+
+**Rationale**:
+- **One duration (300ms)** - consistency creates professionalism
+- **Ease-in-out** - feels natural, not robotic
+- **No spring/bounce** - too playful for scholarly aesthetic
+- **Could add Framer Motion later** for page transitions, but baseline is DaisyUI
+
+#### 5. **Responsive, Mobile-First Layout**
+```jsx
+// Example: Responsive text sizing
+<h1 className="text-xl sm:text-2xl lg:text-3xl">
+
+// Example: Responsive padding
+<div className="p-4 sm:p-6 lg:p-8">
+
+// Example: Responsive grid
+<div className="stats stats-vertical sm:stats-horizontal">
+```
+
+**Rationale**:
+- **Start mobile (320px)** - add complexity at larger breakpoints
+- **3 breakpoints** (sm:640px, md:768px, lg:1024px) - enough without being excessive
+- **Hide secondary info on mobile** - progressive enhancement
+- **Drawer overlay on mobile** - follows native app patterns
+
+#### 6. **DaisyUI Component Customization**
+We use DaisyUI but **heavily customize** colors, spacing, and typography:
+
+```javascript
+// tailwind.config.js
+daisyui: {
+  themes: [
+    {
+      light: {
+        // Custom colors, not defaults
+        primary: "#f59e0b",
+        secondary: "#6366f1",
+        accent: "#14b8a6",
+        // ... etc
+      }
+    }
+  ]
+}
+```
+
+**What we customize:**
+- ✅ All theme colors
+- ✅ Font families (JetBrains Mono everywhere)
+- ✅ Border radiuses (subtle, not round)
+- ✅ Shadow intensities (lighter than defaults)
+- ✅ Animation durations (consistent 300ms)
+
+**What we keep from DaisyUI:**
+- ✅ Semantic component structure
+- ✅ Accessibility features (ARIA, focus states)
+- ✅ Responsive utilities
+- ✅ Dark mode switching logic
+
+### Implementation Checklist
+
+When adding new UI elements, ensure:
+
+- [ ] Uses JetBrains Mono for all text (except brand)
+- [ ] Colors come from our palette (amber/indigo/teal)
+- [ ] Spacing uses our responsive system (p-4 sm:p-6 lg:p-8)
+- [ ] Transitions are duration-300 ease-in-out
+- [ ] Mobile-first: base styles → sm → lg breakpoints
+- [ ] Backgrounds are warm (not stark white/black)
+- [ ] Icons are outline style, w-5 h-5 or w-4 h-4
+- [ ] Loading states use DaisyUI spinner/skeleton
+- [ ] Focus states are visible (WCAG AA)
+- [ ] Hover states are subtle (not aggressive)
+
+### Why This Matters
+
+**Consistency builds trust.** When every element follows the same rules, users subconsciously recognize the app as thoughtfully designed. When fonts, colors, or spacing are inconsistent, it signals "this was thrown together."
+
+**Distinctive aesthetics create memory.** Users should recognize KnowledgePlane instantly by its amber/indigo palette, monospace typography, and warm tones—not by reading the logo.
+
+**Opinionated choices show craftsmanship.** Choosing JetBrains Mono over Inter, warm off-white over stark white, and subtle gradients over flat colors demonstrates **intentional design decisions**, not template adoption.
+
+---
+
 ## Color Palette
 
 ### Light Theme
