@@ -1,9 +1,11 @@
 node_modules
 .DS_Store
 .env
+.env.local
 .env.dev
 packages/db/dist
 apps/mcp-server/dist
 coverage
 .next
 dist
+.claude-flow

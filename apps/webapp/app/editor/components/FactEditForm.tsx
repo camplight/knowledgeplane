@@ -40,15 +40,17 @@ export function FactEditForm({ factId, content, isPending, onSave, onCancel }: F
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Content</label>
+      <div className="form-control">
+        <label className="label">
+          <span className="label-text text-sm font-medium">Content</span>
+        </label>
         <textarea
           ref={textareaRef}
           name="content"
           value={textAreaValue}
           onChange={(e) => setTextAreaValue(e.target.value)}
           rows={4}
-          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none overflow-y-auto"
+          className="textarea textarea-bordered w-full text-sm resize-none overflow-y-auto"
           style={{ minHeight: "100px", maxHeight: "600px" }}
           required
         />
@@ -57,14 +59,14 @@ export function FactEditForm({ factId, content, isPending, onSave, onCancel }: F
         <button
           type="submit"
           disabled={isPending}
-          className="flex-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          className="btn btn-primary btn-sm flex-1"
         >
           {isPending ? "Saving..." : "Save"}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="px-3 py-1.5 text-xs bg-slate-200 text-slate-700 rounded hover:bg-slate-300"
+          className="btn btn-ghost btn-sm"
         >
           Cancel
         </button>

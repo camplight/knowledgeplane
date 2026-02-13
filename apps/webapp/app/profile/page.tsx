@@ -3,7 +3,7 @@
 import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Navigation } from "../components/Navigation";
+import { AppLayout } from "../components/AppLayout";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -248,9 +248,9 @@ export default function ProfilePage() {
 
   if (userLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl text-slate-600">Loading...</div>
-      </div>
+      <AppLayout>
+        <div className="text-xl text-base-content">Loading...</div>
+      </AppLayout>
     );
   }
 
@@ -259,44 +259,43 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <Navigation />
-
-      {/* Main Content */}
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-4xl">
+    <AppLayout>
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-4xl">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">Profile Settings</h1>
-          <p className="text-lg text-slate-600">
+          <h1 className="text-4xl font-bold text-base-content mb-2">Profile Settings</h1>
+          <p className="text-lg text-base-content/70">
             Manage your account information and API keys
           </p>
         </div>
 
         {/* Success/Error Messages */}
         {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">
-            {success}
+          <div className="alert alert-success mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <span>{success}</span>
           </div>
         )}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
-            {error}
+          <div className="alert alert-error mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <span>{error}</span>
           </div>
         )}
 
         {/* Profile Information Card */}
-        <div className="bg-white rounded-xl shadow-lg border border-slate-200 mb-6">
-          <div className="p-6 border-b border-slate-200">
+        <div className="card bg-base-100 shadow-xl border border-base-300 mb-6">
+          <div className="card-body border-b border-base-300">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">Profile Information</h2>
-                <p className="text-sm text-slate-600 mt-1">
+                <h2 className="card-title text-2xl">Profile Information</h2>
+                <p className="text-sm text-base-content/70 mt-1">
                   Update your username and email address
                 </p>
               </div>
               {!isEditing && (
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                  className="btn btn-sm btn-primary"
                 >
                   Edit Profile
                 </button>
@@ -304,30 +303,30 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="card-body">
             {isEditing ? (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Username
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Username</span>
                   </label>
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input input-bordered w-full"
                     placeholder="Username"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Email
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">Email</span>
                   </label>
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="input input-bordered w-full"
                     placeholder="Email"
                   />
                 </div>
@@ -335,14 +334,14 @@ export default function ProfilePage() {
                   <button
                     onClick={handleSave}
                     disabled={updateProfileMutation.isPending}
-                    className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn btn-primary"
                   >
                     {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
                   </button>
                   <button
                     onClick={handleCancel}
                     disabled={updateProfileMutation.isPending}
-                    className="px-6 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn btn-ghost"
                   >
                     Cancel
                   </button>
@@ -351,22 +350,22 @@ export default function ProfilePage() {
             ) : (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-500 mb-1">
-                    Username
+                  <label className="label">
+                    <span className="label-text text-base-content/70">Username</span>
                   </label>
-                  <p className="text-lg text-slate-900">{profileData.username}</p>
+                  <p className="text-lg text-base-content">{profileData.username}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-500 mb-1">
-                    Email
+                  <label className="label">
+                    <span className="label-text text-base-content/70">Email</span>
                   </label>
-                  <p className="text-lg text-slate-900">{profileData.email}</p>
+                  <p className="text-lg text-base-content">{profileData.email}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-500 mb-1">
-                    Account Created
+                  <label className="label">
+                    <span className="label-text text-base-content/70">Account Created</span>
                   </label>
-                  <p className="text-lg text-slate-900">
+                  <p className="text-lg text-base-content">
                     {new Date(profileData.created_at).toLocaleDateString()}
                   </p>
                 </div>
@@ -376,59 +375,61 @@ export default function ProfilePage() {
         </div>
 
         {/* MCP API Key Management Card */}
-        <div className="bg-white rounded-xl shadow-lg border border-slate-200 mb-6">
-          <div className="p-6 border-b border-slate-200">
+        <div className="card bg-base-100 shadow-xl border border-base-300 mb-6">
+          <div className="card-body border-b border-base-300">
             <div>
-              <h2 className="text-2xl font-bold text-slate-900">MCP API Key</h2>
-              <p className="text-sm text-slate-600 mt-1">
+              <h2 className="card-title text-2xl">MCP API Key</h2>
+              <p className="text-sm text-base-content/70 mt-1">
                 Generate and manage your personal API key for MCP access
               </p>
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="card-body">
             {profileData.api_key ? (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    API Key
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">API Key</span>
                   </label>
                   <div className="flex items-center gap-2">
                     <input
                       type={showApiKey ? "text" : "password"}
                       value={profileData.api_key}
                       readOnly
-                      className="flex-1 px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 font-mono text-sm"
+                      className="input input-bordered flex-1 font-mono text-sm bg-base-200"
                     />
                     <button
                       onClick={() => setShowApiKey(!showApiKey)}
-                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                      className="btn btn-ghost btn-sm"
                     >
                       {showApiKey ? "Hide" : "Show"}
                     </button>
                     <button
                       onClick={handleCopyApiKey}
-                      className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                      className="btn btn-primary btn-sm"
                     >
                       {apiKeyCopied ? "Copied!" : "Copy"}
                     </button>
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Use this key in the <code className="bg-slate-100 px-1 py-0.5 rounded">knowledgeplane-key</code> header for API authentication
-                  </p>
+                  <label className="label">
+                    <span className="label-text-alt text-base-content/60">
+                      Use this key in the <kbd className="kbd kbd-sm">knowledgeplane-key</kbd> header for API authentication
+                    </span>
+                  </label>
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button
                     onClick={handleGenerateApiKey}
                     disabled={generateApiKeyMutation.isPending}
-                    className="px-6 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn btn-primary btn-sm"
                   >
                     {generateApiKeyMutation.isPending ? "Generating..." : "Generate New Key"}
                   </button>
                   <button
                     onClick={handleRemoveApiKey}
                     disabled={removeApiKeyMutation.isPending}
-                    className="px-6 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn btn-error btn-sm"
                   >
                     {removeApiKeyMutation.isPending ? "Removing..." : "Remove Key"}
                   </button>
@@ -436,13 +437,13 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-slate-600">
+                <p className="text-base-content/70">
                   You don't have an API key yet. Generate one to enable programmatic access to your knowledge base.
                 </p>
                 <button
                   onClick={handleGenerateApiKey}
                   disabled={generateApiKeyMutation.isPending}
-                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn btn-primary"
                 >
                   {generateApiKeyMutation.isPending ? "Generating..." : "Generate API Key"}
                 </button>
@@ -452,26 +453,26 @@ export default function ProfilePage() {
         </div>
 
         {/* REST API Keys Card */}
-        <div className="bg-white rounded-xl shadow-lg border border-slate-200 mb-6">
-          <div className="p-6 border-b border-slate-200">
+        <div className="card bg-base-100 shadow-xl border border-base-300 mb-6">
+          <div className="card-body border-b border-base-300">
             <div>
-              <h2 className="text-2xl font-bold text-slate-900">REST API Keys</h2>
-              <p className="text-sm text-slate-600 mt-1">
+              <h2 className="card-title text-2xl">REST API Keys</h2>
+              <p className="text-sm text-base-content/70 mt-1">
                 Generate per-workspace keys for the REST API
               </p>
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="card-body">
             {workspacesData && workspacesData.length > 0 && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Select Workspace
+              <div className="form-control mb-4">
+                <label className="label">
+                  <span className="label-text">Select Workspace</span>
                 </label>
                 <select
                   value={selectedWorkspaceId || ""}
                   onChange={(e) => setSelectedWorkspaceId(e.target.value || null)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  className="select select-bordered w-full"
                 >
                   {workspacesData.map((workspace) => (
                     <option key={workspace.id} value={workspace.id}>
@@ -479,82 +480,86 @@ export default function ProfilePage() {
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-slate-500 mt-1">
-                  Choose which workspace the REST API key applies to
-                </p>
+                <label className="label">
+                  <span className="label-text-alt text-base-content/60">
+                    Choose which workspace the REST API key applies to
+                  </span>
+                </label>
               </div>
             )}
 
             {restApiKeyData?.api_key ? (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    REST API Key
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text">REST API Key</span>
                   </label>
                   <div className="flex items-center gap-2">
                     <input
                       type={showRestApiKey ? "text" : "password"}
                       value={restApiKeyData.api_key}
                       readOnly
-                      className="flex-1 px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 font-mono text-sm"
+                      className="input input-bordered flex-1 font-mono text-sm bg-base-200"
                     />
                     <button
                       onClick={() => setShowRestApiKey(!showRestApiKey)}
-                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                      className="btn btn-ghost btn-sm"
                     >
                       {showRestApiKey ? "Hide" : "Show"}
                     </button>
                     <button
                       onClick={handleCopyRestApiKey}
-                      className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                      className="btn btn-primary btn-sm"
                     >
                       {restApiKeyCopied ? "Copied!" : "Copy"}
                     </button>
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Use this key in the{" "}
-                    <code className="bg-slate-100 px-1 py-0.5 rounded">
-                      knowledgeplane-key
-                    </code>{" "}
-                    header or as the <code className="bg-slate-100 px-1 py-0.5 rounded">api_key</code> query parameter
-                  </p>
+                  <label className="label">
+                    <span className="label-text-alt text-base-content/60">
+                      Use this key in the{" "}
+                      <kbd className="kbd kbd-sm">knowledgeplane-key</kbd>{" "}
+                      header or as the <kbd className="kbd kbd-sm">api_key</kbd> query parameter
+                    </span>
+                  </label>
                 </div>
                 {restApiUrl && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      REST API URL
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text">REST API URL</span>
                     </label>
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
                         value={restApiUrl}
                         readOnly
-                        className="flex-1 px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 font-mono text-xs break-all"
+                        className="input input-bordered flex-1 font-mono text-xs break-all bg-base-200"
                       />
                       <button
                         onClick={handleCopyRestApiUrl}
-                        className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors whitespace-nowrap"
+                        className="btn btn-primary btn-sm whitespace-nowrap"
                       >
                         {restApiUrlCopied ? "Copied!" : "Copy URL"}
                       </button>
                     </div>
-                    <p className="text-xs text-slate-500 mt-2">
-                      Includes your workspace context and API key for quick REST calls.
-                    </p>
+                    <label className="label">
+                      <span className="label-text-alt text-base-content/60">
+                        Includes your workspace context and API key for quick REST calls.
+                      </span>
+                    </label>
                   </div>
                 )}
                 <div className="flex gap-3 pt-4">
                   <button
                     onClick={handleGenerateRestApiKey}
                     disabled={generateRestApiKeyMutation.isPending}
-                    className="px-6 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn btn-primary btn-sm"
                   >
                     {generateRestApiKeyMutation.isPending ? "Generating..." : "Generate New Key"}
                   </button>
                   <button
                     onClick={handleRemoveRestApiKey}
                     disabled={removeRestApiKeyMutation.isPending}
-                    className="px-6 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn btn-error btn-sm"
                   >
                     {removeRestApiKeyMutation.isPending ? "Removing..." : "Remove Key"}
                   </button>
@@ -562,13 +567,13 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-slate-600">
+                <p className="text-base-content/70">
                   No REST API key for this workspace yet. Generate one to enable REST API access.
                 </p>
                 <button
                   onClick={handleGenerateRestApiKey}
                   disabled={generateRestApiKeyMutation.isPending}
-                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn btn-primary"
                 >
                   {generateRestApiKeyMutation.isPending ? "Generating..." : "Generate REST API Key"}
                 </button>
@@ -579,28 +584,28 @@ export default function ProfilePage() {
 
         {/* MCP Server URL Card */}
         {profileData.api_key && (
-          <div className="bg-white rounded-xl shadow-lg border border-slate-200">
-            <div className="p-6 border-b border-slate-200">
+          <div className="card bg-base-100 shadow-xl border border-base-300">
+            <div className="card-body border-b border-base-300">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">MCP Server URL</h2>
-                <p className="text-sm text-slate-600 mt-1">
+                <h2 className="card-title text-2xl">MCP Server URL</h2>
+                <p className="text-sm text-base-content/70 mt-1">
                   Copy your personal MCP server URL with your API key and workspace context included
                 </p>
               </div>
             </div>
 
-            <div className="p-6">
+            <div className="card-body">
               {mcpUrlData?.url ? (
                 <div className="space-y-4">
                   {workspacesData && workspacesData.length > 0 && (
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Select Workspace
+                    <div className="form-control">
+                      <label className="label">
+                        <span className="label-text">Select Workspace</span>
                       </label>
                       <select
                         value={selectedWorkspaceId || ""}
                         onChange={(e) => setSelectedWorkspaceId(e.target.value || null)}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        className="select select-bordered w-full"
                       >
                         {workspacesData.map((workspace) => (
                           <option key={workspace.id} value={workspace.id}>
@@ -608,37 +613,41 @@ export default function ProfilePage() {
                           </option>
                         ))}
                       </select>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Choose which workspace's context to include in the MCP URL
-                      </p>
+                      <label className="label">
+                        <span className="label-text-alt text-base-content/60">
+                          Choose which workspace's context to include in the MCP URL
+                        </span>
+                      </label>
                     </div>
                   )}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      MCP Server URL
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text">MCP Server URL</span>
                     </label>
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
                         value={mcpUrlData.url}
                         readOnly
-                        className="flex-1 px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 font-mono text-xs break-all"
+                        className="input input-bordered flex-1 font-mono text-xs break-all bg-base-200"
                       />
                       <button
                         onClick={handleCopyMcpUrl}
-                        className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors whitespace-nowrap"
+                        className="btn btn-primary btn-sm whitespace-nowrap"
                       >
                         {mcpUrlCopied ? "Copied!" : "Copy URL"}
                       </button>
                     </div>
-                    <p className="text-xs text-slate-500 mt-2">
-                      Use this URL to connect AI agents and tools to your KnowledgePlane MCP server. Your API key and workspace context are included in the URL.
-                    </p>
+                    <label className="label">
+                      <span className="label-text-alt text-base-content/60">
+                        Use this URL to connect AI agents and tools to your KnowledgePlane MCP server. Your API key and workspace context are included in the URL.
+                      </span>
+                    </label>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <p className="text-slate-600">
+                  <p className="text-base-content/70">
                     Generate an API key to get your MCP server URL.
                   </p>
                 </div>
@@ -646,8 +655,8 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
 

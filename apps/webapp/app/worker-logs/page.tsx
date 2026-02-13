@@ -3,7 +3,7 @@
 import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Navigation } from "../components/Navigation";
+import { AppLayout } from "../components/AppLayout";
 
 export default function WorkerLogsPage() {
   const router = useRouter();
@@ -38,9 +38,11 @@ export default function WorkerLogsPage() {
 
   if (userLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl text-slate-600">Loading...</div>
-      </div>
+      <AppLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <span className="loading loading-spinner loading-lg"></span>
+        </div>
+      </AppLayout>
     );
   }
 
@@ -52,16 +54,16 @@ export default function WorkerLogsPage() {
   const total = logsData?.total || 0;
   const totalPages = Math.ceil(total / limit);
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadgeColor = (status: string) => {
     switch (status) {
       case "success":
-        return "bg-green-100 text-green-800";
+        return "badge-success";
       case "error":
-        return "bg-red-100 text-red-800";
+        return "badge-error";
       case "running":
-        return "bg-blue-100 text-blue-800";
+        return "badge-info";
       default:
-        return "bg-slate-100 text-slate-800";
+        return "badge-ghost";
     }
   };
 
@@ -73,14 +75,13 @@ export default function WorkerLogsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Navigation />
+    <AppLayout>
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">Background Worker Logs</h1>
-            <p className="text-slate-600 mt-2">
+            <h1 className="text-3xl font-bold">Background Worker Logs</h1>
+            <p className="text-base-content/70 mt-2">
               View execution results and status of background worker tasks
             </p>
           </div>
@@ -88,130 +89,129 @@ export default function WorkerLogsPage() {
             <button
               onClick={() => triggerWorker.mutate({ worker: "card-consolidator" })}
               disabled={triggerWorker.isPending}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+              className="btn btn-info"
             >
-              {triggerWorker.isPending ? "Triggering..." : "Trigger Card Consolidator"}
+              {triggerWorker.isPending ? (
+                <>
+                  <span className="loading loading-spinner loading-sm"></span>
+                  Triggering...
+                </>
+              ) : (
+                "Trigger Card Consolidator"
+              )}
             </button>
             <button
               onClick={() => triggerWorker.mutate({ worker: "embeddings-generator" })}
               disabled={triggerWorker.isPending}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+              className="btn btn-secondary"
             >
-              {triggerWorker.isPending ? "Triggering..." : "Trigger Embeddings Generator"}
+              {triggerWorker.isPending ? (
+                <>
+                  <span className="loading loading-spinner loading-sm"></span>
+                  Triggering...
+                </>
+              ) : (
+                "Trigger Embeddings Generator"
+              )}
             </button>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Worker Name
-              </label>
-              <input
-                type="text"
-                placeholder="Filter by worker name..."
-                value={workerFilter}
-                onChange={(e) => {
-                  setWorkerFilter(e.target.value);
-                  setPage(0);
-                }}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Status
-              </label>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value as any);
-                  setPage(0);
-                }}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">All Statuses</option>
-                <option value="success">Success</option>
-                <option value="error">Error</option>
-                <option value="running">Running</option>
-              </select>
+        <div className="card bg-base-100 shadow-xl mb-6">
+          <div className="card-body">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text font-medium">Worker Name</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Filter by worker name..."
+                  value={workerFilter}
+                  onChange={(e) => {
+                    setWorkerFilter(e.target.value);
+                    setPage(0);
+                  }}
+                  className="input input-bordered w-full"
+                />
+              </div>
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text font-medium">Status</span>
+                </label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value as any);
+                    setPage(0);
+                  }}
+                  className="select select-bordered w-full"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="success">Success</option>
+                  <option value="error">Error</option>
+                  <option value="running">Running</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Logs Table */}
-        <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+        <div className="card bg-base-100 shadow-xl overflow-hidden">
           {logsLoading ? (
             <div className="p-8 text-center">
-              <div className="text-slate-600">Loading logs...</div>
+              <span className="loading loading-spinner loading-lg"></span>
+              <p className="mt-4">Loading logs...</p>
             </div>
           ) : logs.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="text-lg font-medium text-slate-900 mb-2">No logs found</p>
-              <p className="text-slate-600">Worker logs will appear here after tasks are executed</p>
+              <p className="text-lg font-medium mb-2">No logs found</p>
+              <p className="text-base-content/70">Worker logs will appear here after tasks are executed</p>
             </div>
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-50 border-b border-slate-200">
+                <table className="table table-zebra table-pin-rows">
+                  <thead>
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                        Timestamp
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                        Worker
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                        Task Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                        Duration
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                        Items
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                        Message
-                      </th>
+                      <th>Timestamp</th>
+                      <th>Worker</th>
+                      <th>Task Type</th>
+                      <th>Status</th>
+                      <th>Duration</th>
+                      <th>Items</th>
+                      <th>Message</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
+                  <tbody>
                     {logs.map((log: any) => (
-                      <tr key={log.id} className="hover:bg-slate-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
-                          {log.status === "running" 
+                      <tr key={log.id}>
+                        <td className="whitespace-nowrap">
+                          {log.status === "running"
                             ? new Date(log.created_at).toLocaleString()
-                            : (log.updated_at 
+                            : (log.updated_at
                                 ? new Date(log.updated_at).toLocaleString()
                                 : new Date(log.created_at).toLocaleString())}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
+                        <td className="whitespace-nowrap font-medium">
                           {log.worker_name}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                        <td className="whitespace-nowrap">
                           {log.task_type}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                              log.status,
-                            )}`}
-                          >
+                        <td className="whitespace-nowrap">
+                          <span className={`badge ${getStatusBadgeColor(log.status)}`}>
                             {log.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                        <td className="whitespace-nowrap">
                           {formatDuration(log.execution_time_ms)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
+                        <td className="whitespace-nowrap">
                           {log.items_processed !== null && log.items_processed !== undefined && (
-                            <div className="space-y-1">
+                            <div className="space-y-1 text-sm">
                               {log.items_processed > 0 && (
                                 <div>Processed: {log.items_processed}</div>
                               )}
@@ -224,24 +224,26 @@ export default function WorkerLogsPage() {
                             </div>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-600">
+                        <td>
                           <div>
                             {log.message && (
                               <div className="mb-1">{log.message}</div>
                             )}
                             {log.error && (
-                              <div className="text-red-600 font-mono text-xs">
+                              <div className="text-error font-mono text-xs">
                                 {log.error}
                               </div>
                             )}
                             {log.details && Object.keys(log.details).length > 0 && (
-                              <details className="mt-1">
-                                <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
+                              <details className="collapse collapse-arrow bg-base-200 mt-1">
+                                <summary className="collapse-title text-xs min-h-0 py-2 cursor-pointer">
                                   View details
                                 </summary>
-                                <pre className="mt-2 text-xs bg-slate-50 p-2 rounded border border-slate-200 overflow-auto">
-                                  {JSON.stringify(log.details, null, 2)}
-                                </pre>
+                                <div className="collapse-content">
+                                  <pre className="text-xs bg-base-300 p-2 rounded overflow-auto">
+                                    {JSON.stringify(log.details, null, 2)}
+                                  </pre>
+                                </div>
                               </details>
                             )}
                           </div>
@@ -254,25 +256,27 @@ export default function WorkerLogsPage() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
-                  <div className="text-sm text-slate-600">
-                    Showing {page * limit + 1} to {Math.min((page + 1) * limit, total)} of {total} logs
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setPage((p) => Math.max(0, p - 1))}
-                      disabled={page === 0}
-                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                      disabled={page >= totalPages - 1}
-                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </button>
+                <div className="card-body border-t border-base-300">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm">
+                      Showing {page * limit + 1} to {Math.min((page + 1) * limit, total)} of {total} logs
+                    </div>
+                    <div className="join">
+                      <button
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        disabled={page === 0}
+                        className="join-item btn btn-sm"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                        disabled={page >= totalPages - 1}
+                        className="join-item btn btn-sm"
+                      >
+                        Next
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -280,7 +284,7 @@ export default function WorkerLogsPage() {
           )}
         </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }
 

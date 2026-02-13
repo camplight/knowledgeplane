@@ -3,7 +3,7 @@
 import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { Navigation } from "../components/Navigation";
+import { AppLayout } from "../components/AppLayout";
 
 export default function DataSourcesPage() {
   const router = useRouter();
@@ -365,9 +365,9 @@ export default function DataSourcesPage() {
 
   if (userLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <AppLayout>
         <div className="text-xl text-slate-600">Loading...</div>
-      </div>
+      </AppLayout>
     );
   }
 
@@ -380,12 +380,11 @@ export default function DataSourcesPage() {
   const totalPages = Math.ceil(total / limit);
 
   return (
-    <div className="min-h-screen bg-white">
-      <Navigation />
+    <AppLayout>
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-5">
-          <div className="bg-slate-900 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[300px]">
+        <div className="toast toast-top toast-end z-50">
+          <div className="alert alert-success">
             <svg
               className="w-5 h-5 flex-shrink-0"
               fill="none"
@@ -399,10 +398,10 @@ export default function DataSourcesPage() {
                 d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <span className="flex-1">{toastMessage}</span>
+            <span>{toastMessage}</span>
             <button
               onClick={() => setToastMessage(null)}
-              className="text-slate-400 hover:text-white"
+              className="btn btn-ghost btn-xs"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -413,44 +412,21 @@ export default function DataSourcesPage() {
       )}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-slate-900">Data Sources</h1>
-          <p className="text-slate-600 mt-2">Manage automated data sources that gather knowledge</p>
+          <h1 className="text-3xl font-bold">Data Sources</h1>
+          <p className="text-base-content/70 mt-2">Manage automated data sources that gather knowledge</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Data Sources List */}
           <div className="lg:col-span-1">
-            <div className="bg-white border border-slate-200 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-slate-900">Data Sources</h2>
-                <button
-                  onClick={() => {
-                    setIsCreating(true);
-                    setSelectedDataSourceId(null);
-                    setName("");
-                    setDescription("");
-                    setSchedule("every 6 hours");
-                    setEnabled(true);
-                    setDefinitionFile(null);
-                    setCreateSecrets({});
-                    setCreateSecretKey("");
-                    setCreateSecretValue("");
-                    if (fileInputRef.current) {
-                      fileInputRef.current.value = "";
-                    }
-                  }}
-                  className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  + New
-                </button>
-              </div>
-
-              {isCreating ? (
-                <div className="mb-4 p-3 bg-slate-50 rounded-lg">
-                  <p className="text-sm text-slate-600 mb-2">Creating new data source...</p>
+            <div className="card bg-base-100 shadow-xl border border-base-300">
+              <div className="card-body">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-semibold">Data Sources</h2>
                   <button
                     onClick={() => {
-                      setIsCreating(false);
+                      setIsCreating(true);
+                      setSelectedDataSourceId(null);
                       setName("");
                       setDescription("");
                       setSchedule("every 6 hours");
@@ -463,18 +439,59 @@ export default function DataSourcesPage() {
                         fileInputRef.current.value = "";
                       }
                     }}
-                    className="text-sm text-slate-600 hover:text-slate-900"
+                    className="btn btn-primary btn-sm gap-1"
                   >
-                    Cancel
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    New
                   </button>
+                </div>
+
+              {isCreating ? (
+                <div className="bg-base-200 rounded-lg p-4 mb-4 border border-base-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="loading loading-spinner loading-sm text-primary"></div>
+                      <p className="text-sm font-medium">Creating new data source...</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setIsCreating(false);
+                        setName("");
+                        setDescription("");
+                        setSchedule("every 6 hours");
+                        setEnabled(true);
+                        setDefinitionFile(null);
+                        setCreateSecrets({});
+                        setCreateSecretKey("");
+                        setCreateSecretValue("");
+                        if (fileInputRef.current) {
+                          fileInputRef.current.value = "";
+                        }
+                      }}
+                      className="btn btn-ghost btn-xs"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
               <div className="space-y-2">
                 {dataSourcesLoading ? (
-                  <div className="text-sm text-slate-500">Loading...</div>
+                  <div className="flex items-center gap-2 text-sm text-base-content/70 py-4">
+                    <span className="loading loading-spinner loading-sm"></span>
+                    Loading...
+                  </div>
                 ) : dataSources.length === 0 ? (
-                  <div className="text-sm text-slate-500">No data sources yet</div>
+                  <div className="text-center py-8">
+                    <svg className="w-12 h-12 text-base-content/20 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                    </svg>
+                    <p className="text-sm font-medium text-base-content/70">No data sources yet</p>
+                    <p className="text-xs text-base-content/50 mt-1">Click "+ New" to create your first data source</p>
+                  </div>
                 ) : (
                   dataSources.map((ds) => {
                     const isRunning = runningStatusData?.runningStatus[ds.id] || false;
@@ -486,17 +503,19 @@ export default function DataSourcesPage() {
                           setSelectedDataSourceId(ds.id);
                           setIsCreating(false);
                         }}
-                        className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                        className={`w-full text-left px-4 py-3 rounded-lg transition-all border ${
                           selectedDataSourceId === ds.id
-                            ? "bg-indigo-100 text-indigo-900 font-medium"
-                            : "hover:bg-slate-50"
+                            ? "bg-primary/10 border-primary/30 shadow-sm"
+                            : "border-transparent hover:bg-base-200 hover:border-base-300"
                         }`}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <div className="font-medium truncate">{ds.name}</div>
+                            <div className={`font-medium truncate ${selectedDataSourceId === ds.id ? "text-primary" : ""}`}>
+                              {ds.name}
+                            </div>
                             {isRunning && (
-                              <div className="flex items-center gap-1 text-blue-600 flex-shrink-0">
+                              <div className="badge badge-info badge-sm gap-1">
                                 <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
@@ -504,19 +523,24 @@ export default function DataSourcesPage() {
                               </div>
                             )}
                           </div>
-                          <div className={`w-2 h-2 rounded-full ${ds.enabled ? "bg-green-500" : "bg-slate-300"}`} />
+                          <div className={`badge badge-sm ${ds.enabled ? "badge-success" : "badge-ghost"}`}>
+                            {ds.enabled ? "Active" : "Inactive"}
+                          </div>
                         </div>
                         {ds.description && (
-                          <div className="text-xs text-slate-500 mt-1 line-clamp-1">{ds.description}</div>
+                          <div className="text-xs text-base-content/60 mb-2 line-clamp-2">{ds.description}</div>
                         )}
-                        <div className="flex items-center justify-between mt-1">
-                          <div className="text-xs text-slate-400">Schedule: {ds.schedule}</div>
-                          {isRunning && runningLog?.message && (
-                            <div className="text-xs text-blue-600 truncate ml-2 max-w-[200px]" title={runningLog.message}>
-                              {runningLog.message}
-                            </div>
-                          )}
+                        <div className="flex items-center gap-2 text-xs text-base-content/50">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>{ds.schedule}</span>
                         </div>
+                        {isRunning && runningLog?.message && (
+                          <div className="text-xs text-info mt-2 truncate" title={runningLog.message}>
+                            → {runningLog.message}
+                          </div>
+                        )}
                       </button>
                     );
                   })
@@ -529,181 +553,219 @@ export default function DataSourcesPage() {
                   <button
                     onClick={() => setPage(Math.max(0, page - 1))}
                     disabled={page === 0}
-                    className="px-3 py-1 text-sm border border-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn btn-sm btn-outline"
                   >
                     Previous
                   </button>
-                  <span className="text-sm text-slate-600">
+                  <span className="text-sm">
                     Page {page + 1} of {totalPages}
                   </span>
                   <button
                     onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
                     disabled={page >= totalPages - 1}
-                    className="px-3 py-1 text-sm border border-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn btn-sm btn-outline"
                   >
                     Next
                   </button>
                 </div>
               )}
+              </div>
             </div>
           </div>
 
           {/* Data Source Details */}
           <div className="lg:col-span-2">
             {isCreating ? (
-              <div className="bg-white border border-slate-200 rounded-lg p-6">
-                <h2 className="text-2xl font-bold text-slate-900 mb-6">Create Data Source</h2>
-                <form onSubmit={handleCreateDataSource} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Name *
+              <div className="card bg-base-100 shadow-xl border border-base-300">
+                <div className="card-body">
+                  <h2 className="text-2xl font-bold mb-2">Create Data Source</h2>
+                  <p className="text-sm text-base-content/60 mb-6">Configure your automated data source with schedule and secrets</p>
+
+                  <form onSubmit={handleCreateDataSource} className="space-y-6">
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text font-medium">Name <span className="text-error">*</span></span>
                     </label>
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                      className="input input-bordered w-full"
                       placeholder="My Data Source"
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Description
+
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text font-medium">Description</span>
                     </label>
                     <textarea
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                      className="textarea textarea-bordered"
                       rows={3}
                       placeholder="Describe what this data source does..."
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Schedule *
+
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text font-medium">Schedule <span className="text-error">*</span></span>
                     </label>
                     <input
                       type="text"
                       value={schedule}
                       onChange={(e) => setSchedule(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                      className="input input-bordered w-full"
                       placeholder="every 6 hours"
                       required
                     />
-                    <p className="mt-1 text-xs text-slate-500">
-                      Examples: "every 6 hours", "every 1 day", "0 */6 * * *" (cron)
-                    </p>
+                    <label className="label">
+                      <span className="label-text-alt text-base-content/60">Examples: "every 6 hours", "every 1 day", "0 */6 * * *" (cron)</span>
+                    </label>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Definition File * (.md, .txt, or .zip)
+
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text font-medium">Definition File <span className="text-error">*</span> <span className="text-xs text-base-content/60">(.md, .txt, or .zip)</span></span>
                     </label>
                     <input
                       ref={fileInputRef}
                       type="file"
                       accept=".md,.txt,.zip"
                       onChange={handleFileChange}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                      className="file-input file-input-bordered w-full"
                       required
                     />
                     {definitionFile && (
-                      <p className="mt-1 text-sm text-slate-600">Selected: {definitionFile.name}</p>
+                      <label className="label">
+                        <span className="label-text-alt text-success">✓ Selected: {definitionFile.name}</span>
+                      </label>
                     )}
-                    <p className="mt-1 text-xs text-slate-500">
-                      Upload a markdown file with instructions, or a zip file containing .md files and code files
-                    </p>
+                    <label className="label">
+                      <span className="label-text-alt text-base-content/60">Upload a markdown file with instructions, or a zip file containing .md files and code files</span>
+                    </label>
                   </div>
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="enabled"
-                      checked={enabled}
-                      onChange={(e) => setEnabled(e.target.checked)}
-                      className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                    />
-                    <label htmlFor="enabled" className="ml-2 text-sm text-slate-700">
-                      Enabled (run automatically)
+
+                  <div className="form-control">
+                    <label className="label cursor-pointer justify-start gap-3 p-4 bg-base-200 rounded-lg">
+                      <input
+                        type="checkbox"
+                        id="enabled"
+                        checked={enabled}
+                        onChange={(e) => setEnabled(e.target.checked)}
+                        className="checkbox checkbox-primary"
+                      />
+                      <div>
+                        <span className="label-text font-medium">Enabled (run automatically)</span>
+                        <p className="text-xs text-base-content/60 mt-1">Data source will run on the specified schedule</p>
+                      </div>
                     </label>
                   </div>
 
                   {/* Secrets Section */}
-                  <div className="border-t border-slate-200 pt-4">
-                    <h3 className="text-lg font-semibold text-slate-900 mb-4">Secrets</h3>
-                    
+                  <div className="divider my-6"></div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <svg className="w-5 h-5 text-base-content/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      <h3 className="text-lg font-semibold">Secrets</h3>
+                    </div>
+
                     {/* Existing Secrets */}
                     {Object.keys(createSecrets).length > 0 && (
-                      <div className="space-y-2 mb-4">
+                      <div className="space-y-2 mb-6">
                         {Object.entries(createSecrets).map(([key, value]) => (
                           <div
                             key={key}
-                            className="p-3 border border-slate-200 rounded-lg bg-slate-50 flex items-center justify-between"
+                            className="bg-base-200 rounded-lg p-3 border border-base-300"
                           >
-                            <div className="flex-1">
-                              <div className="text-sm font-medium text-slate-900">{key}</div>
-                              <div className="text-xs text-slate-500 font-mono mt-1">••••••••</div>
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="text-sm font-medium">{key}</div>
+                                <div className="text-xs text-base-content/50 font-mono mt-1">••••••••</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCreateSecret(key)}
+                                className="btn btn-ghost btn-xs btn-square text-error hover:bg-error/10"
+                                title="Remove"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveCreateSecret(key)}
-                              className="px-2 py-1 text-xs text-red-600 hover:text-red-900"
-                              title="Remove"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
                           </div>
                         ))}
                       </div>
                     )}
 
                     {/* Add New Secret Form */}
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          Key
-                        </label>
-                        <input
-                          type="text"
-                          value={createSecretKey}
-                          onChange={(e) => setCreateSecretKey(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                          placeholder="e.g., API_KEY"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          Value
-                        </label>
-                        <input
-                          type="password"
-                          value={createSecretValue}
-                          onChange={(e) => setCreateSecretValue(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                          placeholder="Enter secret value"
-                        />
+                    <div className="bg-base-200 rounded-lg p-4 border border-base-300">
+                      <p className="text-xs text-base-content/60 mb-3">Add secrets that will be available to your data source script (e.g., API keys, tokens)</p>
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div className="form-control">
+                          <label className="label py-1">
+                            <span className="label-text text-xs font-medium">Key</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={createSecretKey}
+                            onChange={(e) => setCreateSecretKey(e.target.value)}
+                            className="input input-bordered input-sm"
+                            placeholder="e.g., API_KEY"
+                          />
+                        </div>
+                        <div className="form-control">
+                          <label className="label py-1">
+                            <span className="label-text text-xs font-medium">Value</span>
+                          </label>
+                          <input
+                            type="password"
+                            value={createSecretValue}
+                            onChange={(e) => setCreateSecretValue(e.target.value)}
+                            className="input input-bordered input-sm"
+                            placeholder="Enter secret value"
+                          />
+                        </div>
                       </div>
                       <button
                         type="button"
                         onClick={handleAddCreateSecret}
-                        className="px-4 py-2 text-sm bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300"
+                        className="btn btn-sm btn-outline w-full"
                       >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
                         Add Secret
                       </button>
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">
-                      Add secrets that will be available to your data source script (e.g., API keys, tokens)
-                    </p>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="divider my-6"></div>
+
+                  <div className="flex gap-3">
                     <button
                       type="submit"
                       disabled={createDataSourceMutation.isPending}
-                      className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                      className="btn btn-primary flex-1"
                     >
-                      {createDataSourceMutation.isPending ? "Creating..." : "Create Data Source"}
+                      {createDataSourceMutation.isPending ? (
+                        <>
+                          <span className="loading loading-spinner loading-sm"></span>
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Create Data Source
+                        </>
+                      )}
                     </button>
                     <button
                       type="button"
@@ -721,190 +783,196 @@ export default function DataSourcesPage() {
                           fileInputRef.current.value = "";
                         }
                       }}
-                      className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300"
+                      className="btn btn-ghost"
                     >
                       Cancel
                     </button>
                   </div>
                 </form>
+                </div>
               </div>
             ) : selectedDataSourceId && dataSourceData ? (
-              <div className="bg-white border border-slate-200 rounded-lg p-6">
-                <div className="flex justify-between items-start mb-6">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <h2 className="text-2xl font-bold text-slate-900">{dataSourceData.name}</h2>
-                      {runningStatusData?.runningStatus[selectedDataSourceId!] && (
-                        <div className="flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium">
-                          <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                          <span>Running</span>
-                        </div>
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body">
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <h2 className="card-title text-2xl">{dataSourceData.name}</h2>
+                        {runningStatusData?.runningStatus[selectedDataSourceId!] && (
+                          <div className="badge badge-info gap-2">
+                            <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            <span>Running</span>
+                          </div>
+                        )}
+                      </div>
+                      {dataSourceData.description && (
+                        <p className="text-base-content/70 mt-1">{dataSourceData.description}</p>
+                      )}
+                      {runningStatusData?.runningStatus[selectedDataSourceId!] && runningStatusData?.runningLogs[selectedDataSourceId!]?.message && (
+                        <p className="text-sm text-info mt-2">
+                          {runningStatusData.runningLogs[selectedDataSourceId!]?.message}
+                        </p>
                       )}
                     </div>
-                    {dataSourceData.description && (
-                      <p className="text-slate-600 mt-1">{dataSourceData.description}</p>
-                    )}
-                    {runningStatusData?.runningStatus[selectedDataSourceId!] && runningStatusData?.runningLogs[selectedDataSourceId!]?.message && (
-                      <p className="text-sm text-blue-600 mt-2">
-                        {runningStatusData.runningLogs[selectedDataSourceId!]?.message}
-                      </p>
-                    )}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleTriggerDataSource}
+                        disabled={triggerDataSourceMutation.isPending}
+                        className="btn btn-primary btn-sm"
+                      >
+                        {triggerDataSourceMutation.isPending ? "Triggering..." : "Run Now"}
+                      </button>
+                      <button
+                        onClick={handleDeleteDataSource}
+                        disabled={deleteDataSourceMutation.isPending}
+                        className="btn btn-error btn-sm"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleTriggerDataSource}
-                      disabled={triggerDataSourceMutation.isPending}
-                      className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                    >
-                      {triggerDataSourceMutation.isPending ? "Triggering..." : "Run Now"}
-                    </button>
-                    <button
-                      onClick={handleDeleteDataSource}
-                      disabled={deleteDataSourceMutation.isPending}
-                      className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
 
                 <div className="space-y-4 mb-6">
                   <div className="flex items-center gap-4">
                     <div>
-                      <span className="text-sm text-slate-500">Status:</span>
-                      <span className={`ml-2 px-2 py-1 text-xs font-medium rounded ${
-                        dataSourceData.enabled ? "bg-green-100 text-green-800" : "bg-slate-100 text-slate-800"
+                      <span className="text-sm text-base-content/70">Status:</span>
+                      <span className={`ml-2 badge ${
+                        dataSourceData.enabled ? "badge-success" : "badge-ghost"
                       }`}>
                         {dataSourceData.enabled ? "Enabled" : "Disabled"}
                       </span>
                     </div>
                     <div>
-                      <span className="text-sm text-slate-500">Schedule:</span>
+                      <span className="text-sm text-base-content/70">Schedule:</span>
                       <span className="ml-2 text-sm font-medium">{dataSourceData.schedule}</span>
                     </div>
                   </div>
                   {dataSourceData.last_run_at && (
                     <div>
-                      <span className="text-sm text-slate-500">Last Run:</span>
+                      <span className="text-sm text-base-content/70">Last Run:</span>
                       <span className="ml-2 text-sm">{new Date(dataSourceData.last_run_at).toLocaleString()}</span>
                     </div>
                   )}
                   {dataSourceData.next_run_at && (
                     <div>
-                      <span className="text-sm text-slate-500">Next Run:</span>
+                      <span className="text-sm text-base-content/70">Next Run:</span>
                       <span className="ml-2 text-sm">{new Date(dataSourceData.next_run_at).toLocaleString()}</span>
                     </div>
                   )}
                 </div>
 
                 <form onSubmit={handleUpdateDataSource} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Name
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text">Name</span>
                     </label>
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                      className="input input-bordered w-full"
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Description
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text">Description</span>
                     </label>
                     <textarea
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                      className="textarea textarea-bordered"
                       rows={3}
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Schedule
+                  <div className="form-control">
+                    <label className="label">
+                      <span className="label-text">Schedule</span>
                     </label>
                     <input
                       type="text"
                       value={schedule}
                       onChange={(e) => setSchedule(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                      className="input input-bordered w-full"
                       required
                     />
-                    <p className="mt-1 text-xs text-slate-500">
-                      Examples: "every 6 hours", "every 1 day", "0 */6 * * *" (cron)
-                    </p>
+                    <label className="label">
+                      <span className="label-text-alt">Examples: "every 6 hours", "every 1 day", "0 */6 * * *" (cron)</span>
+                    </label>
                   </div>
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="update-enabled"
-                      checked={enabled}
-                      onChange={(e) => setEnabled(e.target.checked)}
-                      className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                    />
-                    <label htmlFor="update-enabled" className="ml-2 text-sm text-slate-700">
-                      Enabled (run automatically)
+                  <div className="form-control">
+                    <label className="label cursor-pointer justify-start gap-2">
+                      <input
+                        type="checkbox"
+                        id="update-enabled"
+                        checked={enabled}
+                        onChange={(e) => setEnabled(e.target.checked)}
+                        className="checkbox checkbox-primary"
+                      />
+                      <span className="label-text">Enabled (run automatically)</span>
                     </label>
                   </div>
                   {dataSourceData.definition_file && (
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Definition File
+                    <div className="form-control">
+                      <label className="label">
+                        <span className="label-text">Definition File</span>
                       </label>
-                      <div className="px-4 py-2 border border-slate-300 rounded-lg bg-slate-50">
-                        <p className="text-sm">{dataSourceData.definition_file.original_filename}</p>
-                        <p className="text-xs text-slate-500 mt-1">
-                          {(dataSourceData.definition_file.size / 1024).toFixed(2)} KB
-                        </p>
+                      <div className="card bg-base-200">
+                        <div className="card-body p-4">
+                          <p className="text-sm">{dataSourceData.definition_file.original_filename}</p>
+                          <p className="text-xs text-base-content/70 mt-1">
+                            {(dataSourceData.definition_file.size / 1024).toFixed(2)} KB
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
                   <button
                     type="submit"
                     disabled={updateDataSourceMutation.isPending}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                    className="btn btn-primary"
                   >
                     {updateDataSourceMutation.isPending ? "Saving..." : "Save Changes"}
                   </button>
                 </form>
 
                 {/* Secrets Management Section */}
-                <div className="mt-8 border-t border-slate-200 pt-6">
+                <div className="divider"></div>
+                <div className="mt-6">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-slate-900">Secrets</h3>
+                    <h3 className="text-lg font-semibold">Secrets</h3>
                   </div>
-                  
+
                   {/* Existing Secrets */}
                   {dataSourceData.secrets && Object.keys(dataSourceData.secrets).length > 0 ? (
                     <div className="space-y-3 mb-6">
                       {Object.entries(dataSourceData.secrets).map(([key, value]) => (
                         <div
                           key={key}
-                          className="p-4 border border-slate-200 rounded-lg bg-slate-50"
+                          className="card bg-base-200"
                         >
+                          <div className="card-body p-4">
                           {editingSecretKey === key ? (
                             <div className="space-y-3">
-                              <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                  Key
+                              <div className="form-control">
+                                <label className="label">
+                                  <span className="label-text">Key</span>
                                 </label>
-                                <div className="px-3 py-2 bg-slate-100 border border-slate-300 rounded-lg text-sm text-slate-600">
+                                <div className="input input-bordered bg-base-300">
                                   {key}
                                 </div>
                               </div>
-                              <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                  Value
+                              <div className="form-control">
+                                <label className="label">
+                                  <span className="label-text">Value</span>
                                 </label>
                                 <input
                                   type="password"
                                   value={editingSecretValue}
                                   onChange={(e) => setEditingSecretValue(e.target.value)}
-                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                                  className="input input-bordered input-sm"
                                   placeholder="Enter secret value"
                                 />
                               </div>
@@ -912,7 +980,7 @@ export default function DataSourcesPage() {
                                 <button
                                   onClick={() => handleUpdateSecret(key)}
                                   disabled={updateSecretMutation.isPending}
-                                  className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                                  className="btn btn-primary btn-sm"
                                 >
                                   {updateSecretMutation.isPending ? "Saving..." : "Save"}
                                 </button>
@@ -921,7 +989,7 @@ export default function DataSourcesPage() {
                                     setEditingSecretKey(null);
                                     setEditingSecretValue("");
                                   }}
-                                  className="px-3 py-1 text-sm bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300"
+                                  className="btn btn-ghost btn-sm"
                                 >
                                   Cancel
                                 </button>
@@ -930,19 +998,19 @@ export default function DataSourcesPage() {
                           ) : (
                             <div className="flex items-center justify-between">
                               <div className="flex-1">
-                                <div className="text-sm font-medium text-slate-900 mb-1">{key}</div>
-                                <div className="text-sm text-slate-600 font-mono">
+                                <div className="text-sm font-medium mb-1">{key}</div>
+                                <div className="text-sm font-mono">
                                   {visibleSecrets.has(key) ? (
                                     <span>{value}</span>
                                   ) : (
-                                    <span className="text-slate-400">••••••••</span>
+                                    <span className="text-base-content/50">••••••••</span>
                                   )}
                                 </div>
                               </div>
                               <div className="flex gap-2">
                                 <button
                                   onClick={() => toggleSecretVisibility(key)}
-                                  className="px-2 py-1 text-xs text-slate-600 hover:text-slate-900"
+                                  className="btn btn-ghost btn-sm btn-square"
                                   title={visibleSecrets.has(key) ? "Hide" : "Show"}
                                 >
                                   {visibleSecrets.has(key) ? (
@@ -961,7 +1029,7 @@ export default function DataSourcesPage() {
                                     setEditingSecretKey(key);
                                     setEditingSecretValue(value);
                                   }}
-                                  className="px-2 py-1 text-xs text-indigo-600 hover:text-indigo-900"
+                                  className="btn btn-ghost btn-sm btn-square text-primary"
                                   title="Edit"
                                 >
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -971,7 +1039,7 @@ export default function DataSourcesPage() {
                                 <button
                                   onClick={() => handleDeleteSecret(key)}
                                   disabled={deleteSecretMutation.isPending}
-                                  className="px-2 py-1 text-xs text-red-600 hover:text-red-900"
+                                  className="btn btn-ghost btn-sm btn-square text-error"
                                   title="Delete"
                                 >
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -981,39 +1049,41 @@ export default function DataSourcesPage() {
                               </div>
                             </div>
                           )}
+                          </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-sm text-slate-500 mb-6">No secrets configured</div>
+                    <div className="text-sm text-base-content/70 mb-6">No secrets configured</div>
                   )}
 
                   {/* Add New Secret Form */}
-                  <div className="border-t border-slate-200 pt-4">
-                    <h4 className="text-sm font-semibold text-slate-900 mb-3">Add New Secret</h4>
+                  <div className="divider"></div>
+                  <div>
+                    <h4 className="text-sm font-semibold mb-3">Add New Secret</h4>
                     <form onSubmit={handleAddSecret} className="space-y-3">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          Key
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Key</span>
                         </label>
                         <input
                           type="text"
                           value={newSecretKey}
                           onChange={(e) => setNewSecretKey(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                          className="input input-bordered input-sm"
                           placeholder="e.g., API_KEY"
                           required
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          Value
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Value</span>
                         </label>
                         <input
                           type="password"
                           value={newSecretValue}
                           onChange={(e) => setNewSecretValue(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                          className="input input-bordered input-sm"
                           placeholder="Enter secret value"
                           required
                         />
@@ -1021,7 +1091,7 @@ export default function DataSourcesPage() {
                       <button
                         type="submit"
                         disabled={addSecretMutation.isPending}
-                        className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                        className="btn btn-primary btn-sm"
                       >
                         {addSecretMutation.isPending ? "Adding..." : "Add Secret"}
                       </button>
@@ -1030,92 +1100,97 @@ export default function DataSourcesPage() {
                 </div>
 
                 {/* Execution Logs Section */}
-                <div className="mt-8 border-t border-slate-200 pt-6">
+                <div className="divider"></div>
+                <div className="mt-6">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-slate-900">Execution Logs</h3>
+                    <h3 className="text-lg font-semibold">Execution Logs</h3>
                     <button
                       onClick={() => refetchLogs()}
-                      className="text-sm text-slate-600 hover:text-slate-900"
+                      className="btn btn-ghost btn-sm"
                     >
                       Refresh
                     </button>
                   </div>
-                  
+
                   {logsLoading ? (
-                    <div className="text-sm text-slate-500 py-4">Loading logs...</div>
+                    <div className="text-sm text-base-content/70 py-4">Loading logs...</div>
                   ) : !logsData || logsData.logs.length === 0 ? (
-                    <div className="text-sm text-slate-500 py-4">No execution logs yet</div>
+                    <div className="text-sm text-base-content/70 py-4">No execution logs yet</div>
                   ) : (
                     <>
                       <div className="space-y-3">
                         {logsData.logs.map((log) => (
                           <div
                             key={log.id}
-                            className={`p-4 rounded-lg border ${
+                            className={`card ${
                               log.status === "success"
-                                ? "bg-green-50 border-green-200"
+                                ? "bg-success/10"
                                 : log.status === "error"
-                                ? "bg-red-50 border-red-200"
+                                ? "bg-error/10"
                                 : log.status === "running"
-                                ? "bg-blue-50 border-blue-200"
-                                : "bg-slate-50 border-slate-200"
+                                ? "bg-info/10"
+                                : "bg-base-200"
                             }`}
                           >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span
-                                    className={`px-2 py-1 text-xs font-medium rounded ${
-                                      log.status === "success"
-                                        ? "bg-green-100 text-green-800"
-                                        : log.status === "error"
-                                        ? "bg-red-100 text-red-800"
-                                        : log.status === "running"
-                                        ? "bg-blue-100 text-blue-800"
-                                        : "bg-slate-100 text-slate-800"
-                                    }`}
-                                  >
-                                    {log.status.toUpperCase()}
-                                  </span>
-                                  <span className="text-xs text-slate-500">
-                                    {log.status === "running" 
-                                      ? new Date(log.created_at).toLocaleString()
-                                      : (log.updated_at 
-                                          ? new Date(log.updated_at).toLocaleString()
-                                          : new Date(log.created_at).toLocaleString())}
-                                  </span>
-                                </div>
-                                {log.message && (
-                                  <p className="text-sm text-slate-900 mb-1">{log.message}</p>
-                                )}
-                                {log.error && (
-                                  <p className="text-sm text-red-600 mt-1 font-mono text-xs">
-                                    {log.error}
-                                  </p>
-                                )}
-                                {log.details?.progress && Array.isArray(log.details.progress) && log.details.progress.length > 0 && (
-                                  <div className="mt-3 pt-3 border-t border-slate-200">
-                                    <p className="text-xs font-medium text-slate-700 mb-2">Progress:</p>
-                                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                                      {log.details.progress.map((entry: any, idx: number) => (
-                                        <div key={idx} className="text-xs text-slate-600 pl-3 border-l-2 border-slate-300">
-                                          <div className="flex items-start gap-2">
-                                            <span className="text-slate-400 font-mono text-[10px] mt-0.5">
-                                              {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : ''}
-                                            </span>
-                                            <span className="flex-1">{entry.message}</span>
-                                          </div>
-                                          {entry.metadata && Object.keys(entry.metadata).length > 0 && (
-                                            <div className="mt-1 ml-5 text-[10px] text-slate-500 font-mono">
-                                              {JSON.stringify(entry.metadata, null, 2)}
-                                            </div>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
+                            <div className="card-body p-4">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span
+                                      className={`badge badge-sm ${
+                                        log.status === "success"
+                                          ? "badge-success"
+                                          : log.status === "error"
+                                          ? "badge-error"
+                                          : log.status === "running"
+                                          ? "badge-info"
+                                          : "badge-ghost"
+                                      }`}
+                                    >
+                                      {log.status.toUpperCase()}
+                                    </span>
+                                    <span className="text-xs text-base-content/70">
+                                      {log.status === "running"
+                                        ? new Date(log.created_at).toLocaleString()
+                                        : (log.updated_at
+                                            ? new Date(log.updated_at).toLocaleString()
+                                            : new Date(log.created_at).toLocaleString())}
+                                    </span>
                                   </div>
+                                  {log.message && (
+                                    <p className="text-sm mb-1">{log.message}</p>
+                                  )}
+                                  {log.error && (
+                                    <p className="text-sm text-error mt-1 font-mono text-xs">
+                                      {log.error}
+                                    </p>
+                                  )}
+                                {log.details?.progress && Array.isArray(log.details.progress) && log.details.progress.length > 0 && (
+                                  <>
+                                    <div className="mt-3 pt-3 divider"></div>
+                                    <div>
+                                      <p className="text-xs font-medium mb-2">Progress:</p>
+                                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                                        {log.details.progress.map((entry: any, idx: number) => (
+                                          <div key={idx} className="text-xs pl-3 border-l-2 border-base-300">
+                                            <div className="flex items-start gap-2">
+                                              <span className="text-base-content/50 font-mono text-[10px] mt-1">
+                                                {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : ''}
+                                              </span>
+                                              <span className="flex-1">{entry.message}</span>
+                                            </div>
+                                            {entry.metadata && Object.keys(entry.metadata).length > 0 && (
+                                              <div className="mt-1 ml-5 text-[10px] text-base-content/70 font-mono">
+                                                {JSON.stringify(entry.metadata, null, 2)}
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </>
                                 )}
-                                <div className="flex gap-4 mt-2 text-xs text-slate-500">
+                                <div className="flex gap-4 mt-2 text-xs text-base-content/70">
                                   {log.execution_time_ms !== null && log.execution_time_ms !== undefined && (
                                     <span>Duration: {(log.execution_time_ms / 1000).toFixed(2)}s</span>
                                   )}
@@ -1125,27 +1200,28 @@ export default function DataSourcesPage() {
                                 </div>
                               </div>
                             </div>
+                            </div>
                           </div>
                         ))}
                       </div>
-                      
+
                       {/* Logs Pagination */}
                       {logsData.total > logsLimit && (
                         <div className="mt-4 flex items-center justify-between">
                           <button
                             onClick={() => setLogsPage(Math.max(0, logsPage - 1))}
                             disabled={logsPage === 0}
-                            className="px-3 py-1 text-sm border border-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                            className="btn btn-sm btn-outline"
                           >
                             Previous
                           </button>
-                          <span className="text-sm text-slate-600">
+                          <span className="text-sm">
                             Page {logsPage + 1} of {Math.ceil(logsData.total / logsLimit)}
                           </span>
                           <button
                             onClick={() => setLogsPage(Math.min(Math.ceil(logsData.total / logsLimit) - 1, logsPage + 1))}
                             disabled={logsPage >= Math.ceil(logsData.total / logsLimit) - 1}
-                            className="px-3 py-1 text-sm border border-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                            className="btn btn-sm btn-outline"
                           >
                             Next
                           </button>
@@ -1154,16 +1230,19 @@ export default function DataSourcesPage() {
                     </>
                   )}
                 </div>
+                </div>
               </div>
             ) : (
-              <div className="bg-white border border-slate-200 rounded-lg p-12 text-center">
-                <p className="text-slate-500">Select a data source to view details or create a new one</p>
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body p-12 text-center">
+                  <p className="text-base-content/70">Select a data source to view details or create a new one</p>
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }
 
