@@ -82,15 +82,15 @@ export function RelationEditForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-2">
-      <div>
-        <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
+      <div className="form-control">
+        <label className="label py-0">
+          <span className="label-text text-xs font-medium">Type</span>
+        </label>
         <select
           name="type"
           value={selectedType}
           onChange={(e) => setSelectedType(e.target.value)}
-          className={`w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-2 ${
-            isOutgoing ? "focus:ring-blue-500" : "focus:ring-green-500"
-          } bg-white`}
+          className="select select-bordered select-xs w-full"
           required
         >
           {RELATION_TYPES.map((type) => (
@@ -101,17 +101,17 @@ export function RelationEditForm({
         </select>
       </div>
       {allAvailableFacts.length > 0 ? (
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">
-            {variant === "outgoing" ? "To Fact" : "From Fact"}
+        <div className="form-control">
+          <label className="label py-0">
+            <span className="label-text text-xs font-medium">
+              {variant === "outgoing" ? "To Fact" : "From Fact"}
+            </span>
           </label>
           <select
             name="factId"
             value={selectedFactId}
             onChange={(e) => setSelectedFactId(e.target.value)}
-            className={`w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-2 ${
-              isOutgoing ? "focus:ring-blue-500" : "focus:ring-green-500"
-            } bg-white`}
+            className="select select-bordered select-xs w-full"
             required
           >
             {allAvailableFacts.map((fact) => {
@@ -124,7 +124,7 @@ export function RelationEditForm({
               } else {
                 contentStr = JSON.stringify(fact.content || "");
               }
-              const displayText = contentStr 
+              const displayText = contentStr
                 ? `${contentStr.substring(0, 50)}${contentStr.length > 50 ? "..." : ""}`
                 : `Fact ${fact.id.substring(0, 30)}${fact.id.length > 30 ? "..." : ""}`;
               return (
@@ -143,18 +143,14 @@ export function RelationEditForm({
         <button
           type="submit"
           disabled={isPending}
-          className={`flex-1 px-2 py-1 text-xs text-white rounded disabled:opacity-50 ${
-            isOutgoing
-              ? "bg-blue-600 hover:bg-blue-700"
-              : "bg-green-600 hover:bg-green-700"
-          }`}
+          className={`btn btn-xs flex-1 ${isOutgoing ? "btn-primary" : "btn-accent"}`}
         >
           Save
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded hover:bg-slate-300"
+          className="btn btn-ghost btn-xs"
         >
           Cancel
         </button>
@@ -162,7 +158,7 @@ export function RelationEditForm({
           type="button"
           onClick={onDelete}
           disabled={isDeleting}
-          className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+          className="btn btn-error btn-xs"
         >
           Delete
         </button>
