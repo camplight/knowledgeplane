@@ -91,7 +91,7 @@ export function RelationItem({
     : "";
 
   return (
-    <div className="text-xs p-2 bg-slate-50 rounded border border-slate-200">
+    <div className="text-xs p-2 bg-base-200 rounded border border-base-300">
       {isEditing ? (
         <RelationEditForm
           relationId={relation.relation.id || (relation.relation._key ? `fact_relations/${relation.relation._key}` : "")}
@@ -110,35 +110,35 @@ export function RelationItem({
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <span className={`font-medium ${isOutgoing ? "text-blue-600" : "text-green-600"}`}>
+                <span className={`badge badge-sm ${isOutgoing ? "badge-primary" : "badge-accent"}`}>
                   {relation.relation.type}
                 </span>
-                <span className="text-slate-400">→</span>
+                <span className="text-base-content/40">→</span>
               </div>
               <button
                 onClick={() => factId && onSelectFact(factId)}
-                className={`block text-slate-700 mt-1 text-left hover:underline transition-colors cursor-pointer w-full ${
-                  isOutgoing ? "hover:text-blue-600" : "hover:text-green-600"
+                className={`btn btn-ghost btn-xs justify-start h-auto py-1 px-0 min-h-0 text-left normal-case font-normal w-full ${
+                  isOutgoing ? "hover:text-primary" : "hover:text-accent"
                 }`}
                 title={factId ? `Click to select fact ${factId}` : "Fact ID unavailable"}
               >
                 <span className="font-medium">{previewText}</span>
                 {factIdDisplay && (
-                  <span className="ml-2 text-slate-400 text-[10px]">({factIdDisplay})</span>
+                  <span className="ml-2 text-base-content/40 text-[10px]">({factIdDisplay})</span>
                 )}
               </button>
             </div>
             <div className="flex gap-1 ml-2">
               <button
                 onClick={onEdit}
-                className="text-xs px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded hover:bg-slate-300"
+                className="btn btn-ghost btn-xs"
                 title="Edit"
               >
                 ✏️
               </button>
               <button
                 onClick={onDelete}
-                className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                className="btn btn-error btn-xs"
                 title="Delete"
               >
                 🗑️
