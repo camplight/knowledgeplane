@@ -130,14 +130,6 @@ export function Sidebar() {
       <div className="mt-auto border-t border-base-300">
         {!isCollapsed ? (
           <div className="p-3">
-            {/* Divider with label */}
-            <div className="mb-3">
-              <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-              <p className="text-xs text-center text-base-content/40 mt-2 font-mono">
-                Digital Archive
-              </p>
-            </div>
-
             {/* Profile Info */}
             <div className="flex items-center gap-3 p-3 rounded-lg bg-base-200/50 mb-2">
               <img
