@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # Phase 1: Validation run (n=20, quick smoke test)
+  # ALWAYS RUN THIS FIRST to verify setup
+  benchmark-validation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kp-benchmarks:latest
+    container_name: kp-bench-validation
+    volumes:
+      - ./output:/app/output
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: python3 bench_hotpotqa.py --n 20 --run_kp true --run_vector false --mode cached
+    profiles:
+      - validation
+
+  # Phase 2: Full run (n=500, both systems)
+  # ONLY RUN AFTER validation passes
+  benchmark-full:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kp-benchmarks:latest
+    container_name: kp-bench-full
+    volumes:
+      - ./output:/app/output
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: python3 bench_hotpotqa.py --n 500 --run_kp true --run_vector true --mode timestamped
+    profiles:
+      - full
+
+  # MS MARCO benchmark (optional)
+  benchmark-msmarco:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kp-benchmarks:latest
+    container_name: kp-bench-msmarco
+    volumes:
+      - ./output:/app/output
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: python3 bench_msmarco.py --n 100 --k 10 --run_kp true --run_vector true
+    profiles:
+      - msmarco
+
+  # Complete suite (all benchmarks)
+  benchmark-all:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kp-benchmarks:latest
+    container_name: kp-bench-all
+    volumes:
+      - ./output:/app/output
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: python3 run_all.py --n-hotpot 500 --run_kp --run_vector --freshness-mode skip
+    profiles:
+      - all
+
+  # Mock mode (for testing without KP server)
+  benchmark-mock:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kp-benchmarks:latest
+    container_name: kp-bench-mock
+    volumes:
+      - ./output:/app/output
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python3 bench_hotpotqa.py --n 20 --mock_kp --run_vector false

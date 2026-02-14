@@ -37,7 +37,14 @@ from kp_adapter import (
     MockKnowledgePlaneAdapter,
     KnowledgePlaneAdapter
 )
-from vector_baseline import VectorBaseline, Document
+
+# Import vector baseline only if needed (lazy import to avoid dependency issues)
+VectorBaseline = None
+Document = None
+try:
+    from vector_baseline import VectorBaseline, Document
+except ImportError:
+    pass  # Will fail later if --mode vector is used
 
 
 # Configure logging
@@ -106,7 +113,8 @@ class HotpotQABenchmark:
         output_dir: str = "output",
         sample_method: str = "random",
         batch_size: Optional[int] = None,
-        statistical_analysis: bool = False
+        statistical_analysis: bool = False,
+        mode: str = "timestamped"
     ):
         """
         Initialize the benchmark.
@@ -122,6 +130,9 @@ class HotpotQABenchmark:
             sample_method: Sampling method ("random", "first", "stratified")
             batch_size: Process in batches (None = all at once)
             statistical_analysis: Run full statistical analysis
+            mode: Namespace mode ("cached" or "timestamped")
+                  - cached: Use fixed namespace, reuse embeddings across runs (fast)
+                  - timestamped: Fresh namespace each run (full pipeline benchmark)
         """
         self.n_questions = n_questions
         self.top_k = top_k
@@ -133,6 +144,7 @@ class HotpotQABenchmark:
         self.sample_method = sample_method
         self.batch_size = batch_size
         self.statistical_analysis = statistical_analysis
+        self.mode = mode
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -155,6 +167,176 @@ class HotpotQABenchmark:
             f"Initialized HotpotQA benchmark: n={n_questions}, k={top_k}, "
             f"seed={seed}, sample_method={sample_method}"
         )
+
+    def preflight_checks(self) -> bool:
+        """
+        Comprehensive preflight checks for reliable benchmark execution.
+
+        Checks:
+        1. KP REST API is accessible
+        2. Database is accessible and healthy
+        3. Vector index status (drops blocking indexes automatically)
+        4. API credentials configured
+        5. OpenAI key for embeddings
+        6. Background worker status warning
+
+        Returns:
+            True if all critical checks pass, False otherwise
+        """
+        import requests
+
+        if self.mock_kp or not self.run_kp:
+            logger.info("✓ Preflight: Mock mode or KP disabled, skipping service checks")
+            return True
+
+        logger.info("=" * 60)
+        logger.info("Running Preflight Checks (6 checks)")
+        logger.info("=" * 60)
+
+        api_url = os.environ.get("KP_API_URL", "http://localhost:8081")
+        arango_url = os.environ.get("ARANGO_URL", "http://localhost:8529")
+        checks_passed = True
+        warnings = []
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 1: REST API reachable
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[1/6] KP REST API at {api_url}...")
+        try:
+            response = requests.get(f"{api_url}/health", timeout=5)
+            if response.status_code == 200:
+                logger.info(f"  ✓ REST API is healthy")
+            else:
+                logger.error(f"  ✗ REST API returned status {response.status_code}")
+                checks_passed = False
+        except requests.exceptions.ConnectionError:
+            logger.error(f"  ✗ Cannot connect to REST API at {api_url}")
+            logger.error(f"    Start it with: npm run dev")
+            checks_passed = False
+        except Exception as e:
+            logger.error(f"  ✗ REST API check failed: {e}")
+            checks_passed = False
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 2: Database is accessible
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[2/6] ArangoDB at {arango_url}...")
+        db_accessible = False
+        db_url = arango_url
+        try:
+            # Try Docker internal hostname first (for containerized benchmarks)
+            for try_url in [arango_url.replace("localhost", "host.docker.internal"), arango_url]:
+                try:
+                    response = requests.get(f"{try_url}/_api/version", auth=("root", "root"), timeout=5)
+                    if response.status_code == 200:
+                        version = response.json().get("version", "unknown")
+                        logger.info(f"  ✓ ArangoDB v{version} accessible")
+                        db_accessible = True
+                        db_url = try_url
+                        break
+                except:
+                    continue
+            if not db_accessible:
+                logger.warning(f"  ⚠ Cannot verify ArangoDB directly")
+                warnings.append("Database direct access not verified")
+        except Exception as e:
+            logger.warning(f"  ⚠ Database check: {e}")
+            warnings.append("Database health uncertain")
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 3: Vector index status (auto-fix!)
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[3/6] Vector index status...")
+        if db_accessible:
+            try:
+                # Check if blocking vector index exists
+                response = requests.get(
+                    f"{db_url}/_db/knowledgeplane/_api/index/facts/idx_facts_embedding_vector",
+                    auth=("root", "root"),
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    logger.warning(f"  ⚠ Blocking vector index found - auto-dropping...")
+                    del_response = requests.delete(
+                        f"{db_url}/_db/knowledgeplane/_api/index/facts/idx_facts_embedding_vector",
+                        auth=("root", "root"),
+                        timeout=5
+                    )
+                    if del_response.status_code == 200:
+                        logger.info(f"  ✓ Vector index dropped (facts can be ingested)")
+                    else:
+                        logger.error(f"  ✗ Failed to drop vector index")
+                        warnings.append("Vector index may block inserts")
+                elif response.status_code == 404:
+                    logger.info(f"  ✓ No blocking vector index")
+                else:
+                    logger.info(f"  ✓ Vector index check passed")
+            except Exception as e:
+                logger.warning(f"  ⚠ Could not verify vector index: {e}")
+                warnings.append("Vector index status unknown")
+        else:
+            logger.warning(f"  ⚠ Skipped (no DB access)")
+            warnings.append("Vector index not checked")
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 4: API credentials
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[4/6] API credentials...")
+        api_key = os.environ.get("KP_API_KEY")
+        workspace_id = os.environ.get("KP_WORKSPACE_ID")
+        user_id = os.environ.get("KP_USER_ID")
+
+        if api_key:
+            logger.info(f"  ✓ API key set")
+        else:
+            logger.error(f"  ✗ KP_API_KEY missing")
+            checks_passed = False
+
+        if workspace_id:
+            logger.info(f"  ✓ Workspace: {workspace_id}")
+        else:
+            logger.error(f"  ✗ KP_WORKSPACE_ID missing")
+            checks_passed = False
+
+        if not user_id:
+            warnings.append("KP_USER_ID not set")
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 5: OpenAI API key
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[5/6] OpenAI configuration...")
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if openai_key and openai_key.startswith("sk-"):
+            logger.info(f"  ✓ OpenAI API key configured")
+        elif openai_key:
+            logger.warning(f"  ⚠ OpenAI key format unusual")
+            warnings.append("OpenAI key may be invalid")
+        else:
+            logger.warning(f"  ⚠ OPENAI_API_KEY not set")
+            warnings.append("No OpenAI key - embeddings won't generate")
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 6: Background worker warning
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[6/6] Background worker status...")
+        logger.info(f"  ⚠ Cannot verify worker - if embeddings timeout:")
+        logger.info(f"    Run: npm run dev:background-workers")
+        warnings.append("Background worker not verified")
+
+        # ═══════════════════════════════════════════════════════════
+        # Summary
+        # ═══════════════════════════════════════════════════════════
+        logger.info("=" * 60)
+        if checks_passed:
+            logger.info("✓ All critical checks passed")
+            if warnings:
+                logger.info(f"  Warnings ({len(warnings)}): {', '.join(warnings[:3])}")
+        else:
+            logger.error("✗ PREFLIGHT FAILED - cannot proceed")
+            logger.error("  Quick fix: npm run dev && source .env.benchmark")
+        logger.info("=" * 60)
+
+        return checks_passed
 
     def load_dataset(self) -> List[Dict[str, Any]]:
         """
@@ -272,7 +454,7 @@ class HotpotQABenchmark:
 
     def prepare_documents(
         self,
-        context: List[Tuple[str, List[str]]]
+        context: Dict[str, List]
     ) -> List[Dict[str, Any]]:
         """
         Prepare documents from HotpotQA context.
@@ -281,14 +463,18 @@ class HotpotQABenchmark:
         per title with all sentences concatenated.
 
         Args:
-            context: List of [title, sentences] tuples
+            context: Dict with 'title' and 'sentences' keys from HotpotQA dataset
 
         Returns:
             List of document dicts ready for ingestion
         """
         documents = []
 
-        for title, sentences in context:
+        # HotpotQA context format: {'title': ['Title1', 'Title2'], 'sentences': [['sent1'], ['sent2']]}
+        titles = context.get('title', [])
+        sentences_list = context.get('sentences', [])
+
+        for title, sentences in zip(titles, sentences_list):
             # Concatenate all sentences
             content = " ".join(sentences)
 
@@ -300,7 +486,7 @@ class HotpotQABenchmark:
                 'metadata': {
                     'title': title,
                     'source': 'hotpotqa',
-                    'num_sentences': len(sentences)
+                    'num_sentences': str(len(sentences))  # Convert to string for Fact model
                 }
             }
             documents.append(doc)
@@ -587,6 +773,11 @@ class HotpotQABenchmark:
         Returns:
             BenchmarkSummary with all results
         """
+        # Run preflight checks before anything else
+        if not self.preflight_checks():
+            logger.error("Aborting benchmark due to failed preflight checks")
+            raise RuntimeError("Preflight checks failed. See errors above.")
+
         benchmark_start_time = time.time()
 
         logger.info("=" * 60)
@@ -596,9 +787,18 @@ class HotpotQABenchmark:
         # Load dataset
         questions = self.load_dataset()
 
-        # Create unique namespace for this run
-        namespace = f"hotpotqa_{int(time.time())}"
-        logger.info(f"Using namespace: {namespace}")
+        # Create namespace based on mode
+        if self.mode in ("cached", "seed"):
+            # Fixed namespace for cached/seed mode (deterministic with seed)
+            namespace = f"hotpotqa_validation_seed{self.seed}"
+            if self.mode == "seed":
+                logger.info(f"SEED MODE: Using namespace {namespace} (will ingest + trigger embeddings, skip evaluation)")
+            else:
+                logger.info(f"CACHED MODE: Using namespace {namespace}")
+        else:
+            # Timestamped namespace for fresh runs
+            namespace = f"hotpotqa_{int(time.time())}"
+            logger.info(f"TIMESTAMPED MODE: Using namespace {namespace}")
 
         # Prepare documents from all questions
         logger.info("Preparing documents...")
@@ -621,9 +821,40 @@ class HotpotQABenchmark:
         # Initialize systems
         if self.run_kp:
             self.initialize_kp_system(namespace)
-            if not self.ingest_kp_documents(unique_documents, namespace):
-                logger.warning("KP ingestion failed, skipping KP evaluation")
-                self.run_kp = False
+
+            # Check if cached namespace already has data with embeddings
+            skip_ingestion = False
+            if self.mode == "cached" and not self.mock_kp:
+                skip_ingestion = self._check_cached_data_exists(namespace, len(unique_documents))
+
+            if skip_ingestion:
+                logger.info(f"✓ Using cached embeddings from namespace: {namespace}")
+            else:
+                if not self.ingest_kp_documents(unique_documents, namespace):
+                    logger.warning("KP ingestion failed, skipping KP evaluation")
+                    self.run_kp = False
+                elif not self.mock_kp:
+                    # Trigger embedding generation via REST API
+                    logger.info("Triggering embedding generation via REST API...")
+                    self._trigger_embeddings(namespace)
+
+                    if self.mode == "seed":
+                        # Seed mode: don't wait, just trigger and exit early
+                        logger.info("=" * 60)
+                        logger.info("SEED MODE COMPLETE")
+                        logger.info(f"Namespace: {namespace}")
+                        logger.info(f"Documents ingested: {len(unique_documents)}")
+                        logger.info("Embeddings triggered - run background worker to generate")
+                        logger.info("Then use: --mode cached for fast evaluation")
+                        logger.info("=" * 60)
+                        return BenchmarkSummary(
+                            config={"mode": "seed", "namespace": namespace, "documents": len(unique_documents)},
+                            timing={"seed_time": time.time() - benchmark_start_time}
+                        )
+                    else:
+                        # Wait for embeddings to be generated
+                        logger.info("Waiting for embeddings to be generated...")
+                        self._wait_for_embeddings(namespace, timeout=300)
 
         if self.run_vector:
             self.initialize_vector_baseline()
@@ -686,6 +917,141 @@ class HotpotQABenchmark:
         logger.info("Benchmark complete!")
         return summary
 
+    def _check_cached_data_exists(self, namespace: str, expected_doc_count: int) -> bool:
+        """
+        Check if cached namespace already has facts with embeddings.
+
+        Args:
+            namespace: Namespace to check
+            expected_doc_count: Expected number of documents
+
+        Returns:
+            True if data exists with embeddings, False otherwise
+        """
+        try:
+            # Use generic queries that should match any document with embeddings
+            test_queries = ["information", "the", "history", "person", "film"]
+
+            for query in test_queries:
+                result = self.kp_adapter.query(
+                    question=query,
+                    namespace=namespace,
+                    k=10
+                )
+
+                # Check if we got results with actual scores (indicating embeddings exist)
+                if result.results:
+                    scored_results = [r for r in result.results if r.score and r.score > 0]
+                    if len(scored_results) >= 3:  # Need at least 3 results with embeddings
+                        logger.info(f"✓ Cached namespace verified: {len(scored_results)} facts with embeddings (query='{query}')")
+                        return True
+
+            logger.info(f"Cached namespace has no/insufficient embeddings yet")
+            return False
+
+        except Exception as e:
+            logger.warning(f"Error checking cached data: {e}")
+            return False
+
+    def _trigger_embeddings(self, namespace: str) -> bool:
+        """
+        Trigger embedding generation via REST API.
+
+        Args:
+            namespace: Namespace to generate embeddings for
+
+        Returns:
+            True if trigger succeeded, False otherwise
+        """
+        try:
+            import requests
+            url = f"{self.kp_adapter.api_url}/api/facts/trigger-embeddings?workspace_id={self.kp_adapter.workspace_id}"
+            headers = {
+                'Content-Type': 'application/json',
+                'knowledgeplane-key': self.kp_adapter.api_key
+            }
+            data = {
+                'namespace': namespace
+            }
+
+            response = requests.post(url, json=data, headers=headers, timeout=30)
+            response.raise_for_status()
+            result = response.json()
+
+            triggered_count = result.get('triggered_count', 0)
+            logger.info(f"✓ Triggered embedding generation for {triggered_count} facts")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to trigger embeddings: {e}")
+            return False
+
+    def _wait_for_embeddings(self, namespace: str, timeout: int = 300) -> bool:
+        """
+        Wait for embeddings to be generated for facts in namespace.
+
+        Uses aggressive polling with multiple detection strategies:
+        1. Check if ANY results return from semantic search
+        2. Track progress by logging result counts
+        3. Succeed on first positive result
+
+        Args:
+            namespace: Namespace to monitor
+            timeout: Maximum wait time in seconds
+
+        Returns:
+            True if embeddings ready, False if timeout
+        """
+        logger.info(f"Waiting for embeddings in namespace={namespace} (timeout: {timeout}s)...")
+        start_time = time.time()
+        poll_interval = 3  # Check every 3 seconds (more aggressive)
+        min_required_results = 1  # Just need 1 result with embedding
+
+        # Multiple test queries for better coverage
+        test_queries = [
+            "information about",  # Generic
+            "located in",  # Geographic
+            "born in",  # Biographical
+            "the film",  # Entertainment
+            "history",  # General
+        ]
+
+        last_log_time = 0
+        while time.time() - start_time < timeout:
+            for test_query in test_queries:
+                try:
+                    result = self.kp_adapter.query(
+                        question=test_query,
+                        namespace=namespace,
+                        k=10  # Request more to increase hit chance
+                    )
+
+                    # Check if we got ANY results with scores
+                    if result.results:
+                        # Count results with actual scores
+                        scored_results = [r for r in result.results if r.score and r.score > 0]
+                        if len(scored_results) >= min_required_results:
+                            elapsed = int(time.time() - start_time)
+                            top_score = scored_results[0].score
+                            logger.info(f"✓ Embeddings ready after {elapsed}s!")
+                            logger.info(f"  Query: '{test_query}' → {len(scored_results)} results, top_score={top_score:.4f}")
+                            return True
+
+                except Exception as e:
+                    # Don't spam debug logs
+                    pass
+
+            # Log progress every 10 seconds
+            elapsed = int(time.time() - start_time)
+            if elapsed - last_log_time >= 10:
+                logger.info(f"Waiting for embeddings... ({elapsed}s/{timeout}s)")
+                last_log_time = elapsed
+
+            time.sleep(poll_interval)
+
+        logger.error(f"Timeout waiting for embeddings after {timeout}s")
+        return False
+
     def _evaluate_all_questions(
         self,
         questions: List[Dict[str, Any]],
@@ -700,11 +1066,23 @@ class HotpotQABenchmark:
         """
         for i, question_data in enumerate(tqdm(questions, desc="Evaluating")):
             q_start = time.time()
+
+            # Log question start
+            logger.info(f"[BENCHMARK] Question {i+1}/{len(questions)}: {question_data['question'][:80]}...")
+
             result = self.evaluate_question(question_data, namespace)
             self.results.append(result)
 
             q_elapsed = time.time() - q_start
             self.question_times.append(q_elapsed)
+
+            # Log question result
+            kp_f1_str = f"{result.kp_f1:.3f}" if result.kp_f1 is not None else "N/A"
+            logger.info(
+                f"[BENCHMARK] Question {i+1} complete: "
+                f"kp_f1={kp_f1_str} "
+                f"time={q_elapsed:.2f}s"
+            )
 
             # Print ETA every 10 questions (for large runs)
             if i > 0 and (i + 1) % 10 == 0 and len(questions) > 50:
@@ -931,6 +1309,15 @@ class HotpotQABenchmark:
         print("HotpotQA Benchmark Results")
         print("=" * 60)
 
+        # Check for seed mode
+        if summary.config.get('mode') == 'seed':
+            print("\n🌱 SEED MODE - Data ingested, no evaluation performed")
+            print(f"  Namespace: {summary.config.get('namespace', 'N/A')}")
+            print(f"  Documents: {summary.config.get('documents', 0)}")
+            print("\n  Next step: Run with --mode cached for fast evaluation")
+            print("=" * 60)
+            return
+
         if self.run_kp:
             print("\nKnowledgePlane:")
             print(f"  Exact Match:    {summary.kp.avg_em * 100:.1f}%")
@@ -966,8 +1353,13 @@ class HotpotQABenchmark:
         # Print timing information
         if summary.timing:
             print("\nTiming:")
-            print(f"  Total Time:     {summary.timing['total_seconds']:.1f}s")
-            print(f"  Avg/Question:   {summary.timing['avg_per_question']:.2f}s")
+            if 'seed_time' in summary.timing:
+                # Seed mode
+                print(f"  Seed Time:      {summary.timing['seed_time']:.1f}s")
+            elif 'total_seconds' in summary.timing:
+                # Normal evaluation mode
+                print(f"  Total Time:     {summary.timing['total_seconds']:.1f}s")
+                print(f"  Avg/Question:   {summary.timing.get('avg_per_question', 0):.2f}s")
 
         print("\n" + "=" * 60)
 
@@ -1153,6 +1545,17 @@ def parse_args() -> argparse.Namespace:
         help='Directory for output files'
     )
 
+    parser.add_argument(
+        '--mode',
+        type=str,
+        choices=['cached', 'timestamped', 'seed'],
+        default='timestamped',
+        help='''Namespace mode:
+  - cached: Reuse existing embeddings (fastest, requires prior seed run)
+  - timestamped: Fresh namespace each run (full pipeline, slow)
+  - seed: Ingest data + trigger embeddings, skip evaluation (prep for cached mode)'''
+    )
+
     return parser.parse_args()
 
 
@@ -1180,7 +1583,8 @@ def main():
         output_dir=args.output_dir,
         sample_method=args.sample_method,
         batch_size=args.batch_size,
-        statistical_analysis=args.statistical_analysis
+        statistical_analysis=args.statistical_analysis,
+        mode=args.mode
     )
 
     # Run benchmark

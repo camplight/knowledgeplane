@@ -188,78 +188,29 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
         **kwargs
     ) -> None:
         """
-        Initialize connection to MCP server.
+        Initialize connection to REST API server.
 
         Args:
-            mcp_url: Base URL of MCP server
-            api_key: Bearer token for authentication
+            mcp_url: Base URL of REST API server (e.g. http://localhost:8081)
+            api_key: API key for authentication
             workspace_id: Target workspace
             user_id: User for operations
             timeout: Request timeout in seconds
         """
-        self.mcp_url = mcp_url.rstrip('/')
+        self.api_url = mcp_url.rstrip('/')
         self.api_key = api_key
         self.workspace_id = workspace_id
         self.user_id = user_id
         self.timeout = timeout
 
-        # Set authentication header
+        # Set authentication headers for REST API
         self.session.headers.update({
-            'Authorization': f'Bearer {api_key}',
+            'knowledgeplane-key': api_key,
             'Content-Type': 'application/json',
         })
 
-        logger.info(f"Initialized HTTP adapter for {mcp_url}")
+        logger.info(f"Initialized REST API adapter for {mcp_url}")
 
-    def _call_tool(
-        self,
-        tool_name: str,
-        arguments: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Call an MCP tool via HTTP.
-
-        Args:
-            tool_name: Name of the tool to call
-            arguments: Tool arguments
-
-        Returns:
-            Parsed response data
-
-        Raises:
-            requests.RequestException: On HTTP errors
-            ValueError: On invalid response format
-        """
-        url = urljoin(self.mcp_url + '/', 'tools/call')
-
-        payload = {
-            'name': tool_name,
-            'arguments': arguments,
-        }
-
-        try:
-            response = self.session.post(
-                url,
-                json=payload,
-                timeout=self.timeout
-            )
-            response.raise_for_status()
-
-            result = response.json()
-
-            # MCP tool responses have content array with text
-            if 'content' in result and len(result['content']) > 0:
-                content_text = result['content'][0].get('text', '{}')
-                return json.loads(content_text)
-
-            return result
-
-        except requests.RequestException as e:
-            logger.error(f"HTTP request failed for tool {tool_name}: {e}")
-            raise
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error(f"Failed to parse response for tool {tool_name}: {e}")
-            raise ValueError(f"Invalid response format: {e}")
 
     def ingest_documents(
         self,
@@ -267,12 +218,12 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
         namespace: Optional[str] = None
     ) -> List[IngestionResult]:
         """
-        Ingest documents via files_upload tool.
+        Ingest documents via REST API POST /api/facts.
 
         Each document should contain:
         - content: Raw text content
-        - filename: Name of the file
-        - mimeType: MIME type (default: text/plain)
+        - filename: Name of the file (added to metadata)
+        - mimeType: MIME type (added to metadata)
         - metadata: Optional metadata dict
 
         Args:
@@ -293,40 +244,48 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
             mime_type = doc.get('mimeType', 'text/plain')
             metadata = doc.get('metadata', {})
 
+            # Add filename and mimeType to metadata
+            metadata['filename'] = filename
+            metadata['mimeType'] = mime_type
+
             # Add namespace to metadata
             if namespace:
                 metadata['namespace'] = namespace
 
-            # Encode content as base64
-            content_bytes = content.encode('utf-8')
-            base64_data = base64.b64encode(content_bytes).decode('utf-8')
-
-            # Call files_upload tool
+            # Create fact via REST API
             try:
-                response = self._call_tool('files_upload', {
-                    'filename': filename,
-                    'mimeType': mime_type,
-                    'data': base64_data,
-                })
+                url = f"{self.api_url}/api/facts?workspace_id={self.workspace_id}"
+                payload = {
+                    'content': content,
+                    'metadata': metadata,
+                    'created_by': self.user_id,
+                    'last_updated_by': self.user_id,
+                }
 
+                response = self.session.post(
+                    url,
+                    json=payload,
+                    timeout=self.timeout
+                )
+                response.raise_for_status()
+
+                result = response.json()
                 elapsed_ms = (time.time() - start_time) * 1000
 
-                # Extract fact IDs from response
-                fact_ids = []
-                if 'facts' in response:
-                    fact_ids = [f['id'] for f in response['facts']]
+                # Extract fact ID from response
+                fact = result.get('fact', {})
+                fact_id = fact.get('id')
 
                 results.append(IngestionResult(
-                    file_id=response.get('file', {}).get('id'),
-                    facts_created=response.get('factsCreated', 0),
-                    relations_created=response.get('relationsCreated', 0),
-                    fact_ids=fact_ids,
+                    file_id=None,  # REST API doesn't track files
+                    facts_created=1 if fact_id else 0,
+                    relations_created=0,  # REST API doesn't auto-create relations
+                    fact_ids=[fact_id] if fact_id else [],
                     ingestion_time_ms=elapsed_ms,
                 ))
 
                 logger.info(
-                    f"Ingested {filename}: {response.get('factsCreated', 0)} facts, "
-                    f"{response.get('relationsCreated', 0)} relations in {elapsed_ms:.2f}ms"
+                    f"Ingested {filename}: fact {fact_id} in {elapsed_ms:.2f}ms"
                 )
 
             except Exception as e:
@@ -345,16 +304,15 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
         search_mode: str = "hybrid"
     ) -> QueryResult:
         """
-        Query facts via facts_search tool.
+        Query facts via REST API POST /api/facts/search.
 
-        Note: The MCP tool does not expose search mode selection.
-        It always uses hybrid search by default. The search_mode
-        parameter is accepted for API compatibility but ignored.
+        Note: The REST API uses hybrid search by default.
+        The search_mode parameter is accepted for API compatibility but ignored.
 
         Args:
             question: Search query
-            namespace: Optional namespace filter (not implemented in KP)
-            k: Maximum results (capped at 20)
+            namespace: Optional namespace filter
+            k: Maximum results (capped at 100)
             search_mode: Ignored (always hybrid)
 
         Returns:
@@ -362,27 +320,39 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
         """
         start_time = time.time()
 
-        # Cap k at 20 (KP limitation)
-        k = min(k, 20)
+        # Cap k at 100
+        k = min(k, 100)
 
         try:
-            response = self._call_tool('facts_search', {
+            url = f"{self.api_url}/api/facts/search?workspace_id={self.workspace_id}"
+            payload = {
                 'query': question,
                 'k': k,
                 'include_trashed': False,
-            })
+            }
 
+            response = self.session.post(
+                url,
+                json=payload,
+                timeout=self.timeout
+            )
+            response.raise_for_status()
+
+            result = response.json()
             elapsed_ms = (time.time() - start_time) * 1000
 
             # Parse results
-            hits = response.get('hits', [])
+            hits = result.get('hits', [])
             results = []
+            filtered_count = 0
 
             for hit in hits:
                 # Filter by namespace if specified
                 if namespace:
                     hit_namespace = hit.get('metadata', {}).get('namespace')
                     if hit_namespace != namespace:
+                        logger.debug(f"Filtered out fact {hit['id']}: namespace mismatch ({hit_namespace} != {namespace})")
+                        filtered_count += 1
                         continue
 
                 results.append(FactResult(
@@ -393,8 +363,13 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
                     created_at=hit.get('created_at'),
                 ))
 
+            # Detailed benchmark logging
             logger.info(
-                f"Query '{question}' returned {len(results)} results in {elapsed_ms:.2f}ms"
+                f"[BENCHMARK] Query completed: query='{question[:50]}...' "
+                f"total_hits={len(hits)} filtered_out={filtered_count} "
+                f"results_returned={len(results)} time={elapsed_ms:.2f}ms "
+                f"top_score={results[0].score if results else 0:.4f} "
+                f"namespace={namespace} k={k}"
             )
 
             return QueryResult(
