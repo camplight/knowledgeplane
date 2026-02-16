@@ -166,11 +166,15 @@ class MSMARCOBenchmark:
             }
 
             # Process passages with relevance labels
-            for i, passage in enumerate(item['passages']):
+            # MS MARCO HuggingFace structure: passages is a dict with parallel lists
+            # - passages['passage_text']: list of passage strings
+            # - passages['is_selected']: list of 0/1 relevance labels
+            passages = item['passages']
+            for i in range(len(passages['passage_text'])):
                 query_data['passages'].append({
                     'id': f"passage_{idx}_{i}",
-                    'text': passage['passage_text'],
-                    'is_relevant': passage.get('is_selected', 0) == 1
+                    'text': passages['passage_text'][i],
+                    'is_relevant': passages['is_selected'][i] == 1
                 })
 
             queries.append(query_data)
