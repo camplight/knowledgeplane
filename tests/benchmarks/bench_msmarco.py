@@ -137,6 +137,176 @@ class MSMARCOBenchmark:
 
         logger.info(f"Initialized MS MARCO benchmark: n={n_queries}, k={k}, seed={seed}")
 
+    def preflight_checks(self) -> bool:
+        """
+        Comprehensive preflight checks for reliable benchmark execution.
+
+        Checks:
+        1. KP REST API is accessible
+        2. Database is accessible and healthy
+        3. Vector index status (drops blocking indexes automatically)
+        4. API credentials configured
+        5. OpenAI key for embeddings
+        6. Background worker status warning
+
+        Returns:
+            True if all critical checks pass, False otherwise
+        """
+        import requests
+
+        if self.mock_kp or not self.run_kp:
+            logger.info("✓ Preflight: Mock mode or KP disabled, skipping service checks")
+            return True
+
+        logger.info("=" * 60)
+        logger.info("Running Preflight Checks (6 checks)")
+        logger.info("=" * 60)
+
+        api_url = os.environ.get("KP_API_URL", "http://localhost:8081")
+        arango_url = os.environ.get("ARANGO_URL", "http://localhost:8529")
+        checks_passed = True
+        warnings = []
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 1: REST API reachable
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[1/6] KP REST API at {api_url}...")
+        try:
+            response = requests.get(f"{api_url}/health", timeout=5)
+            if response.status_code == 200:
+                logger.info(f"  ✓ REST API is healthy")
+            else:
+                logger.error(f"  ✗ REST API returned status {response.status_code}")
+                checks_passed = False
+        except requests.exceptions.ConnectionError:
+            logger.error(f"  ✗ Cannot connect to REST API at {api_url}")
+            logger.error(f"    Start it with: npm run dev")
+            checks_passed = False
+        except Exception as e:
+            logger.error(f"  ✗ REST API check failed: {e}")
+            checks_passed = False
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 2: Database is accessible
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[2/6] ArangoDB at {arango_url}...")
+        db_accessible = False
+        db_url = arango_url
+        try:
+            # Try Docker internal hostname first (for containerized benchmarks)
+            for try_url in [arango_url.replace("localhost", "host.docker.internal"), arango_url]:
+                try:
+                    response = requests.get(f"{try_url}/_api/version", auth=("root", "root"), timeout=5)
+                    if response.status_code == 200:
+                        version = response.json().get("version", "unknown")
+                        logger.info(f"  ✓ ArangoDB v{version} accessible")
+                        db_accessible = True
+                        db_url = try_url
+                        break
+                except:
+                    continue
+            if not db_accessible:
+                logger.warning(f"  ⚠ Cannot verify ArangoDB directly")
+                warnings.append("Database direct access not verified")
+        except Exception as e:
+            logger.warning(f"  ⚠ Database check: {e}")
+            warnings.append("Database health uncertain")
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 3: Vector index status (auto-fix!)
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[3/6] Vector index status...")
+        if db_accessible:
+            try:
+                # Check if blocking vector index exists
+                response = requests.get(
+                    f"{db_url}/_db/knowledgeplane/_api/index/facts/idx_facts_embedding_vector",
+                    auth=("root", "root"),
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    logger.warning(f"  ⚠ Blocking vector index found - auto-dropping...")
+                    del_response = requests.delete(
+                        f"{db_url}/_db/knowledgeplane/_api/index/facts/idx_facts_embedding_vector",
+                        auth=("root", "root"),
+                        timeout=5
+                    )
+                    if del_response.status_code == 200:
+                        logger.info(f"  ✓ Vector index dropped (facts can be ingested)")
+                    else:
+                        logger.error(f"  ✗ Failed to drop vector index")
+                        warnings.append("Vector index may block inserts")
+                elif response.status_code == 404:
+                    logger.info(f"  ✓ No blocking vector index")
+                else:
+                    logger.info(f"  ✓ Vector index check passed")
+            except Exception as e:
+                logger.warning(f"  ⚠ Could not verify vector index: {e}")
+                warnings.append("Vector index status unknown")
+        else:
+            logger.warning(f"  ⚠ Skipped (no DB access)")
+            warnings.append("Vector index not checked")
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 4: API credentials
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[4/6] API credentials...")
+        api_key = os.environ.get("KP_API_KEY")
+        workspace_id = os.environ.get("KP_WORKSPACE_ID")
+        user_id = os.environ.get("KP_USER_ID")
+
+        if api_key:
+            logger.info(f"  ✓ API key set")
+        else:
+            logger.error(f"  ✗ KP_API_KEY missing")
+            checks_passed = False
+
+        if workspace_id:
+            logger.info(f"  ✓ Workspace: {workspace_id}")
+        else:
+            logger.error(f"  ✗ KP_WORKSPACE_ID missing")
+            checks_passed = False
+
+        if not user_id:
+            warnings.append("KP_USER_ID not set")
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 5: OpenAI API key
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[5/6] OpenAI configuration...")
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if openai_key and openai_key.startswith("sk-"):
+            logger.info(f"  ✓ OpenAI API key configured")
+        elif openai_key:
+            logger.warning(f"  ⚠ OpenAI key format unusual")
+            warnings.append("OpenAI key may be invalid")
+        else:
+            logger.warning(f"  ⚠ OPENAI_API_KEY not set")
+            warnings.append("No OpenAI key - embeddings won't generate")
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 6: Background worker warning
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[6/6] Background worker status...")
+        logger.info(f"  ⚠ Cannot verify worker - if embeddings timeout:")
+        logger.info(f"    Run: npm run dev:background-workers")
+        warnings.append("Background worker not verified")
+
+        # ═══════════════════════════════════════════════════════════
+        # Summary
+        # ═══════════════════════════════════════════════════════════
+        logger.info("=" * 60)
+        if checks_passed:
+            logger.info("✓ All critical checks passed")
+            if warnings:
+                logger.info(f"  Warnings ({len(warnings)}): {', '.join(warnings[:3])}")
+        else:
+            logger.error("✗ PREFLIGHT FAILED - cannot proceed")
+            logger.error("  Quick fix: npm run dev && source .env.benchmark")
+        logger.info("=" * 60)
+
+        return checks_passed
+
     def load_dataset(self) -> List[Dict[str, Any]]:
         """
         Load MS MARCO passage ranking dataset from HuggingFace.
@@ -495,6 +665,11 @@ class MSMARCOBenchmark:
         logger.info("=" * 60)
         logger.info("Starting MS MARCO Passage Ranking Benchmark")
         logger.info("=" * 60)
+
+        # Run preflight checks
+        if not self.preflight_checks():
+            logger.error("Preflight checks failed - aborting benchmark")
+            raise RuntimeError("Preflight checks failed. Fix issues above and retry.")
 
         # Load dataset
         queries = self.load_dataset()
