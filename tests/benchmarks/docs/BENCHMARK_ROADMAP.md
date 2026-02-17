@@ -18,7 +18,7 @@ KnowledgePlane is **knowledge infrastructure for AI** — not a memory layer for
 ### The AI Librarian (Primary UVP)
 
 KnowledgePlane's **CardConsolidator** ("AI Librarian") runs every 5 minutes and:
-1. **Auto-discovers relations** between facts using GPT-4o
+1. **Auto-discovers relations** between facts using gpt-5.1 (configurable via `getChatModel()`)
 2. **Creates graph edges** (FactRelations) with typed relationships
 3. **Consolidates clusters** into KnowledgeCards with title/summary/content
 
@@ -40,6 +40,28 @@ KnowledgePlane's **CardConsolidator** ("AI Librarian") runs every 5 minutes and:
 | **Retrieval** (table stakes) | Can we find relevant facts fast? | HotpotQA SF-F1, MS MARCO |
 | **Organization** (differentiator) | Does the librarian create correct structure? | RelationRecall, ConsoliMem |
 | **Real-time** (differentiator) | How fast are updates searchable? | Freshness, CRUD-Latency |
+| **QA** (competitive) | Can we answer questions accurately? | LoCoMo, LongMemEval, HotPotQA EM |
+
+### Phased Benchmark Strategy
+
+```
+Phase 1: Retrieval (DONE) ──────────────────────────────────────────────────────┐
+  └─ Freshness ✅, MS MARCO ✅, HotPotQA SF-F1 ✅                                │
+                                                                                 │
+Phase 2: Organization (IN PROGRESS) ────────────────────────────────────────────┤
+  └─ RelationRecall 🔄, ConsoliMem ⏳                                            │
+  └─ UNIQUE: No competitor does auto-relation discovery                         │
+                                                                                 │
+Phase 3: Extended Retrieval (PLANNED) ──────────────────────────────────────────┤
+  └─ GraphHop-N (multi-hop traversal)                                           │
+                                                                                 │
+Phase 4: Competitive (REQUIRES ANSWER SYNTHESIS) ───────────────────────────────┤
+  └─ LoCoMo (vs Mem0 68.4%)                                                     │
+  └─ LongMemEval (vs Zep 94.8% DMR)                                             │
+  └─ HotPotQA EM (vs Cognee 66.7%)                                              │
+```
+
+**Answer Synthesis Note:** Dashboard chat already synthesizes answers. Need to expose via REST API for benchmarking.
 
 ---
 
@@ -198,23 +220,82 @@ Measure:
 
 ## Phase 4: Competitive Benchmarks (MEDIUM PRIORITY)
 
-### 4.1 LoCoMo Subset
-**What it proves:** Long-term memory retrieval (Mem0's flagship benchmark)
+> **🔧 REQUIRES: Answer Synthesis Endpoint**
+>
+> The dashboard chat (`apps/webapp/server/trpc/routes/chat.ts`) already synthesizes answers via:
+> ```typescript
+> const completion = await provider.chatCompletion(messages, {
+>   model: getOpenAIModel(),
+>   mcpTools: [{ server_url: mcpServerUrl }]  // Retrieves facts via MCP
+> });
+> ```
+>
+> To run competitive benchmarks, we need to expose this via REST API:
+> ```
+> POST /api/qa/answer
+> {
+>   "question": "Who is Einstein's wife?",
+>   "synthesize": true  // Use LLM to generate final answer
+> }
+> ```
+>
+> **Without answer synthesis, we cannot fairly compare with Cognee (66.7% EM) or Mem0 (68.4%).**
+
+### 4.1 LoCoMo (Mem0's Flagship Benchmark)
+**What it measures:** Long-context conversation memory — can the system remember facts from long conversations and answer questions about them?
+
+**Mem0 Results:** 68.4% accuracy with Mem0g
+
+**KP Requirements:**
+1. ✅ Fact retrieval (already have)
+2. ❌ Answer synthesis endpoint (need to add)
+3. ❌ Conversation history context (chat.ts has this, need REST endpoint)
 
 **Scope:** Single-session QA + multi-session reasoning (skip multi-modal)
 
-**Target:** Match or beat Mem0's 66.9% on subset
+**Target:** Match or beat Mem0's 68.4%
 
-**Why partial:** LoCoMo tests conversational memory; KP is knowledge infrastructure
+**Action items:**
+- [ ] Create REST endpoint `/api/qa/answer` with synthesis
+- [ ] Implement `bench_locomo.py`
+- [ ] Run n=100 subset benchmark
 
-### 4.2 LongMemEval Subset
-**What it proves:** Temporal reasoning, knowledge updates (Zep's benchmark)
+### 4.2 LongMemEval (Zep/Graphiti's Benchmark)
+**What it measures:** Temporal reasoning across memory — can the system answer questions like "What did the user say about X *last week* vs *yesterday*?"
+
+**"Temporal boundaries"** means:
+- Questions that reference time periods (last week, yesterday, before the trip)
+- Tests if the system indexes and queries temporal metadata
+- Example: "What was my opinion about React before I tried Vue?"
+
+**Zep Results:** +18.5% improvement over baselines, 94.8% DMR
+
+**KP Requirements:**
+1. ✅ Fact retrieval with timestamps
+2. ❌ Temporal indexing (facts have `created_at`, but not query-able by time range)
+3. ❌ Answer synthesis endpoint
+4. ❌ Temporal reasoning in prompts
 
 **Scope:** Temporal reasoning + knowledge update consistency
 
-**Target:** Match or beat Zep's 18.5% improvement claim
+**Target:** Match or beat Zep's 94.8% DMR
 
-**Note:** Zep's original 84% LoCoMo claim was disputed; corrected evaluation shows 58.44%
+**Action items:**
+- [ ] Add temporal filters to fact search API
+- [ ] Implement `bench_longmemeval.py`
+- [ ] Run n=100 subset benchmark
+
+### 4.3 Competitor Benchmark Comparison Matrix
+
+| Benchmark | Owner | Primary Metric | KP Requirement | Priority |
+|-----------|-------|----------------|----------------|----------|
+| **RelationRecall** | KnowledgePlane | Relation F1 | ✅ CardConsolidator | P1 (Unique) |
+| **LoCoMo** | Mem0 | Accuracy | Answer synthesis | P2 |
+| **LongMemEval** | Zep | DMR + Temporal | Temporal indexing + synthesis | P3 |
+| **HotPotQA** | Cognee, others | EM, F1 | Answer synthesis | P2 |
+| **memorybench** | Supermemory | Various | TBD | P4 |
+
+**Note:** Cognee's HotPotQA results (0.042 → 0.667 EM) are measured with answer synthesis. Our current 0.5% EM is unfair comparison since we only measure retrieval.
 
 ---
 
@@ -345,6 +426,11 @@ cd tests/benchmarks
 
 | Date | Change |
 |------|--------|
+| 2026-02-17 | Added phased benchmark strategy visualization |
+| 2026-02-17 | Expanded Phase 4: LoCoMo, LongMemEval with requirements |
+| 2026-02-17 | Added temporal boundaries explanation for LongMemEval |
+| 2026-02-17 | Noted answer synthesis requirement (chat.ts already has it) |
+| 2026-02-17 | Added competitor benchmark comparison matrix |
 | 2026-02-17 | Major restructure: AI Librarian benchmarks as Phase 2, research swarm findings |
 | 2026-02-17 | Added RelationRecall, ConsoliMem benchmarks |
 | 2026-02-17 | Added competitive analysis: Mem0 finds 0% relations |
