@@ -18,6 +18,7 @@ import {
   splitKnowledgeCard,
   combineKnowledgeCards,
 } from "@knowledgeplane/api-core";
+import { createAIModelClient } from "@knowledgeplane/aimodel";
 
 
 type RequestContext = {
@@ -32,6 +33,50 @@ type EmbeddingRecord = {
   _id?: unknown;
   _key?: unknown;
 };
+
+/**
+ * Generate embedding synchronously for a single text content.
+ * Used when sync_embedding=true query parameter is passed to fact creation.
+ *
+ * @param content - Text content to generate embedding for
+ * @param timeoutMs - Timeout in milliseconds (default: 30000)
+ * @returns Embedding result or null if generation fails/unavailable
+ */
+async function generateEmbeddingSync(
+  content: string,
+  timeoutMs: number = 30000,
+): Promise<{ embedding: number[]; model: string } | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return null;
+  }
+
+  const aiClient = createAIModelClient("openai", apiKey);
+  const provider = aiClient.getProvider();
+  const model = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
+
+  // Truncate content if needed (OpenAI has token limits)
+  const maxChars = 8000 * 3; // ~8000 tokens with conservative estimate
+  const truncatedContent = content.length > maxChars
+    ? content.substring(0, maxChars)
+    : content;
+
+  // Create timeout promise
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error("Embedding generation timed out")), timeoutMs);
+  });
+
+  // Race between embedding generation and timeout
+  const result = await Promise.race([
+    provider.embeddings(truncatedContent, model),
+    timeoutPromise,
+  ]);
+
+  return {
+    embedding: result.embeddings[0],
+    model: result.model,
+  };
+}
 
 function stripEmbeddings<T extends EmbeddingRecord>(
   record: T,
@@ -174,10 +219,15 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
     const ctx = await resolveContext(request, reply);
     if (!ctx) return;
     const body = request.body as any;
-    const workspaceId = body.workspace_id || ctx.workspaceId;
+    let workspaceId = body.workspace_id || ctx.workspaceId;
     if (!workspaceId) {
       reply.code(400);
       return { error: "workspace_id is required or must be inferred from auth" };
+    }
+    // Normalize workspace_id to full format (workspaces/xxx) for consistency
+    // This ensures facts stored with "668" vs "workspaces/668" are handled consistently
+    if (!workspaceId.includes('/')) {
+      workspaceId = `workspaces/${workspaceId}`;
     }
     const createdBy = body.created_by || ctx.userId;
     const lastUpdatedBy = body.last_updated_by || ctx.userId || body.created_by;
@@ -193,7 +243,78 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       last_updated_by: lastUpdatedBy,
     });
 
-    return { fact: stripEmbeddings(fact) };
+    // Check for sync_embedding query parameter
+    // When true, generates embedding synchronously before returning
+    // This is useful for benchmarking or when facts need to be immediately searchable
+    const query = request.query as { sync_embedding?: string };
+    const syncEmbedding = query.sync_embedding === "true";
+
+    let embeddingGenerated = false;
+    let embeddingModel: string | undefined;
+    let embeddingError: string | undefined;
+
+    if (syncEmbedding) {
+      try {
+        const timeoutMs = parseInt(process.env.SYNC_EMBEDDING_TIMEOUT_MS || "30000", 10);
+        const embeddingResult = await generateEmbeddingSync(body.content, timeoutMs);
+
+        if (embeddingResult) {
+          // Update fact with embedding
+          const key = Fact.extractKey(fact.id);
+          await collections.facts.update(key, {
+            embedding: embeddingResult.embedding,
+            embedding_model: embeddingResult.model,
+          });
+
+          embeddingGenerated = true;
+          embeddingModel = embeddingResult.model;
+        } else {
+          embeddingError = "Embedding service unavailable (no API key configured)";
+        }
+      } catch (error: any) {
+        // Log error but still return the created fact
+        console.error("Sync embedding generation failed:", error.message);
+        embeddingError = error.message;
+      }
+    }
+
+    // Build response
+    const response: Record<string, any> = {
+      fact: stripEmbeddings(fact),
+    };
+
+    // Include embedding status when sync_embedding was requested
+    if (syncEmbedding) {
+      response.embedding_generated = embeddingGenerated;
+      if (embeddingModel) {
+        response.embedding_model = embeddingModel;
+      }
+      if (embeddingError) {
+        response.embedding_error = embeddingError;
+        response.warning = "Fact created but embedding generation failed. Fact will be indexed by background worker.";
+      }
+    } else {
+      // Queue embedding generation for async processing
+      // This triggers the background worker to process this specific fact
+      try {
+        await collections.worker_triggers.save({
+          worker_name: "embeddings-generator",
+          status: "pending",
+          created_at: new Date().toISOString(),
+          metadata: {
+            type: "fact",
+            id: fact.id,
+            workspace_id: workspaceId,
+          },
+        });
+        response.embedding_queued = true;
+      } catch (triggerError: any) {
+        // Non-fatal: sweep will catch it within 10 minutes
+        console.error("Failed to queue embedding trigger:", triggerError.message);
+      }
+    }
+
+    return response;
   });
 
   server.put("/api/facts/:id", async (request, reply) => {
@@ -238,9 +359,14 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
     const workspaceError = requireWorkspace(ctx, reply);
     if (workspaceError) return workspaceError;
     const body = request.body as any;
+    // Normalize workspace_id to full format for consistency with fact storage
+    let workspaceId = ctx.workspaceId;
+    if (workspaceId && !workspaceId.includes('/')) {
+      workspaceId = `workspaces/${workspaceId}`;
+    }
     const results = await searchFacts({
       query: body.query || "*",
-      workspace_id: ctx.workspaceId,
+      workspace_id: workspaceId,
       k: body.k || 10,
       offset: body.offset || 0,
       include_trashed: body.include_trashed || false,
@@ -249,6 +375,72 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       ...results,
       hits: stripEmbeddingsArray(results.hits as EmbeddingRecord[]),
     };
+  });
+
+  // Trigger embedding generation for facts
+  server.post("/api/facts/trigger-embeddings", async (request, reply) => {
+    const ctx = await resolveContext(request, reply);
+    if (!ctx) return;
+    const workspaceError = requireWorkspace(ctx, reply);
+    if (workspaceError) return workspaceError;
+
+    const body = request.body as { fact_ids?: string[]; namespace?: string };
+
+    try {
+      let factIds = body.fact_ids || [];
+
+      // If no specific IDs provided, find all facts needing embeddings in workspace
+      if (factIds.length === 0) {
+        const aql = body.namespace
+          ? `
+            FOR f IN facts
+              FILTER f.workspace_id == @wid
+              FILTER f.metadata.namespace == @ns
+              FILTER !HAS(f, 'embedding') OR LENGTH(f.embedding) == 0
+              LIMIT 1000
+              RETURN f._id
+          `
+          : `
+            FOR f IN facts
+              FILTER f.workspace_id == @wid
+              FILTER !HAS(f, 'embedding') OR LENGTH(f.embedding) == 0
+              LIMIT 1000
+              RETURN f._id
+          `;
+
+        const cursor = await collections.facts.database.query(aql, {
+          wid: ctx.workspaceId,
+          ns: body.namespace,
+        });
+        factIds = await cursor.all();
+      }
+
+      // Create worker triggers for embedding generation
+      const triggers = factIds.map((factId) => ({
+        worker_name: "embeddings-generator",
+        status: "pending",
+        created_at: new Date().toISOString(),
+        metadata: {
+          type: "fact",
+          id: factId,
+          workspace_id: ctx.workspaceId,
+        },
+      }));
+
+      if (triggers.length > 0) {
+        // Bulk insert triggers
+        await collections.worker_triggers.saveAll(triggers);
+      }
+
+      return {
+        success: true,
+        triggered_count: triggers.length,
+        message: `Triggered embedding generation for ${triggers.length} facts. Worker will process within 30 seconds.`,
+      };
+    } catch (error: any) {
+      reply.code(500);
+      return { error: error.message || "Failed to trigger embeddings" };
+    }
   });
 
   server.get("/api/relations", async (request, reply) => {
@@ -313,6 +505,23 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       workspace_id: workspaceId,
       created_by: createdBy,
     });
+
+    // Queue embedding generation for the relation
+    try {
+      await collections.worker_triggers.save({
+        worker_name: "embeddings-generator",
+        status: "pending",
+        created_at: new Date().toISOString(),
+        metadata: {
+          type: "relation",
+          id: relation.id,
+          workspace_id: workspaceId,
+        },
+      });
+    } catch (triggerError: any) {
+      // Non-fatal: sweep will catch it within 10 minutes
+      console.error("Failed to queue relation embedding trigger:", triggerError.message);
+    }
 
     return { relation: stripEmbeddings(relation) };
   });
@@ -409,6 +618,23 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       last_updated_by: lastUpdatedBy,
       metadata: body.metadata,
     });
+
+    // Queue embedding generation for the card
+    try {
+      await collections.worker_triggers.save({
+        worker_name: "embeddings-generator",
+        status: "pending",
+        created_at: new Date().toISOString(),
+        metadata: {
+          type: "card",
+          id: card.id,
+          workspace_id: workspaceId,
+        },
+      });
+    } catch (triggerError: any) {
+      // Non-fatal: sweep will catch it within 10 minutes
+      console.error("Failed to queue card embedding trigger:", triggerError.message);
+    }
 
     return { card: stripEmbeddings(card) };
   });
