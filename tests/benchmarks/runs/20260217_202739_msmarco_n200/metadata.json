@@ -1,0 +1,7 @@
+{
+  "timestamp": "20260217_202739",
+  "benchmark": "msmarco_n200",
+  "n_questions": "200",
+  "git_commit": "9a7b66a",
+  "git_branch": "feature/benchmarking-suite"
+}

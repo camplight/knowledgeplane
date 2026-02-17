@@ -6,6 +6,7 @@ Orchestrates all benchmarks with a single command
 This script runs the complete benchmarking suite:
 1. HotpotQA (multi-hop reasoning: graph vs vector)
 2. Freshness (time-to-truth for updated facts)
+3. Librarian (relation extraction: precision/recall/F1)
 
 Then generates a comprehensive final report with all metrics and recommendations.
 
@@ -128,13 +129,62 @@ def run_freshness(args) -> Dict[str, Any]:
     return {"status": "success", "results": None}
 
 
-def generate_final_report(hotpot_result: Dict, fresh_result: Dict, args) -> None:
+def run_librarian(args) -> Dict[str, Any]:
+    """
+    Run Librarian (RelationRecall) benchmark and return results.
+
+    Args:
+        args: Command-line arguments
+
+    Returns:
+        Dict with status and results from librarian benchmark
+    """
+    print("\n" + "="*60)
+    print("Running Librarian Benchmark (Relation Extraction)")
+    print("="*60 + "\n")
+
+    if args.librarian_mode == "skip":
+        print("Skipping librarian benchmark (use --librarian-mode run)")
+        return {"status": "skipped"}
+
+    cmd = [
+        sys.executable,
+        "librarian.py",
+        "--n", str(args.n_librarian),
+        "--seed", str(args.seed),
+        "--consolidation-timeout", str(args.consolidation_timeout),
+    ]
+
+    if args.mock_kp:
+        cmd.append("--mock")
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        print(f"ERROR: Librarian benchmark failed: {result.stderr}")
+        return {"status": "failed", "error": result.stderr}
+
+    # Print stdout for real-time feedback
+    if result.stdout:
+        print(result.stdout)
+
+    # Load summary
+    summary_path = Path("output/librarian_summary.json")
+    if summary_path.exists():
+        with open(summary_path) as f:
+            return {"status": "success", "results": json.load(f)}
+
+    return {"status": "success", "results": None}
+
+
+def generate_final_report(hotpot_result: Dict, fresh_result: Dict, librarian_result: Dict, args) -> None:
     """
     Generate comprehensive final report.
 
     Args:
         hotpot_result: Results from HotpotQA benchmark
         fresh_result: Results from freshness benchmark
+        librarian_result: Results from librarian (relation extraction) benchmark
         args: Command-line arguments
     """
     print("\n" + "="*60)
@@ -208,11 +258,40 @@ def generate_final_report(hotpot_result: Dict, fresh_result: Dict, args) -> None
         if "error" in fresh_result:
             print(f"   Error: {fresh_result['error'][:200]}")
 
+    # Librarian results
+    print()
+    print("3. Librarian (Relation Extraction)")
+    print("-" * 60)
+    if librarian_result["status"] == "success" and librarian_result.get("results"):
+        results = librarian_result["results"]
+        if "metrics" in results:
+            m = results["metrics"]
+            print(f"   Precision: {m['precision']*100:.1f}%")
+            print(f"   Recall:    {m['recall']*100:.1f}%")
+            print(f"   F1 Score:  {m['f1']*100:.1f}%")
+            print(f"   True Pos:  {m['true_positives']}")
+            print(f"   False Pos: {m['false_positives']}")
+            print(f"   False Neg: {m['false_negatives']}")
+
+            if m['f1'] >= 0.7:
+                print(f"   Rating: GOOD (F1 >= 70%)")
+            elif m['f1'] >= 0.5:
+                print(f"   Rating: ACCEPTABLE (F1 >= 50%)")
+            else:
+                print(f"   Rating: NEEDS IMPROVEMENT (F1 < 50%)")
+    elif librarian_result["status"] == "skipped":
+        print(f"   Status: Skipped (run with --librarian-mode run)")
+    else:
+        print(f"   Status: {librarian_result['status']}")
+        if "error" in librarian_result:
+            print(f"   Error: {librarian_result['error'][:200]}")
+
     print("\n" + "="*60)
     print("Detailed results saved to:")
     print("   - output/hotpotqa_results.csv")
     print("   - output/hotpotqa_summary.json")
     print("   - output/freshness_run.json")
+    print("   - output/librarian_summary.json")
     print("="*60 + "\n")
 
     # Save combined report
@@ -221,6 +300,7 @@ def generate_final_report(hotpot_result: Dict, fresh_result: Dict, args) -> None
         "config": vars(args),
         "hotpotqa": hotpot_result,
         "freshness": fresh_result,
+        "librarian": librarian_result,
     }
 
     report_path = Path("output") / f"benchmark_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -271,6 +351,15 @@ def main():
     parser.add_argument("--max_attempts", type=int, default=20,
                        help="Max polling attempts")
 
+    # Librarian options
+    parser.add_argument("--librarian-mode", choices=["skip", "run"],
+                       default="skip",
+                       help="Librarian benchmark mode")
+    parser.add_argument("--n-librarian", type=int, default=10,
+                       help="Number of relation clusters for librarian")
+    parser.add_argument("--consolidation-timeout", type=int, default=300,
+                       help="Timeout for CardConsolidator in seconds")
+
     # KP connection
     parser.add_argument("--workspace_id", type=str,
                        help="KP workspace ID")
@@ -290,6 +379,7 @@ def main():
     print(f"Configuration:")
     print(f"  HotpotQA: {args.n_hotpot} questions")
     print(f"  Freshness: {args.freshness_mode} mode")
+    print(f"  Librarian: {args.librarian_mode} mode")
     print(f"  Mock KP: {args.mock_kp}")
     print(f"  Run KP: {args.run_kp}")
     print(f"  Run Vector: {args.run_vector}")
@@ -298,12 +388,15 @@ def main():
     # Run benchmarks
     hotpot_result = run_hotpotqa(args)
     fresh_result = run_freshness(args)
+    librarian_result = run_librarian(args)
 
     # Generate report
-    generate_final_report(hotpot_result, fresh_result, args)
+    generate_final_report(hotpot_result, fresh_result, librarian_result, args)
 
     # Exit with appropriate code
-    if hotpot_result["status"] == "failed" or fresh_result["status"] == "failed":
+    if (hotpot_result["status"] == "failed" or
+        fresh_result["status"] == "failed" or
+        librarian_result["status"] == "failed"):
         print("\nERROR: One or more benchmarks failed. See above for details.")
         sys.exit(1)
 
