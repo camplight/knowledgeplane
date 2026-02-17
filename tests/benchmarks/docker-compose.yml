@@ -25,5 +25,4 @@ services:
       - ARANGO_URL=http://host.docker.internal:8529
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    entrypoint: ["python3"]
-    command: ["src/hotpotqa.py", "--n", "20", "--run_kp", "true", "--run_vector", "true"]
+    command: ["python3", "src/hotpotqa.py", "--n", "20", "--run_kp", "true", "--run_vector", "true"]

@@ -48,7 +48,7 @@ from lib.adapter import (
 VectorBaseline = None
 Document = None
 try:
-    from vector_baseline import VectorBaseline, Document
+    from lib.vector import VectorBaseline, Document
 except ImportError:
     pass  # Will fail later if --mode vector is used
 
@@ -705,7 +705,7 @@ class HotpotQABenchmark:
     def query_vector_system(
         self,
         question: str
-    ) -> Tuple[Optional[str], float, List[str]]:
+    ) -> Tuple[Optional[str], float, List[str], Dict[str, str]]:
         """
         Query vector baseline and extract answer.
 
@@ -713,10 +713,12 @@ class HotpotQABenchmark:
             question: Question to ask
 
         Returns:
-            Tuple of (answer, latency_ms, retrieved_doc_contents)
+            Tuple of (answer, latency_ms, retrieved_doc_contents, chunk_to_title_map)
         """
         try:
             start_time = time.time()
+            chunk_to_title = {}  # Map chunk text -> title for SF evaluation
+
             # Use query_with_results to get both answer and retrieved chunks
             if hasattr(self.vector_baseline, 'query_with_results'):
                 answer, results = self.vector_baseline.query_with_results(
@@ -724,8 +726,14 @@ class HotpotQABenchmark:
                     k=self.top_k,
                     mode="extractive"
                 )
-                # RetrievalResult has .chunk.text (Chunk object contains the text)
-                retrieved_docs = [r.chunk.text for r in results] if results else []
+                # RetrievalResult has .chunk.text and .chunk.metadata
+                retrieved_docs = []
+                for r in results:
+                    chunk_text = r.chunk.text
+                    retrieved_docs.append(chunk_text)
+                    # Extract title from chunk metadata for SF evaluation
+                    if r.chunk.metadata and 'title' in r.chunk.metadata:
+                        chunk_to_title[chunk_text] = r.chunk.metadata['title']
             else:
                 # Fallback for older vector baseline versions
                 answer = self.vector_baseline.query(
@@ -736,11 +744,11 @@ class HotpotQABenchmark:
                 retrieved_docs = []
             latency_ms = (time.time() - start_time) * 1000
 
-            return answer, latency_ms, retrieved_docs
+            return answer, latency_ms, retrieved_docs, chunk_to_title
 
         except Exception as e:
             logger.error(f"Vector query failed: {e}", exc_info=True)
-            return None, 0.0, []
+            return None, 0.0, [], {}
 
     def _extract_answer_from_context(
         self,
@@ -839,7 +847,7 @@ class HotpotQABenchmark:
         # Query vector system
         if self.run_vector:
             try:
-                vector_answer, vector_latency, vector_retrieved = self.query_vector_system(question)
+                vector_answer, vector_latency, vector_retrieved, chunk_to_title = self.query_vector_system(question)
                 if vector_answer:
                     result.vector_answer = vector_answer
                     result.vector_latency_ms = vector_latency
@@ -847,9 +855,11 @@ class HotpotQABenchmark:
                     result.vector_f1 = compute_f1(vector_answer, ground_truth)
 
                 # Compute vector Supporting Facts metrics
+                # Merge chunk->title mapping with doc_content_to_title for proper evaluation
                 if vector_retrieved and support_list:
+                    vector_content_to_title = {**doc_content_to_title, **chunk_to_title}
                     v_sf_metrics = compute_supporting_facts_metrics(
-                        vector_retrieved, support_list, title_to_sentences, doc_content_to_title
+                        vector_retrieved, support_list, title_to_sentences, vector_content_to_title
                     )
                     result.vector_sf_precision = v_sf_metrics['sf_precision']
                     result.vector_sf_recall = v_sf_metrics['sf_recall']
