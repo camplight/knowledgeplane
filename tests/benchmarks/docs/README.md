@@ -45,13 +45,16 @@ Historical docs moved to `./archive/`:
 cd tests/benchmarks
 
 # Quick validation (n=20)
-docker compose --profile validation up
+./bench hotpot
 
 # Full benchmark (n=500)
-docker compose --profile full up
+./bench hotpot --full
 
 # Freshness with FAISS comparison (n=50)
-docker compose --profile freshness-batch up
+./bench freshness
+
+# Or from project root
+npm run bench hotpot
 ```
 
 ### Environment Setup
@@ -119,4 +122,26 @@ To add new benchmark results:
 
 ---
 
-**Last Updated**: 2026-02-16
+## Folder Structure
+
+```
+tests/benchmarks/
+├── bench                 # CLI entry point
+├── src/                  # Python source
+│   ├── hotpotqa.py       # HotpotQA benchmark
+│   ├── freshness.py      # Freshness benchmark
+│   ├── msmarco.py        # MS MARCO benchmark
+│   └── lib/              # Shared modules
+│       ├── adapter.py    # KP REST API adapter
+│       ├── vector.py     # FAISS vector baseline
+│       └── stats.py      # Statistical analysis
+├── tests/                # Unit tests
+├── examples/             # Demo scripts
+├── docs/                 # Documentation
+├── output/               # Latest results
+└── runs/                 # Archived runs
+```
+
+---
+
+**Last Updated**: 2026-02-17

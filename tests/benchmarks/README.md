@@ -85,6 +85,7 @@ Evaluates single-hop passage retrieval quality.
 --full              Full benchmark (n=500)
 --skip-preflight    Skip environment checks
 --no-archive        Don't save results to runs/
+-- <args>           Pass extra args to Python script
 ```
 
 ## Results
@@ -114,8 +115,8 @@ runs/
 # Clean old benchmark data
 ./bench clean
 
-# Full preflight with fixes
-./scripts/preflight.sh --fix
+# Pass custom args to Python
+./bench hotpot -- --run_vector false --seed 123
 ```
 
 ## Documentation

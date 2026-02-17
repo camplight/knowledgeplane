@@ -31,11 +31,12 @@ cd tests/benchmarks
 ## Options
 
 ```bash
-./bench hotpot -n 50           # Custom number of questions
-./bench hotpot --quick         # Minimal (n=10)
-./bench hotpot --full          # Full (n=500)
-./bench hotpot --skip-preflight # Skip environment checks
-./bench hotpot --no-archive    # Don't save to runs/
+./bench hotpot -n 50              # Custom number of questions
+./bench hotpot --quick            # Minimal (n=10)
+./bench hotpot --full             # Full (n=500)
+./bench hotpot --skip-preflight   # Skip environment checks
+./bench hotpot --no-archive       # Don't save to runs/
+./bench hotpot -- --seed 42       # Pass args to Python
 ```
 
 ## Results
@@ -59,7 +60,7 @@ cd apps/rest-api && PORT=8081 npx tsx src/server.ts &
 ./bench clean
 ```
 
-### Full preflight check
+### Pass custom Python args
 ```bash
-./scripts/preflight.sh --fix
+./bench hotpot -- --run_vector false --seed 123
 ```
