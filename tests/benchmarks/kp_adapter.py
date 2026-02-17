@@ -14,7 +14,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Set
 from urllib.parse import urljoin
 import requests
 
@@ -175,8 +175,11 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
         self.api_key: Optional[str] = None
         self.workspace_id: Optional[str] = None
         self.user_id: Optional[str] = None
+        self.username: Optional[str] = None
+        self.email: Optional[str] = None
         self.session = requests.Session()
         self.timeout = 30  # seconds
+        self.sync_embedding = True  # Generate embeddings synchronously for benchmarks
 
     def initialize(
         self,
@@ -185,6 +188,9 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
         workspace_id: str,
         user_id: str,
         timeout: int = 30,
+        sync_embedding: bool = True,
+        username: Optional[str] = None,
+        email: Optional[str] = None,
         **kwargs
     ) -> None:
         """
@@ -196,20 +202,31 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
             workspace_id: Target workspace
             user_id: User for operations
             timeout: Request timeout in seconds
+            sync_embedding: Generate embeddings synchronously (default: True for benchmarks)
+            username: Username for auto-user creation (defaults to bench_{workspace_id})
+            email: Email for auto-user creation (defaults to bench_{workspace_id}@benchmark.local)
         """
         self.api_url = mcp_url.rstrip('/')
         self.api_key = api_key
         self.workspace_id = workspace_id
         self.user_id = user_id
         self.timeout = timeout
+        self.sync_embedding = sync_embedding
 
-        # Set authentication headers for REST API
+        # Auto-generate username/email for REST API auto-user creation
+        ws_slug = workspace_id.replace('-', '_')[:20] if workspace_id else 'bench'
+        self.username = username or f"bench_{ws_slug}"
+        self.email = email or f"bench_{ws_slug}@benchmark.local"
+
+        # Set headers for REST API
+        # NOTE: We use username/email query params for auth instead of API key header
+        # to support auto-user creation when the workspace doesn't exist
         self.session.headers.update({
-            'knowledgeplane-key': api_key,
             'Content-Type': 'application/json',
         })
 
-        logger.info(f"Initialized REST API adapter for {mcp_url}")
+        sync_status = "enabled (facts immediately searchable)" if sync_embedding else "disabled (async)"
+        logger.info(f"Initialized REST API adapter for {mcp_url} [sync_embedding: {sync_status}]")
 
 
     def ingest_documents(
@@ -251,10 +268,14 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
             # Add namespace to metadata
             if namespace:
                 metadata['namespace'] = namespace
+                logger.debug(f"[DEBUG] Ingesting with namespace={namespace}, metadata keys: {list(metadata.keys())}")
 
             # Create fact via REST API
             try:
-                url = f"{self.api_url}/api/facts?workspace_id={self.workspace_id}"
+                # Build URL with auth params for auto-user creation + sync_embedding
+                url = f"{self.api_url}/api/facts?workspace_id={self.workspace_id}&username={self.username}&email={self.email}"
+                if self.sync_embedding:
+                    url += "&sync_embedding=true"
                 payload = {
                     'content': content,
                     'metadata': metadata,
@@ -284,8 +305,15 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
                     ingestion_time_ms=elapsed_ms,
                 ))
 
+                # Log with embedding status if sync_embedding was used
+                embedding_status = ""
+                if self.sync_embedding:
+                    emb_generated = result.get('embedding_generated', False)
+                    emb_model = result.get('embedding_model', '')
+                    embedding_status = f" [embedding: {'✓' if emb_generated else '✗'}{' ' + emb_model if emb_model else ''}]"
+
                 logger.info(
-                    f"Ingested {filename}: fact {fact_id} in {elapsed_ms:.2f}ms"
+                    f"Ingested {filename}: fact {fact_id} in {elapsed_ms:.2f}ms{embedding_status}"
                 )
 
             except Exception as e:
@@ -323,11 +351,18 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
         # Cap k at 100
         k = min(k, 100)
 
+        # When filtering by namespace, request more results since the search
+        # endpoint returns global results and we filter client-side.
+        # Request 10x to ensure we get enough namespace-matching results.
+        search_k = k * 10 if namespace else k
+        search_k = min(search_k, 100)
+
         try:
-            url = f"{self.api_url}/api/facts/search?workspace_id={self.workspace_id}"
+            # Include auth params for auto-user creation
+            url = f"{self.api_url}/api/facts/search?workspace_id={self.workspace_id}&username={self.username}&email={self.email}"
             payload = {
                 'query': question,
-                'k': k,
+                'k': search_k,
                 'include_trashed': False,
             }
 
@@ -346,12 +381,19 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
             results = []
             filtered_count = 0
 
+            # Debug: log first few hits to understand namespace distribution
+            if namespace and len(hits) > 0:
+                sample_namespaces = [hit.get('metadata', {}).get('namespace', '<NONE>') for hit in hits[:5]]
+                logger.debug(f"[DEBUG] First 5 hit namespaces: {sample_namespaces}")
+                logger.debug(f"[DEBUG] Looking for namespace: {namespace}")
+
             for hit in hits:
                 # Filter by namespace if specified
                 if namespace:
                     hit_namespace = hit.get('metadata', {}).get('namespace')
                     if hit_namespace != namespace:
-                        logger.debug(f"Filtered out fact {hit['id']}: namespace mismatch ({hit_namespace} != {namespace})")
+                        if filtered_count < 3:  # Log first 3 filtered hits
+                            logger.debug(f"[DEBUG] Filtered fact {hit['id']}: namespace '{hit_namespace}' != '{namespace}'")
                         filtered_count += 1
                         continue
 
@@ -362,6 +404,10 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
                     metadata=hit.get('metadata', {}),
                     created_at=hit.get('created_at'),
                 ))
+
+                # Stop once we have enough results
+                if len(results) >= k:
+                    break
 
             # Detailed benchmark logging
             logger.info(
@@ -825,6 +871,376 @@ def cleanup_benchmark_data(
         bind_vars={'wid': workspace_id}
     )
     logger.info(f"Deleted workspace {workspace_id}")
+
+
+def wait_for_embeddings(
+    fact_ids: List[str],
+    db_url: str = "http://localhost:8529",
+    db_name: str = "knowledgeplane",
+    db_user: str = "root",
+    db_password: str = "root",
+    timeout_seconds: int = 60,
+    poll_interval: float = 2.0
+) -> Tuple[int, int]:
+    """
+    Wait for embeddings to be generated for a list of facts.
+
+    The background worker generates embeddings asynchronously. This function
+    polls the database until embeddings are ready or timeout is reached.
+
+    Args:
+        fact_ids: List of fact IDs to check
+        db_url: ArangoDB URL
+        db_name: Database name
+        db_user: Database user
+        db_password: Database password
+        timeout_seconds: Maximum time to wait
+        poll_interval: Time between checks in seconds
+
+    Returns:
+        Tuple of (facts_with_embeddings, facts_without_embeddings)
+    """
+    import requests
+
+    if not fact_ids:
+        return 0, 0
+
+    start_time = time.time()
+    with_emb = 0
+    without_emb = len(fact_ids)
+
+    while time.time() - start_time < timeout_seconds:
+        try:
+            # Check embedding status for all facts
+            url = f"{db_url}/_db/{db_name}/_api/cursor"
+
+            # AQL query to count facts with and without embeddings
+            query = {
+                "query": """
+                    LET ids = @fact_ids
+                    LET with_emb = (
+                        FOR f IN facts
+                        FILTER f._key IN ids AND f.embedding != null AND LENGTH(f.embedding) > 0
+                        RETURN 1
+                    )
+                    LET without_emb = (
+                        FOR f IN facts
+                        FILTER f._key IN ids AND (f.embedding == null OR LENGTH(f.embedding) == 0)
+                        RETURN 1
+                    )
+                    RETURN { with_embeddings: LENGTH(with_emb), without_embeddings: LENGTH(without_emb) }
+                """,
+                "bindVars": {"fact_ids": fact_ids}
+            }
+
+            response = requests.post(url, json=query, auth=(db_user, db_password), timeout=10)
+
+            if response.status_code == 200:
+                result = response.json().get("result", [{}])[0]
+                with_emb = result.get("with_embeddings", 0)
+                without_emb = result.get("without_embeddings", 0)
+
+                logger.debug(f"Embedding status: {with_emb}/{len(fact_ids)} ready, {without_emb} pending")
+
+                # All facts have embeddings
+                if without_emb == 0:
+                    logger.info(f"All {with_emb} facts have embeddings ready")
+                    return with_emb, 0
+
+        except Exception as e:
+            logger.debug(f"Embedding check failed: {e}")
+
+        time.sleep(poll_interval)
+
+    # Timeout - return current status
+    logger.warning(f"Embedding wait timeout after {timeout_seconds}s")
+    return with_emb, without_emb
+
+
+def check_workspace_isolation(
+    workspace_id: str,
+    db_url: str = "http://localhost:8529",
+    db_name: str = "knowledgeplane",
+    db_user: str = "root",
+    db_password: str = "root"
+) -> Dict[str, Any]:
+    """
+    Check workspace isolation status for benchmarking.
+
+    Returns information about the workspace to help determine if it's safe
+    to use for benchmarking (i.e., won't pollute production data).
+
+    Args:
+        workspace_id: Workspace ID to check
+        db_url: ArangoDB URL
+        db_name: Database name
+        db_user: Database user
+        db_password: Database password
+
+    Returns:
+        Dict with workspace status including:
+        - exists: bool
+        - fact_count: int
+        - benchmark_fact_count: int (facts with benchmark namespaces)
+        - is_dedicated_benchmark: bool
+    """
+    import requests
+
+    result = {
+        "exists": False,
+        "fact_count": 0,
+        "benchmark_fact_count": 0,
+        "non_benchmark_fact_count": 0,
+        "is_dedicated_benchmark": False,
+        "workspace_name": None,
+    }
+
+    try:
+        url = f"{db_url}/_db/{db_name}/_api/cursor"
+
+        # Check if workspace exists
+        ws_query = {
+            "query": "FOR w IN workspaces FILTER w._key == @wid OR w.id == @wid RETURN w",
+            "bindVars": {"wid": workspace_id}
+        }
+        response = requests.post(url, json=ws_query, auth=(db_user, db_password), timeout=10)
+
+        if response.status_code == 200:
+            workspaces = response.json().get("result", [])
+            if workspaces:
+                result["exists"] = True
+                result["workspace_name"] = workspaces[0].get("name", "unknown")
+
+        # Count facts in workspace
+        count_query = {
+            "query": """
+                LET all_facts = (FOR f IN facts FILTER f.workspace_id == @wid RETURN f)
+                LET bench_facts = (FOR f IN facts FILTER f.workspace_id == @wid AND
+                    (STARTS_WITH(f.metadata.namespace, 'msmarco_') OR
+                     STARTS_WITH(f.metadata.namespace, 'hotpotqa_') OR
+                     STARTS_WITH(f.metadata.namespace, 'benchmark_'))
+                    RETURN f)
+                RETURN {
+                    total: LENGTH(all_facts),
+                    benchmark: LENGTH(bench_facts)
+                }
+            """,
+            "bindVars": {"wid": workspace_id}
+        }
+        response = requests.post(url, json=count_query, auth=(db_user, db_password), timeout=10)
+
+        if response.status_code == 200:
+            counts = response.json().get("result", [{}])[0]
+            result["fact_count"] = counts.get("total", 0)
+            result["benchmark_fact_count"] = counts.get("benchmark", 0)
+            result["non_benchmark_fact_count"] = result["fact_count"] - result["benchmark_fact_count"]
+
+            # Consider it a dedicated benchmark workspace if:
+            # - All facts are benchmark facts, OR
+            # - Workspace name contains 'benchmark'
+            result["is_dedicated_benchmark"] = (
+                result["non_benchmark_fact_count"] == 0 or
+                (result["workspace_name"] and "benchmark" in result["workspace_name"].lower())
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to check workspace isolation: {e}")
+
+    return result
+
+
+def _get_arango_url() -> str:
+    """
+    Get the ArangoDB URL, handling Docker environment detection.
+
+    Priority:
+    1. ARANGO_URL environment variable (explicit override)
+    2. host.docker.internal if running in Docker
+    3. localhost (default for local execution)
+    """
+    import os
+
+    # Check explicit override
+    if os.environ.get("ARANGO_URL"):
+        return os.environ["ARANGO_URL"]
+
+    # Check if running in Docker (/.dockerenv exists in containers)
+    if os.path.exists("/.dockerenv"):
+        return "http://host.docker.internal:8529"
+
+    # Default for local execution
+    return "http://localhost:8529"
+
+
+def cleanup_benchmark_facts_by_prefix(
+    namespace_prefix: str,
+    db_url: str = None,  # Auto-detect if None
+    db_name: str = "knowledgeplane",
+    db_user: str = "root",
+    db_password: str = "root"
+) -> int:
+    """
+    Delete all facts with namespaces starting with a given prefix.
+
+    This is useful to clean up old benchmark data before a new run.
+
+    NOTE: Automatically detects Docker environment and uses host.docker.internal
+    to reach the host's ArangoDB when running inside a container.
+
+    Args:
+        namespace_prefix: Prefix to match (e.g., "msmarco_" or "hotpotqa_")
+        db_url: ArangoDB URL (auto-detected if None)
+        db_name: Database name
+        db_user: Database user
+        db_password: Database password
+
+    Returns:
+        Number of facts deleted
+    """
+    import requests
+    import os
+
+    # Auto-detect URL if not provided
+    if db_url is None:
+        db_url = _get_arango_url()
+
+    logger.debug(f"Cleanup using ArangoDB at: {db_url}")
+
+    try:
+        # Use AQL to delete facts with matching namespace prefix
+        url = f"{db_url}/_db/{db_name}/_api/cursor"
+
+        # First count how many will be deleted
+        count_query = {
+            "query": f"FOR f IN facts FILTER STARTS_WITH(f.metadata.namespace, @prefix) RETURN 1",
+            "bindVars": {"prefix": namespace_prefix}
+        }
+        response = requests.post(url, json=count_query, auth=(db_user, db_password), timeout=30)
+
+        if response.status_code != 201:
+            logger.warning(f"ArangoDB query failed (status {response.status_code}): {response.text[:200]}")
+            return 0
+
+        count = len(response.json().get("result", []))
+
+        if count == 0:
+            logger.info(f"No facts found with namespace prefix '{namespace_prefix}'")
+            return 0
+
+        # Delete the facts
+        delete_query = {
+            "query": f"FOR f IN facts FILTER STARTS_WITH(f.metadata.namespace, @prefix) REMOVE f IN facts RETURN 1",
+            "bindVars": {"prefix": namespace_prefix}
+        }
+        response = requests.post(url, json=delete_query, auth=(db_user, db_password), timeout=60)
+
+        if response.status_code != 201:
+            logger.warning(f"ArangoDB delete failed (status {response.status_code}): {response.text[:200]}")
+            return 0
+
+        deleted = len(response.json().get("result", []))
+
+        logger.info(f"Deleted {deleted} facts with namespace prefix '{namespace_prefix}'")
+        return deleted
+
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Cannot connect to ArangoDB at {db_url}: {e}")
+        logger.info("Hint: If running in Docker, ensure host.docker.internal is reachable")
+        return 0
+    except Exception as e:
+        logger.error(f"Failed to cleanup benchmark facts: {e}")
+        return 0
+
+
+def ensure_workspace_exists(
+    workspace_id: str,
+    db_url: str = None,  # Auto-detect if None
+    db_name: str = "knowledgeplane",
+    db_user: str = "root",
+    db_password: str = "root",
+    workspace_name: Optional[str] = None
+) -> bool:
+    """
+    Ensure a workspace exists, creating it if necessary.
+
+    This allows benchmarks to work with arbitrary workspace IDs without
+    requiring manual setup.
+
+    NOTE: Automatically detects Docker environment and uses host.docker.internal
+    to reach the host's ArangoDB when running inside a container.
+
+    Args:
+        workspace_id: Workspace ID (can be "workspaces/xxx" or just "xxx")
+        db_url: ArangoDB URL (auto-detected if None)
+        db_name: Database name
+        db_user: Database user
+        db_password: Database password
+        workspace_name: Optional human-readable name for the workspace
+
+    Returns:
+        True if workspace exists (or was created), False on failure
+    """
+    import requests
+    import time
+
+    # Auto-detect URL if not provided
+    if db_url is None:
+        db_url = _get_arango_url()
+
+    # Normalize workspace_id - extract the key part
+    ws_key = workspace_id.replace("workspaces/", "") if "/" in workspace_id else workspace_id
+
+    logger.debug(f"Ensuring workspace {ws_key} exists at {db_url}")
+
+    try:
+        url = f"{db_url}/_db/{db_name}/_api/cursor"
+
+        # Check if workspace already exists
+        check_query = {
+            "query": "FOR w IN workspaces FILTER w._key == @wid RETURN w._key",
+            "bindVars": {"wid": ws_key}
+        }
+        response = requests.post(url, json=check_query, auth=(db_user, db_password), timeout=10)
+
+        if response.status_code == 200:
+            result = response.json().get("result", [])
+            if result:
+                logger.debug(f"Workspace {ws_key} already exists")
+                return True
+
+        # Create the workspace
+        name = workspace_name or f"Benchmark Workspace {ws_key[:8]}"
+        create_url = f"{db_url}/_db/{db_name}/_api/document/workspaces"
+
+        workspace_doc = {
+            "_key": ws_key,
+            "name": name,
+            "description": "Auto-created for benchmarking",
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "settings": {}
+        }
+
+        response = requests.post(
+            create_url,
+            json=workspace_doc,
+            auth=(db_user, db_password),
+            timeout=10
+        )
+
+        if response.status_code in (201, 202):
+            logger.info(f"Created workspace: {ws_key} ({name})")
+            return True
+        else:
+            logger.warning(f"Failed to create workspace: {response.text}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Failed to ensure workspace exists: {e}")
+        return False
+
+    except Exception as e:
+        logger.error(f"Failed to cleanup benchmark facts: {e}")
+        return 0
 
 
 # Factory function
