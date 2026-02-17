@@ -1,25 +1,39 @@
 #!/usr/bin/env python3
 """
-RelationRecall Benchmark for KnowledgePlane
+RelationRecall Benchmark for KnowledgePlane (AI Librarian)
 
-This script evaluates KnowledgePlane's relation extraction capabilities by:
-1. Creating facts with known ground-truth relations
-2. Waiting for the CardConsolidator to process them
-3. Comparing extracted relations against ground truth
-4. Computing Relation Precision, Recall, and F1 scores
+This benchmark evaluates KnowledgePlane's CardConsolidator ability to
+auto-discover relations between facts - our key differentiator vs Mem0/Zep.
 
-The benchmark uses synthetic data with clear semantic relationships to provide
-a controlled evaluation of the system's relation extraction.
+Process:
+1. Create facts with known ground-truth relations
+2. Wait for CardConsolidator to process and discover relations
+3. Compare extracted relations against ground truth
+4. Compute Relation Precision, Recall, and F1 scores
+
+Datasets:
+- synthetic: 15 thematic clusters with clear semantic relations (default)
+- redocred: Re-DocRED dataset from HuggingFace (+13 F1 over DocRED)
+
+Evaluation:
+- Standard P/R/F1 on relation pairs
+- NLI-verified metrics using DeBERTa entailment (optional)
 
 Usage:
-    # Quick test (default)
-    python librarian.py --n 20
+    # Quick test with synthetic data
+    python relationrecall.py --n 10
 
-    # Full benchmark
-    python librarian.py --n 100 --consolidation-timeout 600
+    # Full benchmark with consolidation wait
+    python relationrecall.py --n 100 --consolidation-timeout 600
+
+    # Using Re-DocRED dataset
+    python relationrecall.py --n 20 --dataset redocred
+
+    # With NLI verification
+    python relationrecall.py --n 10 --use-nli
 
     # Mock mode (no server required)
-    python librarian.py --n 20 --mock
+    python relationrecall.py --n 20 --mock
 """
 
 import argparse
@@ -46,6 +60,21 @@ from lib.adapter import (
     cleanup_benchmark_facts_by_prefix,
 )
 
+# Optional imports for advanced features
+try:
+    from lib.redocred_loader import load_redocred_with_relations
+    REDOCRED_AVAILABLE = True
+except ImportError:
+    REDOCRED_AVAILABLE = False
+    load_redocred_with_relations = None
+
+try:
+    from lib.nli_verifier import NLIVerifier
+    NLI_AVAILABLE = True
+except ImportError:
+    NLI_AVAILABLE = False
+    NLIVerifier = type(None)  # Placeholder for type hints
+
 
 # Configure logging
 logging.basicConfig(
@@ -60,6 +89,7 @@ logger = logging.getLogger(__name__)
 # =====================================================================
 
 # Ground truth relation types used by CardConsolidator
+# Must match the types in @knowledgeplane/aimodel constants.ts
 RELATION_TYPES = [
     "references",
     "depends_on",
@@ -67,6 +97,7 @@ RELATION_TYPES = [
     "part_of",
     "causes",
     "enables",
+    "contradicts",
     "supports",
 ]
 
@@ -337,6 +368,11 @@ class RelationMetrics:
     false_negatives: int = 0
     total_predicted: int = 0
     total_expected: int = 0
+    # NLI-verified metrics (optional)
+    nli_precision: Optional[float] = None
+    nli_recall: Optional[float] = None
+    nli_f1: Optional[float] = None
+    nli_verified_count: Optional[int] = None
 
 
 @dataclass
@@ -392,6 +428,8 @@ class RelationRecallBenchmark:
         consolidation_timeout: int = 300,
         consolidation_poll_interval: int = 10,
         mode: str = "smart",
+        dataset: str = "synthetic",
+        use_nli: bool = False,
     ):
         """
         Initialize the benchmark.
@@ -405,6 +443,8 @@ class RelationRecallBenchmark:
             consolidation_timeout: Max seconds to wait for consolidation
             consolidation_poll_interval: Seconds between consolidation checks
             mode: "smart" (reuse cached data) or "fresh" (always start clean)
+            dataset: Dataset to use (synthetic, redocred)
+            use_nli: Enable NLI-based relation verification
         """
         self.n_clusters = n_clusters
         self.facts_per_cluster = facts_per_cluster
@@ -414,6 +454,8 @@ class RelationRecallBenchmark:
         self.consolidation_timeout = consolidation_timeout
         self.consolidation_poll_interval = consolidation_poll_interval
         self.mode = mode
+        self.dataset = dataset
+        self.use_nli = use_nli
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -431,9 +473,19 @@ class RelationRecallBenchmark:
         self.ground_truth_relations: List[Dict] = []
         self.local_to_kp_id: Dict[int, str] = {}  # Map local_id -> KP fact ID
 
+        # NLI verifier (lazy-loaded)
+        self.nli_verifier: Optional[NLIVerifier] = None
+        if use_nli:
+            if not NLI_AVAILABLE:
+                logger.warning("NLI verification requested but nli_verifier not available")
+                self.use_nli = False
+            else:
+                logger.info("NLI verification enabled")
+
         logger.info(
             f"Initialized RelationRecall benchmark: clusters={n_clusters}, "
-            f"facts/cluster={facts_per_cluster}, seed={seed}, mode={mode}"
+            f"facts/cluster={facts_per_cluster}, seed={seed}, mode={mode}, "
+            f"dataset={dataset}, use_nli={use_nli}"
         )
 
     def preflight_checks(self) -> bool:
@@ -547,9 +599,31 @@ class RelationRecallBenchmark:
         """
         Load test data (facts with ground truth relations).
 
+        Supports:
+        - synthetic: Built-in thematic clusters (default)
+        - redocred: Re-DocRED dataset from HuggingFace
+
         Returns:
             Tuple of (facts, ground_truth_relations)
         """
+        if self.dataset == "redocred":
+            if not REDOCRED_AVAILABLE:
+                logger.warning("Re-DocRED not available, falling back to synthetic")
+                self.dataset = "synthetic"
+            else:
+                logger.info("Loading Re-DocRED dataset...")
+                facts, relations = load_redocred_with_relations(
+                    n_documents=self.n_clusters,
+                    seed=self.seed,
+                    min_facts_per_doc=self.facts_per_cluster,
+                    max_facts_per_doc=self.facts_per_cluster * 2,
+                )
+                self.facts = facts
+                self.ground_truth_relations = relations
+                logger.info(f"Loaded {len(facts)} facts with {len(relations)} ground truth relations from Re-DocRED")
+                return facts, relations
+
+        # Default: synthetic data
         logger.info("Generating synthetic test data...")
 
         facts, relations = generate_synthetic_corpus(
@@ -841,7 +915,107 @@ class RelationRecallBenchmark:
             f"(TP={true_positives} FP={false_positives} FN={false_negatives})"
         )
 
+        # NLI verification (optional)
+        if self.use_nli and NLI_AVAILABLE:
+            metrics = self._compute_nli_verified_metrics(created_relations, metrics)
+
         return metrics
+
+    def _compute_nli_verified_metrics(
+        self,
+        created_relations: List[Dict],
+        base_metrics: RelationMetrics,
+    ) -> RelationMetrics:
+        """
+        Enhance metrics with NLI verification scores.
+
+        Args:
+            created_relations: Relations to verify
+            base_metrics: Base metrics to enhance
+
+        Returns:
+            RelationMetrics with NLI scores added
+        """
+        logger.info("Running NLI verification on relations...")
+
+        # Lazy-load verifier
+        if self.nli_verifier is None:
+            self.nli_verifier = NLIVerifier()
+
+        # Build fact text mapping
+        fact_texts = {}
+        for fact in self.facts:
+            local_id = int(fact["local_id"].replace("fact_", ""))
+            fact_texts[local_id] = fact["content"]
+
+        # Verify ground truth relations
+        gt_verifications = self.nli_verifier.verify_relation_batch(
+            self.ground_truth_relations, fact_texts, fact_texts
+        )
+
+        verified_gt_count = sum(1 for v in gt_verifications if v.get("is_valid", False))
+
+        # Convert created relations to local format for verification
+        created_local = []
+        kp_to_local = {v: k for k, v in self.local_to_kp_id.items()}
+
+        for rel in created_relations:
+            from_fact = rel.get("from_fact", "")
+            to_fact = rel.get("to_fact", "")
+
+            # Normalize and map back to local IDs
+            if "/" in from_fact:
+                from_fact = from_fact.split("/")[-1]
+            if "/" in to_fact:
+                to_fact = to_fact.split("/")[-1]
+
+            # Find local IDs
+            from_local = None
+            to_local = None
+            for local_id, kp_id in self.local_to_kp_id.items():
+                kp_id_norm = kp_id.split("/")[-1] if "/" in kp_id else kp_id
+                if kp_id_norm == from_fact:
+                    from_local = local_id
+                if kp_id_norm == to_fact:
+                    to_local = local_id
+
+            if from_local is not None and to_local is not None:
+                created_local.append({
+                    "from_local_id": from_local,
+                    "to_local_id": to_local,
+                    "type": rel.get("type", "related_to"),
+                })
+
+        # Verify created relations
+        if created_local:
+            pred_verifications = self.nli_verifier.verify_relation_batch(
+                created_local, fact_texts, fact_texts
+            )
+            verified_pred_count = sum(1 for v in pred_verifications if v.get("is_valid", False))
+        else:
+            verified_pred_count = 0
+
+        # Compute NLI-verified precision
+        nli_precision = verified_pred_count / len(created_relations) if created_relations else 0.0
+
+        # Compute NLI-verified recall (against verified ground truth)
+        nli_recall = verified_pred_count / verified_gt_count if verified_gt_count > 0 else 0.0
+
+        nli_f1 = 2 * nli_precision * nli_recall / (nli_precision + nli_recall) if (nli_precision + nli_recall) > 0 else 0.0
+
+        logger.info(
+            f"NLI-verified metrics: P={nli_precision:.3f} R={nli_recall:.3f} F1={nli_f1:.3f} "
+            f"(verified: {verified_pred_count}/{len(created_relations)} predicted, "
+            f"{verified_gt_count}/{len(self.ground_truth_relations)} ground truth)"
+        )
+
+        # Update metrics with NLI scores
+        base_metrics.nli_precision = nli_precision
+        base_metrics.nli_recall = nli_recall
+        base_metrics.nli_f1 = nli_f1
+        base_metrics.nli_verified_count = verified_pred_count
+
+        return base_metrics
 
     def run_benchmark(self) -> BenchmarkSummary:
         """
@@ -862,9 +1036,9 @@ class RelationRecallBenchmark:
 
         # Create namespace
         if self.mode == "smart":
-            namespace = f"librarian_n{self.n_clusters}_seed{self.seed}"
+            namespace = f"relationrecall_n{self.n_clusters}_seed{self.seed}"
         else:
-            namespace = f"librarian_{int(time.time())}"
+            namespace = f"relationrecall_{int(time.time())}"
 
         logger.info(f"Using namespace: {namespace}")
 
@@ -904,6 +1078,8 @@ class RelationRecallBenchmark:
                 "facts_per_cluster": self.facts_per_cluster,
                 "seed": self.seed,
                 "mode": self.mode,
+                "dataset": self.dataset,
+                "use_nli": self.use_nli,
                 "namespace": namespace,
                 "mock": self.mock,
                 "timestamp": datetime.now().isoformat(),
@@ -930,12 +1106,17 @@ class RelationRecallBenchmark:
     def _save_results(self, summary: BenchmarkSummary) -> None:
         """Save results to output files."""
         # Save summary JSON
-        json_path = self.output_dir / "librarian_summary.json"
+        json_path = self.output_dir / "relationrecall_summary.json"
         logger.info(f"Saving summary to {json_path}")
+
+        # Convert metrics to dict, handling None values
+        metrics_dict = asdict(summary.overall_metrics)
+        # Clean up None values for JSON
+        metrics_dict = {k: v for k, v in metrics_dict.items() if v is not None}
 
         with open(json_path, 'w') as f:
             json.dump({
-                "metrics": asdict(summary.overall_metrics),
+                "metrics": metrics_dict,
                 "config": summary.config,
                 "timing": summary.timing,
                 "consolidation_triggered": summary.consolidation_triggered,
@@ -943,7 +1124,7 @@ class RelationRecallBenchmark:
             }, f, indent=2)
 
         # Save detailed CSV
-        csv_path = self.output_dir / "librarian_details.csv"
+        csv_path = self.output_dir / "relationrecall_details.csv"
         logger.info(f"Saving details to {csv_path}")
 
         with open(csv_path, 'w', newline='') as f:
@@ -979,12 +1160,12 @@ class RelationRecallBenchmark:
         runs_dir.mkdir(exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_dir = runs_dir / f"{timestamp}_librarian_n{self.n_clusters}"
+        run_dir = runs_dir / f"{timestamp}_relationrecall_n{self.n_clusters}"
         run_dir.mkdir(exist_ok=True)
 
         # Copy output files
         import shutil
-        for src_file in self.output_dir.glob("librarian_*"):
+        for src_file in self.output_dir.glob("relationrecall_*"):
             shutil.copy(src_file, run_dir / src_file.name)
 
         logger.info(f"Archived run to {run_dir}")
@@ -992,7 +1173,7 @@ class RelationRecallBenchmark:
     def print_summary(self, summary: BenchmarkSummary) -> None:
         """Print benchmark summary to console."""
         print("\n" + "=" * 60)
-        print("RelationRecall Benchmark Results")
+        print("RelationRecall Benchmark Results (AI Librarian)")
         print("=" * 60)
 
         m = summary.overall_metrics
@@ -1006,11 +1187,21 @@ class RelationRecallBenchmark:
         print(f"  Total Predicted: {m.total_predicted}")
         print(f"  Total Expected:  {m.total_expected}")
 
+        # NLI-verified metrics (if available)
+        if m.nli_precision is not None:
+            print("\nNLI-Verified Metrics:")
+            print(f"  NLI Precision: {m.nli_precision * 100:.1f}%")
+            print(f"  NLI Recall:    {m.nli_recall * 100:.1f}%")
+            print(f"  NLI F1 Score:  {m.nli_f1 * 100:.1f}%")
+            print(f"  Verified:      {m.nli_verified_count}/{m.total_predicted} relations")
+
         print("\nConfiguration:")
         print(f"  Clusters:      {summary.config.get('n_clusters')}")
         print(f"  Facts/Cluster: {summary.config.get('facts_per_cluster')}")
+        print(f"  Dataset:       {summary.config.get('dataset', 'synthetic')}")
         print(f"  Seed:          {summary.config.get('seed')}")
         print(f"  Mode:          {summary.config.get('mode')}")
+        print(f"  NLI Enabled:   {summary.config.get('use_nli', False)}")
 
         print("\nTiming:")
         print(f"  Total Time:    {summary.timing.get('total_seconds', 0):.1f}s")
@@ -1054,6 +1245,20 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=42,
         help='Random seed for reproducibility'
+    )
+
+    parser.add_argument(
+        '--dataset',
+        type=str,
+        choices=['synthetic', 'redocred'],
+        default='synthetic',
+        help='Dataset to use: synthetic (built-in), redocred (HuggingFace Re-DocRED)'
+    )
+
+    parser.add_argument(
+        '--use-nli',
+        action='store_true',
+        help='Enable NLI-based relation verification (requires transformers, torch)'
     )
 
     parser.add_argument(
@@ -1103,6 +1308,18 @@ def main():
         logger.error("Number of clusters must be >= 1")
         return 1
 
+    # Check dataset availability
+    if args.dataset == 'redocred' and not REDOCRED_AVAILABLE:
+        logger.warning("Re-DocRED loader not available, falling back to synthetic")
+        logger.info("Install with: pip install datasets")
+        args.dataset = 'synthetic'
+
+    # Check NLI availability
+    if args.use_nli and not NLI_AVAILABLE:
+        logger.warning("NLI verifier not available, disabling NLI verification")
+        logger.info("Install with: pip install transformers torch")
+        args.use_nli = False
+
     # Create benchmark
     benchmark = RelationRecallBenchmark(
         n_clusters=args.n,
@@ -1113,6 +1330,8 @@ def main():
         consolidation_timeout=args.consolidation_timeout,
         consolidation_poll_interval=args.consolidation_poll_interval,
         mode=args.mode,
+        dataset=args.dataset,
+        use_nli=args.use_nli,
     )
 
     # Run benchmark

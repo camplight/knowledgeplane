@@ -10,6 +10,7 @@ import {
   type ChatMessage,
   type ChatCompletionOptions,
   type Tool,
+  getChatModel,
 } from "@knowledgeplane/aimodel";
 import { randomUUID } from "node:crypto";
 import * as path from "node:path";
@@ -811,8 +812,7 @@ Make sure to:
       };
 
       const chatOptions: ChatCompletionOptions = {
-        model:
-          process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || "gpt-4o",
+        model: getChatModel(),
         temperature: 0.7,
         maxTokens: 4000,
         tools: [codeExecuteTool],

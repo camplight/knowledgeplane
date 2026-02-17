@@ -9,6 +9,7 @@ import {
   createAIModelClient,
   type ChatMessage,
   type ChatCompletionOptions,
+  getChatModel,
 } from "@knowledgeplane/aimodel";
 
 export class CardConsolidator {
@@ -457,8 +458,7 @@ Identify relationships that would be useful for organizing and understanding the
     ];
 
     const chatOptions: ChatCompletionOptions = {
-      model:
-        process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || "gpt-4o",
+      model: getChatModel(),
       temperature: 0.5,
       responseFormat: "json_object",
     };
@@ -625,8 +625,7 @@ Consider the relationships between these facts when consolidating. Provide your 
     ];
 
     const chatOptions: ChatCompletionOptions = {
-      model:
-        process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || "gpt-4o",
+      model: getChatModel(),
       temperature: 0.7,
       responseFormat: "json_object",
     };

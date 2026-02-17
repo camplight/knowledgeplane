@@ -1,7 +1,7 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { Fact, KnowledgeCard, FactRelation, WorkspaceMember } from "@knowledgeplane/db";
 import { stripEmbeddings } from "./strip-embeddings.js";
-import { createAIModelClient } from "@knowledgeplane/aimodel";
+import { createAIModelClient, getChatModel } from "@knowledgeplane/aimodel";
 import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
 
 export const factsConsolidateTool: Tool = {
@@ -136,8 +136,7 @@ Consider the relationships between these facts when consolidating. Provide your 
   ];
 
   const chatOptions: ChatCompletionOptions = {
-    model:
-      process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || "gpt-4o",
+    model: getChatModel(),
     temperature: 0.7,
     responseFormat: "json_object",
   };

@@ -25,6 +25,9 @@ N_QUESTIONS=""
 SKIP_PREFLIGHT=false
 ARCHIVE=true
 EXTRA_ARGS=""
+DATASET="synthetic"
+WAIT_TIMEOUT=300
+USE_NLI=false
 
 show_help() {
     echo -e "${BOLD}${BLUE}KnowledgePlane Benchmark CLI${NC}"
@@ -36,18 +39,24 @@ show_help() {
     echo -e "    ${CYAN}hotpot${NC}      HotpotQA multi-hop reasoning (SF F1 metric)"
     echo -e "    ${CYAN}freshness${NC}   Write-to-searchable latency"
     echo -e "    ${CYAN}msmarco${NC}     MS MARCO passage retrieval"
+    echo -e "    ${CYAN}relationrecall${NC}   Relation extraction quality (AI Librarian)"
     echo -e "    ${CYAN}all${NC}         Run all benchmarks"
     echo -e "    ${CYAN}preflight${NC}   Check environment (runs automatically)"
     echo -e "    ${CYAN}runs${NC}        List archived benchmark runs"
     echo -e "    ${CYAN}clean${NC}       Remove old benchmark data from DB"
     echo ""
     echo -e "${BOLD}OPTIONS${NC}"
-    echo "    -n, --n <num>       Number of questions/samples (default: varies)"
+    echo "    -n, --n <num>       Number of questions/samples/clusters (default: varies)"
     echo "    --quick             Use minimal sample size (n=10)"
     echo "    --full              Use full sample size (n=500)"
     echo "    --skip-preflight    Skip environment checks"
     echo "    --no-archive        Don't save results to runs/"
     echo "    -- <args>           Pass extra args directly to Python script"
+    echo ""
+    echo -e "${BOLD}RELATIONRECALL OPTIONS${NC}"
+    echo "    --dataset <name>    Dataset: synthetic (default), redocred (HuggingFace)"
+    echo "    --wait <secs>       Consolidation timeout in seconds (default: 300)"
+    echo "    --use-nli           Enable NLI-based relation verification"
     echo ""
     echo -e "${BOLD}EXAMPLES${NC}"
     echo "    ./bench hotpot                  # Quick validation (n=20)"
@@ -55,6 +64,10 @@ show_help() {
     echo "    ./bench hotpot --full           # Full benchmark (n=500)"
     echo "    ./bench hotpot -- --run_vector false  # Pass args to Python"
     echo "    ./bench freshness               # Freshness with FAISS comparison"
+    echo "    ./bench relationrecall -n 10    # RelationRecall with 10 clusters"
+    echo "    ./bench relationrecall --wait 600  # Extended consolidation timeout"
+    echo "    ./bench relationrecall --dataset redocred  # Use Re-DocRED"
+    echo "    ./bench relationrecall --use-nli   # With NLI verification"
     echo "    ./bench all --quick             # All benchmarks, minimal size"
     echo "    ./bench runs                    # List past runs"
     echo ""
@@ -65,6 +78,8 @@ show_help() {
 }
 
 run_preflight() {
+    local check_workers=${1:-false}
+
     echo -e "${BOLD}${BLUE}━━━ Preflight Checks ━━━${NC}"
     local errors=0
 
@@ -114,6 +129,23 @@ run_preflight() {
         errors=$((errors + 1))
     fi
 
+    # Background workers (for librarian benchmark)
+    if [ "$check_workers" = true ]; then
+        echo -e "${DIM}Checking background workers...${NC}"
+        # Check if CardConsolidator is running by looking for active workers
+        local worker_status
+        worker_status=$(curl -s --connect-timeout 2 "http://localhost:8529/_db/knowledgeplane/_api/cursor" \
+            -u root:root -H "Content-Type: application/json" \
+            -d '{"query": "FOR w IN worker_status FILTER w.name == \"card-consolidator\" RETURN w"}' 2>/dev/null)
+
+        if echo "$worker_status" | grep -q '"result":\[\]'; then
+            echo -e "${YELLOW}⚠${NC} CardConsolidator worker status unknown"
+            echo -e "${DIM}  Ensure background-workers is running: npm run dev:background-workers${NC}"
+        else
+            echo -e "${GREEN}✓${NC} CardConsolidator worker registered"
+        fi
+    fi
+
     echo ""
     if [ $errors -gt 0 ]; then
         echo -e "${RED}Preflight failed with $errors errors${NC}"
@@ -141,6 +173,7 @@ EOF
     cp output/hotpotqa_*.{csv,json} "$run_dir/" 2>/dev/null || true
     cp output/msmarco_*.{csv,json} "$run_dir/" 2>/dev/null || true
     cp output/freshness*.json "$run_dir/" 2>/dev/null || true
+    cp output/relationrecall_*.{csv,json} "$run_dir/" 2>/dev/null || true
 
     echo -e "${GREEN}Results archived to:${NC} $run_dir"
 }
@@ -199,6 +232,52 @@ run_msmarco() {
     [ "$ARCHIVE" = true ] && archive_results "msmarco_n${n}"
 }
 
+run_relationrecall() {
+    local n=${N_QUESTIONS:-10}
+    local timeout=${WAIT_TIMEOUT:-300}
+    local dataset=${DATASET:-synthetic}
+    local use_nli=${USE_NLI:-false}
+
+    echo -e "${BOLD}${BLUE}━━━ RelationRecall Benchmark (n=$n clusters) ━━━${NC}"
+    echo -e "${DIM}Metric: Relation Extraction F1${NC}"
+    echo -e "${DIM}Dataset: $dataset | Consolidation timeout: ${timeout}s${NC}"
+    if [ "$use_nli" = true ]; then
+        echo -e "${DIM}NLI verification: enabled${NC}"
+    fi
+    echo ""
+
+    local nli_flag=""
+    if [ "$use_nli" = true ]; then
+        nli_flag="--use-nli"
+    fi
+
+    run_docker relationrecall --n "$n" --dataset "$dataset" --consolidation-timeout "$timeout" $nli_flag
+
+    [ "$ARCHIVE" = true ] && archive_results "relationrecall_n${n}"
+
+    if [ -f "output/relationrecall_summary.json" ]; then
+        echo ""
+        echo -e "${BOLD}Results:${NC}"
+        python3 -c "
+import json
+with open('output/relationrecall_summary.json') as f:
+    d = json.load(f)
+m = d.get('metrics', {})
+print(f\"  Relation F1:  {m.get('f1', 0)*100:.1f}%  <- KEY METRIC\")
+print(f\"  Precision:    {m.get('precision', 0)*100:.1f}%\")
+print(f\"  Recall:       {m.get('recall', 0)*100:.1f}%\")
+print(f\"  TP/FP/FN:     {m.get('true_positives', 0)}/{m.get('false_positives', 0)}/{m.get('false_negatives', 0)}\")
+# NLI metrics if available
+if 'nli_f1' in m:
+    print()
+    print('  NLI-Verified:')
+    print(f\"    NLI F1:     {m.get('nli_f1', 0)*100:.1f}%\")
+    print(f\"    NLI Prec:   {m.get('nli_precision', 0)*100:.1f}%\")
+    print(f\"    NLI Recall: {m.get('nli_recall', 0)*100:.1f}%\")
+"
+    fi
+}
+
 run_all() {
     echo -e "${BOLD}${BLUE}━━━ Running All Benchmarks ━━━${NC}"
     echo ""
@@ -235,6 +314,8 @@ list_runs() {
             metric=$(python3 -c "import json; print(f\"{json.load(open('$dir/hotpotqa_summary.json')).get('kp',{}).get('avg_sf_f1',0)*100:.1f}%\")" 2>/dev/null || echo "?")
         elif [ -f "$dir/msmarco_summary.json" ]; then
             metric=$(python3 -c "import json; print(f\"{json.load(open('$dir/msmarco_summary.json')).get('kp',{}).get('mrr',0):.3f}\")" 2>/dev/null || echo "?")
+        elif [ -f "$dir/relationrecall_summary.json" ]; then
+            metric=$(python3 -c "import json; print(f\"{json.load(open('$dir/relationrecall_summary.json')).get('metrics',{}).get('f1',0)*100:.1f}%\")" 2>/dev/null || echo "?")
         fi
 
         printf "%-25s %-15s %-10s %s\n" "$name" "$benchmark" "$n" "$metric"
@@ -245,7 +326,7 @@ clean_db() {
     echo -e "${BOLD}${BLUE}━━━ Cleaning Benchmark Data ━━━${NC}"
     echo ""
 
-    for ns in hotpotqa freshness msmarco; do
+    for ns in hotpotqa freshness msmarco relationrecall; do
         result=$(curl -s "http://localhost:8529/_db/knowledgeplane/_api/cursor" \
             -u root:root -H "Content-Type: application/json" \
             -d "{\"query\": \"FOR f IN facts FILTER STARTS_WITH(f.metadata.namespace, \\\"$ns\\\") REMOVE f IN facts RETURN 1\"}" \
@@ -260,7 +341,7 @@ clean_db() {
 COMMAND=""
 while [[ $# -gt 0 ]]; do
     case $1 in
-        hotpot|freshness|msmarco|all|preflight|runs|clean|help|-h|--help)
+        hotpot|freshness|msmarco|relationrecall|all|preflight|runs|clean|help|-h|--help)
             COMMAND=$1; shift ;;
         -n|--n)
             N_QUESTIONS=$2; shift 2 ;;
@@ -272,6 +353,12 @@ while [[ $# -gt 0 ]]; do
             SKIP_PREFLIGHT=true; shift ;;
         --no-archive)
             ARCHIVE=false; shift ;;
+        --dataset)
+            DATASET=$2; shift 2 ;;
+        --wait)
+            WAIT_TIMEOUT=$2; shift 2 ;;
+        --use-nli)
+            USE_NLI=true; shift ;;
         --)
             shift; EXTRA_ARGS="$*"; break ;;
         *)
@@ -290,6 +377,9 @@ case $COMMAND in
         list_runs ;;
     clean)
         clean_db ;;
+    relationrecall)
+        [ "$SKIP_PREFLIGHT" = false ] && run_preflight true  # Check workers for relationrecall
+        run_relationrecall ;;
     hotpot|freshness|msmarco|all)
         [ "$SKIP_PREFLIGHT" = false ] && run_preflight
         run_$COMMAND ;;

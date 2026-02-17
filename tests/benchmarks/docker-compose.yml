@@ -6,7 +6,11 @@
 #   docker compose run --rm benchmark hotpot -n 100      # Custom
 #   docker compose run --rm benchmark freshness          # Freshness benchmark
 #   docker compose run --rm benchmark msmarco            # MS MARCO benchmark
-#   docker compose run --rm benchmark librarian          # RelationRecall benchmark
+#   docker compose run --rm benchmark relationrecall     # RelationRecall benchmark
+#
+# RelationRecall options:
+#   docker compose run --rm benchmark python3 src/relationrecall.py --n 10 --consolidation-timeout 600
+#   docker compose run --rm benchmark python3 src/relationrecall.py --dataset redocred --use-nli
 
 services:
   benchmark:

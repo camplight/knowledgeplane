@@ -7,7 +7,7 @@ import {
   cosineSimilarity,
   type KnowledgeCardRecord,
 } from "@knowledgeplane/db";
-import { createAIModelClient } from "@knowledgeplane/aimodel";
+import { createAIModelClient, getChatModel } from "@knowledgeplane/aimodel";
 import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
 
 type KnowledgeCardSearchResult = {
@@ -31,7 +31,7 @@ export async function searchFacts(args: {
   include_trashed?: boolean;
 }) {
   const provider = getProvider();
-  const limit = Math.min(args.k || 5, 20);
+  const limit = Math.min(args.k || 5, 100);  // Allow up to 100 for benchmarks
   const maxContentLength = 500;
 
   const hits = await Fact.search({
@@ -177,8 +177,7 @@ Provide your response as JSON with the following structure:
   ];
 
   const chatOptions: ChatCompletionOptions = {
-    model:
-      process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || "gpt-4o",
+    model: getChatModel(),
     temperature: 0.7,
     responseFormat: "json_object",
   };
@@ -309,8 +308,7 @@ Provide your response as JSON with the following structure:
   ];
 
   const chatOptions: ChatCompletionOptions = {
-    model:
-      process.env.OPENAI_MODEL || process.env.ANTHROPIC_MODEL || "gpt-4o",
+    model: getChatModel(),
     temperature: 0.7,
     responseFormat: "json_object",
   };
