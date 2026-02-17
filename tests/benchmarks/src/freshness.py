@@ -74,7 +74,7 @@ except ImportError:
     FAISS_AVAILABLE = False
     print("Note: Install faiss-cpu and sentence-transformers for baseline comparison")
 
-from kp_adapter import (
+from lib.adapter import (
     HTTPKnowledgePlaneAdapter,
     KnowledgePlaneAdapter,
     QueryResult,

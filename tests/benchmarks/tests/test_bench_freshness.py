@@ -9,10 +9,10 @@ a live KnowledgePlane instance by using the mock adapter.
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
-parent_dir = Path(__file__).parent.parent
-if str(parent_dir) not in sys.path:
-    sys.path.insert(0, str(parent_dir))
+# Add src directory to path for imports
+src_dir = Path(__file__).parent.parent / "src"
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
 
 
 import json
@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from bench_freshness import (
+from freshness import (
     FreshnessResult,
     PollAttempt,
     TestFact,
@@ -30,7 +30,7 @@ from bench_freshness import (
     poll_until_updated,
     save_results,
 )
-from kp_adapter import MockKnowledgePlaneAdapter
+from lib.adapter import MockKnowledgePlaneAdapter
 
 
 class TestGenerateTestFact(unittest.TestCase):

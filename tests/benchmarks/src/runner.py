@@ -42,7 +42,7 @@ def run_hotpotqa(args) -> Dict[str, Any]:
 
     cmd = [
         sys.executable,
-        "bench_hotpotqa.py",
+        "hotpotqa.py",
         "--n", str(args.n_hotpot),
         "--top_k", str(args.top_k),
         "--seed", str(args.seed),
@@ -94,7 +94,7 @@ def run_freshness(args) -> Dict[str, Any]:
 
     cmd = [
         sys.executable,
-        "bench_freshness.py",
+        "freshness.py",
         "--mode", args.freshness_mode,
         "--poll_interval", str(args.poll_interval),
         "--max_attempts", str(args.max_attempts),

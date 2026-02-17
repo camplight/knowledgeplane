@@ -38,7 +38,7 @@ import numpy as np
 from datasets import load_dataset
 from tqdm import tqdm
 
-from kp_adapter import (
+from lib.adapter import (
     HTTPKnowledgePlaneAdapter,
     MockKnowledgePlaneAdapter,
     KnowledgePlaneAdapter
@@ -724,7 +724,8 @@ class HotpotQABenchmark:
                     k=self.top_k,
                     mode="extractive"
                 )
-                retrieved_docs = [r.text for r in results] if results else []
+                # RetrievalResult has .chunk.text (Chunk object contains the text)
+                retrieved_docs = [r.chunk.text for r in results] if results else []
             else:
                 # Fallback for older vector baseline versions
                 answer = self.vector_baseline.query(

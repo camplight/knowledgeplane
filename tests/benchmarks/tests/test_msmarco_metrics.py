@@ -11,10 +11,10 @@ from typing import List, Dict, Set
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add src directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from bench_msmarco import compute_mrr, compute_recall_at_k, compute_ndcg_at_k
+from msmarco import compute_mrr, compute_recall_at_k, compute_ndcg_at_k
 
 
 class TestMRR(unittest.TestCase):

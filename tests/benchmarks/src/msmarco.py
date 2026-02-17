@@ -29,7 +29,7 @@ import numpy as np
 from datasets import load_dataset
 from tqdm import tqdm
 
-from kp_adapter import (
+from lib.adapter import (
     HTTPKnowledgePlaneAdapter,
     MockKnowledgePlaneAdapter,
     KnowledgePlaneAdapter,
@@ -38,7 +38,7 @@ from kp_adapter import (
     ensure_workspace_exists,
     wait_for_embeddings,
 )
-from vector_baseline import VectorBaseline, Document
+from lib.vector import VectorBaseline, Document
 
 
 # Configure logging - level set dynamically based on --verbose flag

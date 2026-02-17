@@ -192,6 +192,35 @@ class VectorBaseline:
             RuntimeError: If no documents have been ingested
             ValueError: If k < 1 or invalid mode
         """
+        answer, _ = self.query_with_results(question, k, mode)
+        return answer
+
+    def query_with_results(
+        self,
+        question: str,
+        k: int = 5,
+        mode: str = "extractive"
+    ) -> Tuple[str, List[RetrievalResult]]:
+        """
+        Query the vector baseline and return both the answer and retrieved chunks.
+
+        This method is used by benchmarks to compute retrieval metrics (SF F1, etc.)
+        by comparing retrieved chunks against gold evidence.
+
+        Args:
+            question: The question to answer
+            k: Number of top chunks to retrieve
+            mode: Answer generation mode:
+                  - "extractive": Extract the best sentence from top chunk (default, no API cost)
+                  - "generative": Use LLM to synthesize answer (requires API key)
+
+        Returns:
+            Tuple of (answer_string, list_of_RetrievalResult)
+
+        Raises:
+            RuntimeError: If no documents have been ingested
+            ValueError: If k < 1 or invalid mode
+        """
         if not self.is_indexed:
             raise RuntimeError("No documents ingested. Call ingest_documents() first.")
 
@@ -208,13 +237,15 @@ class VectorBaseline:
         retrieved = self._retrieve(query_embedding, k)
 
         if not retrieved:
-            return "No relevant information found."
+            return "No relevant information found.", []
 
         # Step 3: Generate answer based on mode
         if mode == "extractive":
-            return self._generate_answer_extractive(question, retrieved)
+            answer = self._generate_answer_extractive(question, retrieved)
         else:  # generative
-            return self._generate_answer_generative(question, retrieved)
+            answer = self._generate_answer_generative(question, retrieved)
+
+        return answer, retrieved
 
     def _chunk_document(self, doc: Document) -> List[Chunk]:
         """

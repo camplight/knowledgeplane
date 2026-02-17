@@ -9,14 +9,12 @@ work correctly with various inputs.
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
-parent_dir = Path(__file__).parent.parent
-if str(parent_dir) not in sys.path:
-    sys.path.insert(0, str(parent_dir))
+# Add src directory to path for imports
+src_dir = Path(__file__).parent.parent / "src"
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
 
-
-import sys
-from bench_hotpotqa import normalize_answer, compute_exact_match, compute_f1
+from hotpotqa import normalize_answer, compute_exact_match, compute_f1
 
 
 def test_normalize_answer():

@@ -4,9 +4,13 @@ Unit tests for statistical_analysis.py
 Tests all statistical functions for correctness, edge cases, and robustness.
 """
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 import pytest
 import numpy as np
-from statistical_analysis import (
+from lib.stats import (
     compute_confidence_interval,
     paired_t_test,
     mcnemar_test,
