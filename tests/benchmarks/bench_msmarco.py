@@ -23,7 +23,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field, asdict
 from math import log2
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Set, Tuple
+from typing import List, Dict, Optional, Any, Set, Tuple, Union
 
 import numpy as np
 from datasets import load_dataset
@@ -32,17 +32,30 @@ from tqdm import tqdm
 from kp_adapter import (
     HTTPKnowledgePlaneAdapter,
     MockKnowledgePlaneAdapter,
-    KnowledgePlaneAdapter
+    KnowledgePlaneAdapter,
+    cleanup_benchmark_facts_by_prefix,
+    check_workspace_isolation,
+    ensure_workspace_exists,
+    wait_for_embeddings,
 )
 from vector_baseline import VectorBaseline, Document
 
 
-# Configure logging
+# Configure logging - level set dynamically based on --verbose flag
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def set_verbose_logging(verbose: bool) -> None:
+    """Enable verbose DEBUG logging for all benchmark loggers."""
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logging.getLogger('__main__').setLevel(logging.DEBUG)
+        logging.getLogger('kp_adapter').setLevel(logging.DEBUG)
+        logger.info("Verbose logging enabled (DEBUG level)")
 
 
 @dataclass
@@ -100,7 +113,9 @@ class MSMARCOBenchmark:
         run_kp: bool = True,
         run_vector: bool = True,
         mock_kp: bool = False,
-        output_dir: str = "output"
+        output_dir: str = "output",
+        wait_for_embeddings: bool = False,
+        embedding_timeout: int = 30
     ):
         """
         Initialize the benchmark.
@@ -113,6 +128,8 @@ class MSMARCOBenchmark:
             run_vector: Whether to run vector baseline
             mock_kp: Use mock KP adapter (no server required)
             output_dir: Directory for output files
+            wait_for_embeddings: Wait for embeddings before querying
+            embedding_timeout: Timeout in seconds to wait for embeddings
         """
         self.n_queries = n_queries
         self.k = k
@@ -121,6 +138,9 @@ class MSMARCOBenchmark:
         self.run_vector = run_vector
         self.mock_kp = mock_kp
         self.output_dir = Path(output_dir)
+        self.cleanup = True  # Set via run_benchmark(cleanup=...)
+        self.wait_for_embeddings = wait_for_embeddings
+        self.embedding_timeout = embedding_timeout
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -159,7 +179,7 @@ class MSMARCOBenchmark:
             return True
 
         logger.info("=" * 60)
-        logger.info("Running Preflight Checks (6 checks)")
+        logger.info("Running Preflight Checks (7 checks)")
         logger.info("=" * 60)
 
         api_url = os.environ.get("KP_API_URL", "http://localhost:8081")
@@ -171,17 +191,24 @@ class MSMARCOBenchmark:
         # Check 1: REST API reachable
         # ═══════════════════════════════════════════════════════════
         logger.info(f"[1/6] KP REST API at {api_url}...")
+        api_accessible = False
+        working_api_url = api_url
         try:
-            response = requests.get(f"{api_url}/health", timeout=5)
-            if response.status_code == 200:
-                logger.info(f"  ✓ REST API is healthy")
-            else:
-                logger.error(f"  ✗ REST API returned status {response.status_code}")
+            # Try Docker internal hostname first (for containerized benchmarks)
+            for try_url in [api_url.replace("localhost", "host.docker.internal"), api_url]:
+                try:
+                    response = requests.get(f"{try_url}/health", timeout=5)
+                    if response.status_code == 200:
+                        logger.info(f"  ✓ REST API is healthy")
+                        api_accessible = True
+                        working_api_url = try_url
+                        break
+                except:
+                    continue
+            if not api_accessible:
+                logger.error(f"  ✗ Cannot connect to REST API at {api_url}")
+                logger.error(f"    Start it with: npm run dev")
                 checks_passed = False
-        except requests.exceptions.ConnectionError:
-            logger.error(f"  ✗ Cannot connect to REST API at {api_url}")
-            logger.error(f"    Start it with: npm run dev")
-            checks_passed = False
         except Exception as e:
             logger.error(f"  ✗ REST API check failed: {e}")
             checks_passed = False
@@ -285,9 +312,46 @@ class MSMARCOBenchmark:
             warnings.append("No OpenAI key - embeddings won't generate")
 
         # ═══════════════════════════════════════════════════════════
-        # Check 6: Background worker warning
+        # Check 6: Workspace isolation
         # ═══════════════════════════════════════════════════════════
-        logger.info(f"[6/6] Background worker status...")
+        logger.info(f"[6/7] Workspace isolation...")
+        if workspace_id and db_accessible:
+            try:
+                isolation_info = check_workspace_isolation(
+                    workspace_id=workspace_id,
+                    db_url=db_url
+                )
+                if isolation_info["exists"]:
+                    logger.info(f"  ✓ Workspace exists: {isolation_info.get('workspace_name', workspace_id)}")
+                    logger.info(f"    Total facts: {isolation_info['fact_count']}")
+                    logger.info(f"    Benchmark facts: {isolation_info['benchmark_fact_count']}")
+                    logger.info(f"    Non-benchmark facts: {isolation_info['non_benchmark_fact_count']}")
+
+                    if isolation_info["is_dedicated_benchmark"]:
+                        logger.info(f"  ✓ Workspace is isolated for benchmarking")
+                    else:
+                        logger.warning(f"  ⚠ Workspace contains {isolation_info['non_benchmark_fact_count']} non-benchmark facts")
+                        logger.warning(f"    Consider using a dedicated benchmark workspace")
+                        warnings.append(f"Shared workspace with {isolation_info['non_benchmark_fact_count']} non-benchmark facts")
+                else:
+                    # Auto-create workspace for benchmarking
+                    logger.info(f"  ⚠ Workspace {workspace_id} not found - creating...")
+                    if ensure_workspace_exists(workspace_id, db_url=db_url):
+                        logger.info(f"  ✓ Created benchmark workspace: {workspace_id}")
+                    else:
+                        logger.warning(f"  ⚠ Failed to create workspace {workspace_id}")
+                        warnings.append("Workspace auto-creation failed")
+            except Exception as e:
+                logger.warning(f"  ⚠ Could not verify workspace isolation: {e}")
+                warnings.append("Workspace isolation not verified")
+        else:
+            logger.warning(f"  ⚠ Skipped (no workspace_id or DB access)")
+            warnings.append("Workspace isolation not checked")
+
+        # ═══════════════════════════════════════════════════════════
+        # Check 7: Background worker warning
+        # ═══════════════════════════════════════════════════════════
+        logger.info(f"[7/7] Background worker status...")
         logger.info(f"  ⚠ Cannot verify worker - if embeddings timeout:")
         logger.info(f"    Run: npm run dev:background-workers")
         warnings.append("Background worker not verified")
@@ -300,6 +364,10 @@ class MSMARCOBenchmark:
             logger.info("✓ All critical checks passed")
             if warnings:
                 logger.info(f"  Warnings ({len(warnings)}): {', '.join(warnings[:3])}")
+            # Update environment with working URLs for downstream code
+            if api_accessible and working_api_url != api_url:
+                os.environ["KP_API_URL"] = working_api_url
+                logger.info(f"  Using Docker-accessible URL: {working_api_url}")
         else:
             logger.error("✗ PREFLIGHT FAILED - cannot proceed")
             logger.error("  Quick fix: npm run dev && source .env.benchmark")
@@ -434,7 +502,7 @@ class MSMARCOBenchmark:
         self,
         passages: List[Dict[str, Any]],
         namespace: str
-    ) -> bool:
+    ) -> Tuple[bool, List[str]]:
         """
         Ingest passages into KP system.
 
@@ -443,10 +511,12 @@ class MSMARCOBenchmark:
             namespace: Namespace for isolation
 
         Returns:
-            True if successful, False otherwise
+            Tuple of (success, fact_ids)
         """
         try:
             logger.info(f"Ingesting {len(passages)} passages into KP...")
+            logger.debug(f"[DEBUG] Using namespace: {namespace}")
+            logger.debug(f"[DEBUG] First passage metadata: {passages[0].get('metadata', {})}")
             start_time = time.time()
 
             results = self.kp_adapter.ingest_documents(passages, namespace=namespace)
@@ -454,16 +524,43 @@ class MSMARCOBenchmark:
             elapsed = time.time() - start_time
             total_facts = sum(r.facts_created for r in results)
             total_relations = sum(r.relations_created for r in results)
+            fact_ids = [fid for r in results for fid in r.fact_ids]
 
             logger.info(
                 f"KP ingestion complete: {total_facts} facts, "
                 f"{total_relations} relations in {elapsed:.2f}s"
             )
-            return True
+            logger.debug(f"[DEBUG] Created fact IDs: {fact_ids[:3]}... (total: {len(fact_ids)})")
+
+            # Wait for embeddings if configured
+            if self.wait_for_embeddings and fact_ids and not self.mock_kp:
+                logger.info(f"Waiting for embeddings (timeout: {self.embedding_timeout}s)...")
+                arango_url = os.environ.get("ARANGO_URL", "http://localhost:8529")
+                # Extract just the key from full fact IDs (e.g., "facts/123" -> "123")
+                fact_keys = [fid.split("/")[-1] if "/" in fid else fid for fid in fact_ids]
+
+                # Try Docker internal hostname first
+                for url in [arango_url.replace("localhost", "host.docker.internal"), arango_url]:
+                    try:
+                        with_emb, without_emb = wait_for_embeddings(
+                            fact_ids=fact_keys,
+                            db_url=url,
+                            timeout_seconds=self.embedding_timeout
+                        )
+                        if without_emb == 0:
+                            logger.info(f"✓ All {with_emb} facts have embeddings")
+                        else:
+                            logger.warning(f"⚠ {without_emb}/{len(fact_keys)} facts still missing embeddings")
+                        break
+                    except Exception as e:
+                        logger.debug(f"Embedding wait failed with URL {url}: {e}")
+                        continue
+
+            return True, fact_ids
 
         except Exception as e:
             logger.error(f"KP ingestion failed: {e}", exc_info=True)
-            return False
+            return False, []
 
     def ingest_vector_passages(
         self,
@@ -671,6 +768,20 @@ class MSMARCOBenchmark:
             logger.error("Preflight checks failed - aborting benchmark")
             raise RuntimeError("Preflight checks failed. Fix issues above and retry.")
 
+        # Cleanup old MS MARCO facts to prevent namespace collision
+        if self.cleanup and self.run_kp and not self.mock_kp:
+            logger.info("Cleaning up old MS MARCO benchmark facts...")
+            arango_url = os.environ.get("ARANGO_URL", "http://localhost:8529")
+            # Try Docker internal hostname first
+            for url in [arango_url.replace("localhost", "host.docker.internal"), arango_url]:
+                try:
+                    deleted = cleanup_benchmark_facts_by_prefix("msmarco_", db_url=url)
+                    logger.info(f"Cleanup complete: {deleted} old facts removed")
+                    break
+                except Exception as e:
+                    logger.debug(f"Cleanup failed with URL {url}: {e}")
+                    continue
+
         # Load dataset
         queries = self.load_dataset()
 
@@ -692,7 +803,8 @@ class MSMARCOBenchmark:
             if self.run_kp:
                 if self.kp_adapter is None:
                     self.initialize_kp_system(namespace)
-                if not self.ingest_kp_passages(passages, query_namespace):
+                success, fact_ids = self.ingest_kp_passages(passages, query_namespace)
+                if not success:
                     logger.warning(f"KP ingestion failed for query {query_data['id']}")
                     continue
 
@@ -713,7 +825,20 @@ class MSMARCOBenchmark:
         # Save results
         self._save_results(summary)
 
-        # Cleanup
+        # Post-run cleanup to avoid polluting workspace
+        if self.cleanup and self.run_kp and not self.mock_kp:
+            logger.info("Post-run cleanup: removing benchmark facts from this run...")
+            arango_url = os.environ.get("ARANGO_URL", "http://localhost:8529")
+            for url in [arango_url.replace("localhost", "host.docker.internal"), arango_url]:
+                try:
+                    deleted = cleanup_benchmark_facts_by_prefix(namespace, db_url=url)
+                    logger.info(f"Post-run cleanup complete: {deleted} facts removed (namespace: {namespace})")
+                    break
+                except Exception as e:
+                    logger.debug(f"Post-run cleanup failed with URL {url}: {e}")
+                    continue
+
+        # Cleanup adapter
         if self.kp_adapter:
             self.kp_adapter.close()
 
@@ -1042,12 +1167,48 @@ def parse_args() -> argparse.Namespace:
         help='Directory for output files'
     )
 
+    parser.add_argument(
+        '--verbose', '-v',
+        action='store_true',
+        help='Enable verbose DEBUG logging for diagnostics'
+    )
+
+    parser.add_argument(
+        '--cleanup',
+        action='store_true',
+        default=True,
+        help='Clean up old MS MARCO benchmark facts before running (default: True)'
+    )
+
+    parser.add_argument(
+        '--no-cleanup',
+        action='store_true',
+        help='Skip cleanup of old benchmark facts'
+    )
+
+    parser.add_argument(
+        '--wait-for-embeddings',
+        action='store_true',
+        help='Wait for embeddings to be generated before querying (slower but more accurate)'
+    )
+
+    parser.add_argument(
+        '--embedding-timeout',
+        type=int,
+        default=30,
+        help='Timeout in seconds to wait for embeddings per query (default: 30)'
+    )
+
     return parser.parse_args()
 
 
 def main():
     """Main entry point."""
     args = parse_args()
+
+    # Enable verbose logging if requested
+    if args.verbose:
+        set_verbose_logging(True)
 
     # Validate arguments
     if not args.run_kp and not args.run_vector:
@@ -1070,8 +1231,13 @@ def main():
         run_kp=args.run_kp,
         run_vector=args.run_vector,
         mock_kp=args.mock_kp,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
+        wait_for_embeddings=args.wait_for_embeddings,
+        embedding_timeout=args.embedding_timeout
     )
+
+    # Set cleanup flag (--no-cleanup disables it)
+    benchmark.cleanup = not getattr(args, 'no_cleanup', False)
 
     # Run benchmark
     try:

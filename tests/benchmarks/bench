@@ -1,0 +1,403 @@
+#!/bin/bash
+#
+# KnowledgePlane Benchmark CLI
+# One command to run all benchmarks with automatic archiving
+#
+# Usage: ./bench <command> [options]
+#
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# Defaults
+N_QUESTIONS=""
+SKIP_PREFLIGHT=false
+ARCHIVE=true
+
+#═══════════════════════════════════════════════════════════════════════════════
+# Help
+#═══════════════════════════════════════════════════════════════════════════════
+show_help() {
+    echo -e "${BOLD}${BLUE}KnowledgePlane Benchmark CLI${NC}"
+    echo ""
+    echo -e "${BOLD}USAGE${NC}"
+    echo "    ./bench <command> [options]"
+    echo ""
+    echo -e "${BOLD}COMMANDS${NC}"
+    echo -e "    ${CYAN}hotpot${NC}      HotpotQA multi-hop reasoning (SF F1 metric)"
+    echo -e "    ${CYAN}freshness${NC}   Write-to-searchable latency"
+    echo -e "    ${CYAN}msmarco${NC}     MS MARCO passage retrieval"
+    echo -e "    ${CYAN}all${NC}         Run all benchmarks"
+    echo -e "    ${CYAN}preflight${NC}   Check environment (runs automatically)"
+    echo -e "    ${CYAN}runs${NC}        List archived benchmark runs"
+    echo -e "    ${CYAN}clean${NC}       Remove old benchmark data from DB"
+    echo ""
+    echo -e "${BOLD}OPTIONS${NC}"
+    echo "    -n, --n <num>       Number of questions/samples (default: varies by benchmark)"
+    echo "    --quick             Use minimal sample size for testing"
+    echo "    --full              Use full sample size (500+ questions)"
+    echo "    --skip-preflight    Skip environment checks"
+    echo "    --no-archive        Don't save results to runs/"
+    echo ""
+    echo -e "${BOLD}EXAMPLES${NC}"
+    echo "    ./bench hotpot                  # Quick validation (n=20)"
+    echo "    ./bench hotpot -n 100           # Custom size"
+    echo "    ./bench hotpot --full           # Full benchmark (n=500)"
+    echo "    ./bench freshness               # Freshness with FAISS comparison"
+    echo "    ./bench all --quick             # All benchmarks, minimal size"
+    echo "    ./bench runs                    # List past runs"
+    echo ""
+    echo -e "${BOLD}RESULTS${NC}"
+    echo "    Results are saved to: ./runs/<timestamp>_<benchmark>/"
+    echo "    Latest results also in: ./output/"
+    echo ""
+}
+
+#═══════════════════════════════════════════════════════════════════════════════
+# Preflight
+#═══════════════════════════════════════════════════════════════════════════════
+run_preflight() {
+    echo -e "${BOLD}${BLUE}━━━ Preflight Checks ━━━${NC}"
+
+    local errors=0
+
+    # Check Docker
+    if ! docker info >/dev/null 2>&1; then
+        echo -e "${RED}✗${NC} Docker is not running"
+        errors=$((errors + 1))
+    else
+        echo -e "${GREEN}✓${NC} Docker running"
+    fi
+
+    # Check KP REST API
+    if curl -s --connect-timeout 2 http://localhost:8081/health >/dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} KP REST API (port 8081)"
+    else
+        echo -e "${YELLOW}⚠${NC} KP REST API not running - starting..."
+        cd "$SCRIPT_DIR/../.."
+        (cd apps/rest-api && PORT=8081 npx tsx src/server.ts &) 2>/dev/null
+        sleep 3
+        cd "$SCRIPT_DIR"
+        if curl -s --connect-timeout 2 http://localhost:8081/health >/dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} KP REST API started"
+        else
+            echo -e "${RED}✗${NC} Failed to start KP REST API"
+            errors=$((errors + 1))
+        fi
+    fi
+
+    # Check ArangoDB
+    if curl -s --connect-timeout 2 http://localhost:8529/_api/version -u root:root >/dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} ArangoDB (port 8529)"
+    else
+        echo -e "${RED}✗${NC} ArangoDB not accessible"
+        errors=$((errors + 1))
+    fi
+
+    # Check Docker image
+    if docker images kp-benchmarks:latest --format "{{.ID}}" | grep -q .; then
+        echo -e "${GREEN}✓${NC} Docker image (kp-benchmarks:latest)"
+    else
+        echo -e "${YELLOW}⚠${NC} Building Docker image..."
+        docker compose build benchmark-validation >/dev/null 2>&1
+        echo -e "${GREEN}✓${NC} Docker image built"
+    fi
+
+    # Check .env
+    if [ -f "$SCRIPT_DIR/../../.env" ]; then
+        if grep -q "OPENAI_API_KEY" "$SCRIPT_DIR/../../.env"; then
+            echo -e "${GREEN}✓${NC} OpenAI API key configured"
+        else
+            echo -e "${YELLOW}⚠${NC} OPENAI_API_KEY not in .env (embeddings may fail)"
+        fi
+    else
+        echo -e "${RED}✗${NC} .env file not found"
+        errors=$((errors + 1))
+    fi
+
+    echo ""
+
+    if [ $errors -gt 0 ]; then
+        echo -e "${RED}Preflight failed with $errors errors${NC}"
+        exit 1
+    fi
+}
+
+#═══════════════════════════════════════════════════════════════════════════════
+# Archive results
+#═══════════════════════════════════════════════════════════════════════════════
+archive_results() {
+    local benchmark=$1
+    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local run_dir="runs/${timestamp}_${benchmark}"
+
+    mkdir -p "$run_dir"
+
+    # Save metadata
+    cat > "$run_dir/metadata.json" << EOF
+{
+  "timestamp": "$timestamp",
+  "benchmark": "$benchmark",
+  "n_questions": "${N_QUESTIONS:-default}",
+  "git_commit": "$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')",
+  "git_branch": "$(git branch --show-current 2>/dev/null || echo 'unknown')"
+}
+EOF
+
+    # Copy results
+    if [ -f "output/hotpotqa_results.csv" ]; then
+        cp output/hotpotqa_results.csv "$run_dir/" 2>/dev/null || true
+        cp output/hotpotqa_summary.json "$run_dir/" 2>/dev/null || true
+    fi
+    if [ -f "output/msmarco_results.csv" ]; then
+        cp output/msmarco_results.csv "$run_dir/" 2>/dev/null || true
+        cp output/msmarco_summary.json "$run_dir/" 2>/dev/null || true
+    fi
+    if [ -f "output/freshness_results.json" ]; then
+        cp output/freshness_results.json "$run_dir/" 2>/dev/null || true
+    fi
+
+    echo -e "${GREEN}Results archived to:${NC} $run_dir"
+}
+
+#═══════════════════════════════════════════════════════════════════════════════
+# Run benchmarks
+#═══════════════════════════════════════════════════════════════════════════════
+run_hotpot() {
+    local n=${N_QUESTIONS:-20}
+    local profile="validation"
+
+    if [ "$n" -ge 100 ]; then
+        profile="full"
+    fi
+
+    echo -e "${BOLD}${BLUE}━━━ HotpotQA Benchmark (n=$n) ━━━${NC}"
+    echo -e "${DIM}Metric: Supporting Facts F1 (sentence-level evidence retrieval)${NC}"
+    echo ""
+
+    # Override n if custom
+    if [ -n "$N_QUESTIONS" ]; then
+        docker compose run --rm -e N_QUESTIONS="$n" benchmark-validation \
+            python3 bench_hotpotqa.py --n "$n" --run_kp true --run_vector false
+    else
+        docker compose --profile "$profile" up --abort-on-container-exit
+    fi
+
+    if [ "$ARCHIVE" = true ]; then
+        archive_results "hotpot_n${n}"
+    fi
+
+    # Print summary
+    if [ -f "output/hotpotqa_summary.json" ]; then
+        echo ""
+        echo -e "${BOLD}Results:${NC}"
+        python3 -c "
+import json
+with open('output/hotpotqa_summary.json') as f:
+    d = json.load(f)
+kp = d.get('kp', {})
+print(f\"  SF F1:        {kp.get('avg_sf_f1', 0)*100:.1f}%  ← KEY METRIC\")
+print(f\"  SF Precision: {kp.get('avg_sf_precision', 0)*100:.1f}%\")
+print(f\"  SF Recall:    {kp.get('avg_sf_recall', 0)*100:.1f}%\")
+print(f\"  Doc Recall:   {kp.get('avg_doc_recall', 0)*100:.1f}%\")
+print(f\"  Questions:    {kp.get('questions_answered', 0)}/{kp.get('questions_evaluated', 0)}\")
+"
+    fi
+}
+
+run_freshness() {
+    local n=${N_QUESTIONS:-50}
+
+    echo -e "${BOLD}${BLUE}━━━ Freshness Benchmark (n=$n) ━━━${NC}"
+    echo -e "${DIM}Metric: Write-to-searchable latency${NC}"
+    echo ""
+
+    docker compose --profile freshness-batch up --abort-on-container-exit
+
+    if [ "$ARCHIVE" = true ]; then
+        archive_results "freshness_n${n}"
+    fi
+}
+
+run_msmarco() {
+    local n=${N_QUESTIONS:-100}
+
+    echo -e "${BOLD}${BLUE}━━━ MS MARCO Benchmark (n=$n) ━━━${NC}"
+    echo -e "${DIM}Metric: MRR, Recall@10, NDCG@10${NC}"
+    echo ""
+
+    docker compose --profile msmarco up --abort-on-container-exit
+
+    if [ "$ARCHIVE" = true ]; then
+        archive_results "msmarco_n${n}"
+    fi
+}
+
+run_all() {
+    echo -e "${BOLD}${BLUE}━━━ Running All Benchmarks ━━━${NC}"
+    echo ""
+
+    run_freshness
+    echo ""
+    run_hotpot
+    echo ""
+    run_msmarco
+}
+
+list_runs() {
+    echo -e "${BOLD}${BLUE}━━━ Archived Benchmark Runs ━━━${NC}"
+    echo ""
+
+    if [ ! -d "runs" ] || [ -z "$(ls -A runs 2>/dev/null)" ]; then
+        echo "No runs archived yet."
+        echo "Run a benchmark with: ./bench hotpot"
+        return
+    fi
+
+    printf "%-25s %-15s %-10s %s\n" "TIMESTAMP" "BENCHMARK" "N" "SF_F1/MRR"
+    echo "────────────────────────────────────────────────────────────────"
+
+    for dir in runs/*/; do
+        if [ -d "$dir" ]; then
+            name=$(basename "$dir")
+            if [ -f "$dir/metadata.json" ]; then
+                benchmark=$(python3 -c "import json; print(json.load(open('$dir/metadata.json')).get('benchmark', 'unknown'))" 2>/dev/null || echo "?")
+                n=$(python3 -c "import json; print(json.load(open('$dir/metadata.json')).get('n_questions', '?'))" 2>/dev/null || echo "?")
+            fi
+
+            # Try to get key metric
+            metric="—"
+            if [ -f "$dir/hotpotqa_summary.json" ]; then
+                metric=$(python3 -c "import json; print(f\"{json.load(open('$dir/hotpotqa_summary.json')).get('kp',{}).get('avg_sf_f1',0)*100:.1f}%\")" 2>/dev/null || echo "?")
+            elif [ -f "$dir/msmarco_summary.json" ]; then
+                metric=$(python3 -c "import json; print(f\"{json.load(open('$dir/msmarco_summary.json')).get('kp',{}).get('mrr',0):.3f}\")" 2>/dev/null || echo "?")
+            fi
+
+            printf "%-25s %-15s %-10s %s\n" "$name" "${benchmark:-?}" "${n:-?}" "$metric"
+        fi
+    done
+}
+
+clean_db() {
+    echo -e "${BOLD}${BLUE}━━━ Cleaning Benchmark Data ━━━${NC}"
+    echo ""
+
+    echo "Removing old benchmark facts from ArangoDB..."
+
+    # Remove hotpotqa facts
+    curl -s "http://localhost:8529/_db/knowledgeplane/_api/cursor" \
+        -u root:root -H "Content-Type: application/json" \
+        -d '{"query": "FOR f IN facts FILTER STARTS_WITH(f.metadata.namespace, \"hotpotqa\") REMOVE f IN facts RETURN 1"}' \
+        | python3 -c "import sys,json; r=json.load(sys.stdin); print(f'  Removed {len(r.get(\"result\",[]))} hotpotqa facts')"
+
+    # Remove freshness facts
+    curl -s "http://localhost:8529/_db/knowledgeplane/_api/cursor" \
+        -u root:root -H "Content-Type: application/json" \
+        -d '{"query": "FOR f IN facts FILTER STARTS_WITH(f.metadata.namespace, \"freshness\") REMOVE f IN facts RETURN 1"}' \
+        | python3 -c "import sys,json; r=json.load(sys.stdin); print(f'  Removed {len(r.get(\"result\",[]))} freshness facts')"
+
+    # Remove msmarco facts
+    curl -s "http://localhost:8529/_db/knowledgeplane/_api/cursor" \
+        -u root:root -H "Content-Type: application/json" \
+        -d '{"query": "FOR f IN facts FILTER STARTS_WITH(f.metadata.namespace, \"msmarco\") REMOVE f IN facts RETURN 1"}' \
+        | python3 -c "import sys,json; r=json.load(sys.stdin); print(f'  Removed {len(r.get(\"result\",[]))} msmarco facts')"
+
+    echo -e "${GREEN}Done!${NC}"
+}
+
+#═══════════════════════════════════════════════════════════════════════════════
+# Parse arguments
+#═══════════════════════════════════════════════════════════════════════════════
+COMMAND=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        hotpot|freshness|msmarco|all|preflight|runs|clean|help|-h|--help)
+            COMMAND=$1
+            shift
+            ;;
+        -n|--n)
+            N_QUESTIONS=$2
+            shift 2
+            ;;
+        --quick)
+            N_QUESTIONS=10
+            shift
+            ;;
+        --full)
+            N_QUESTIONS=500
+            shift
+            ;;
+        --skip-preflight)
+            SKIP_PREFLIGHT=true
+            shift
+            ;;
+        --no-archive)
+            ARCHIVE=false
+            shift
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            echo "Run './bench help' for usage"
+            exit 1
+            ;;
+    esac
+done
+
+#═══════════════════════════════════════════════════════════════════════════════
+# Execute
+#═══════════════════════════════════════════════════════════════════════════════
+case $COMMAND in
+    help|-h|--help|"")
+        show_help
+        ;;
+    preflight)
+        run_preflight
+        ;;
+    runs)
+        list_runs
+        ;;
+    clean)
+        clean_db
+        ;;
+    hotpot)
+        if [ "$SKIP_PREFLIGHT" = false ]; then
+            run_preflight
+        fi
+        run_hotpot
+        ;;
+    freshness)
+        if [ "$SKIP_PREFLIGHT" = false ]; then
+            run_preflight
+        fi
+        run_freshness
+        ;;
+    msmarco)
+        if [ "$SKIP_PREFLIGHT" = false ]; then
+            run_preflight
+        fi
+        run_msmarco
+        ;;
+    all)
+        if [ "$SKIP_PREFLIGHT" = false ]; then
+            run_preflight
+        fi
+        run_all
+        ;;
+    *)
+        echo -e "${RED}Unknown command: $COMMAND${NC}"
+        show_help
+        exit 1
+        ;;
+esac

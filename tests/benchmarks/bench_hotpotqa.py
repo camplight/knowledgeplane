@@ -9,8 +9,14 @@ HotpotQA requires answering questions that need 2+ reasoning steps across
 multiple documents, making it ideal for evaluating graph-based reasoning.
 
 Usage:
-    python bench_hotpotqa.py --n 20 --run_kp true --run_vector true
-    python bench_hotpotqa.py --n 50 --mock_kp --top_k 10
+    # Just run it - smart mode auto-detects cache
+    python bench_hotpotqa.py --n 100
+
+    # Force fresh run (for CI/reproducibility)
+    python bench_hotpotqa.py --n 100 --mode fresh
+
+    # With vector baseline comparison
+    python bench_hotpotqa.py --n 100 --run_vector true
 """
 
 import argparse
@@ -61,23 +67,53 @@ class QuestionResult:
     question_id: str
     question: str
     ground_truth: str
+    # Supporting Facts metrics (PRIMARY - what HotpotQA is designed to measure)
+    # These measure: did we retrieve the sentences containing evidence?
+    kp_sf_precision: Optional[float] = None  # Correct support sentences / Retrieved sentences
+    kp_sf_recall: Optional[float] = None     # Found support sentences / Gold support sentences
+    kp_sf_f1: Optional[float] = None         # Harmonic mean of precision and recall
+    kp_latency_ms: Optional[float] = None
+    kp_support_found: Optional[int] = None   # How many supporting sentences found
+    kp_support_total: Optional[int] = None   # Total supporting sentences needed
+    # Legacy answer metrics (kept for backwards compatibility, but less meaningful)
     kp_answer: Optional[str] = None
     kp_em: Optional[float] = None
     kp_f1: Optional[float] = None
-    kp_latency_ms: Optional[float] = None
+    # Document-level retrieval metrics
+    kp_doc_recall: Optional[float] = None    # Did we find docs with right titles?
+    kp_mrr: Optional[float] = None
+    # Vector baseline metrics (same structure)
+    vector_sf_precision: Optional[float] = None
+    vector_sf_recall: Optional[float] = None
+    vector_sf_f1: Optional[float] = None
+    vector_latency_ms: Optional[float] = None
+    vector_support_found: Optional[int] = None
+    vector_support_total: Optional[int] = None
     vector_answer: Optional[str] = None
     vector_em: Optional[float] = None
     vector_f1: Optional[float] = None
-    vector_latency_ms: Optional[float] = None
+    vector_doc_recall: Optional[float] = None
+    vector_mrr: Optional[float] = None
     error: Optional[str] = None
 
 
 @dataclass
 class SystemMetrics:
     """Aggregate metrics for a system."""
+    # Supporting Facts metrics (PRIMARY - the real benchmark)
+    avg_sf_precision: float = 0.0  # Did retrieved content contain mostly relevant sentences?
+    avg_sf_recall: float = 0.0     # Did we find all the supporting sentences?
+    avg_sf_f1: float = 0.0         # Harmonic mean - THE KEY METRIC
+    avg_latency_ms: float = 0.0
+    total_support_found: int = 0
+    total_support_needed: int = 0
+    # Document-level retrieval metrics (secondary)
+    avg_doc_recall: float = 0.0    # Did we find docs with right titles?
+    avg_mrr: float = 0.0
+    # Legacy answer metrics (kept for compatibility)
     avg_em: float = 0.0
     avg_f1: float = 0.0
-    avg_latency_ms: float = 0.0
+    # Counts
     questions_evaluated: int = 0
     questions_answered: int = 0
     errors: int = 0
@@ -130,9 +166,9 @@ class HotpotQABenchmark:
             sample_method: Sampling method ("random", "first", "stratified")
             batch_size: Process in batches (None = all at once)
             statistical_analysis: Run full statistical analysis
-            mode: Namespace mode ("cached" or "timestamped")
-                  - cached: Use fixed namespace, reuse embeddings across runs (fast)
-                  - timestamped: Fresh namespace each run (full pipeline benchmark)
+            mode: Execution mode ("smart" or "fresh")
+                  - smart: Auto-detect cache, reuse if valid, seed if needed (default)
+                  - fresh: Always start clean with timestamped namespace
         """
         self.n_questions = n_questions
         self.top_k = top_k
@@ -455,27 +491,34 @@ class HotpotQABenchmark:
     def prepare_documents(
         self,
         context: Dict[str, List]
-    ) -> List[Dict[str, Any]]:
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, List[str]]]:
         """
         Prepare documents from HotpotQA context.
 
         Each context entry is [title, [sentences]]. We create one document
-        per title with all sentences concatenated.
+        per title with all sentences concatenated, but also preserve the
+        individual sentences for Supporting Facts evaluation.
 
         Args:
             context: Dict with 'title' and 'sentences' keys from HotpotQA dataset
 
         Returns:
-            List of document dicts ready for ingestion
+            Tuple of:
+            - List of document dicts ready for ingestion
+            - Dict mapping title -> list of sentences (for SF evaluation)
         """
         documents = []
+        title_to_sentences = {}  # For Supporting Facts evaluation
 
         # HotpotQA context format: {'title': ['Title1', 'Title2'], 'sentences': [['sent1'], ['sent2']]}
         titles = context.get('title', [])
         sentences_list = context.get('sentences', [])
 
         for title, sentences in zip(titles, sentences_list):
-            # Concatenate all sentences
+            # Store sentences for SF evaluation
+            title_to_sentences[title] = sentences
+
+            # Concatenate all sentences for ingestion
             content = " ".join(sentences)
 
             # Create document
@@ -491,7 +534,7 @@ class HotpotQABenchmark:
             }
             documents.append(doc)
 
-        return documents
+        return documents, title_to_sentences
 
     def initialize_kp_system(self, namespace: str) -> None:
         """
@@ -621,7 +664,7 @@ class HotpotQABenchmark:
         self,
         question: str,
         namespace: str
-    ) -> Tuple[Optional[str], float]:
+    ) -> Tuple[Optional[str], float, List[str]]:
         """
         Query KP system and extract answer.
 
@@ -630,7 +673,7 @@ class HotpotQABenchmark:
             namespace: Namespace filter
 
         Returns:
-            Tuple of (answer, latency_ms)
+            Tuple of (answer, latency_ms, retrieved_doc_contents)
         """
         try:
             start_time = time.time()
@@ -642,6 +685,9 @@ class HotpotQABenchmark:
             )
             latency_ms = (time.time() - start_time) * 1000
 
+            # Collect retrieved document contents for retrieval metrics
+            retrieved_docs = [r.content for r in result.results] if result.results else []
+
             # Extract answer from results
             if result.results:
                 # Simple strategy: concatenate top results and extract answer
@@ -650,16 +696,16 @@ class HotpotQABenchmark:
             else:
                 answer = "No answer found"
 
-            return answer, latency_ms
+            return answer, latency_ms, retrieved_docs
 
         except Exception as e:
             logger.error(f"KP query failed: {e}", exc_info=True)
-            return None, 0.0
+            return None, 0.0, []
 
     def query_vector_system(
         self,
         question: str
-    ) -> Tuple[Optional[str], float]:
+    ) -> Tuple[Optional[str], float, List[str]]:
         """
         Query vector baseline and extract answer.
 
@@ -667,22 +713,33 @@ class HotpotQABenchmark:
             question: Question to ask
 
         Returns:
-            Tuple of (answer, latency_ms)
+            Tuple of (answer, latency_ms, retrieved_doc_contents)
         """
         try:
             start_time = time.time()
-            answer = self.vector_baseline.query(
-                question=question,
-                k=self.top_k,
-                mode="extractive"
-            )
+            # Use query_with_results to get both answer and retrieved chunks
+            if hasattr(self.vector_baseline, 'query_with_results'):
+                answer, results = self.vector_baseline.query_with_results(
+                    question=question,
+                    k=self.top_k,
+                    mode="extractive"
+                )
+                retrieved_docs = [r.text for r in results] if results else []
+            else:
+                # Fallback for older vector baseline versions
+                answer = self.vector_baseline.query(
+                    question=question,
+                    k=self.top_k,
+                    mode="extractive"
+                )
+                retrieved_docs = []
             latency_ms = (time.time() - start_time) * 1000
 
-            return answer, latency_ms
+            return answer, latency_ms, retrieved_docs
 
         except Exception as e:
             logger.error(f"Vector query failed: {e}", exc_info=True)
-            return None, 0.0
+            return None, 0.0, []
 
     def _extract_answer_from_context(
         self,
@@ -716,7 +773,9 @@ class HotpotQABenchmark:
     def evaluate_question(
         self,
         question_data: Dict[str, Any],
-        namespace: str
+        namespace: str,
+        doc_content_to_title: Dict[str, str],
+        title_to_sentences: Dict[str, List[str]]
     ) -> QuestionResult:
         """
         Evaluate a single question on both systems.
@@ -724,6 +783,8 @@ class HotpotQABenchmark:
         Args:
             question_data: Question dict from dataset
             namespace: Namespace for this question
+            doc_content_to_title: Mapping of doc content to title for retrieval metrics
+            title_to_sentences: Mapping of title to list of sentences for SF evaluation
 
         Returns:
             QuestionResult with all metrics
@@ -731,6 +792,16 @@ class HotpotQABenchmark:
         question = question_data['question']
         ground_truth = question_data['answer']
         question_id = question_data['id']
+        supporting_facts = question_data.get('supporting_facts', {})
+
+        # Convert supporting_facts from HotPotQA format
+        # Format: {'title': ['T1', 'T2'], 'sent_id': [0, 1]}
+        support_list = []
+        if isinstance(supporting_facts, dict):
+            titles = supporting_facts.get('title', [])
+            sent_ids = supporting_facts.get('sent_id', [])
+            for title, sent_id in zip(titles, sent_ids):
+                support_list.append((title, sent_id))
 
         result = QuestionResult(
             question_id=question_id,
@@ -741,12 +812,25 @@ class HotpotQABenchmark:
         # Query KP system
         if self.run_kp:
             try:
-                kp_answer, kp_latency = self.query_kp_system(question, namespace)
+                kp_answer, kp_latency, retrieved_docs = self.query_kp_system(question, namespace)
                 if kp_answer:
                     result.kp_answer = kp_answer
                     result.kp_latency_ms = kp_latency
                     result.kp_em = compute_exact_match(kp_answer, ground_truth)
                     result.kp_f1 = compute_f1(kp_answer, ground_truth)
+
+                # Compute Supporting Facts metrics (PRIMARY - the real benchmark)
+                if retrieved_docs and support_list:
+                    sf_metrics = compute_supporting_facts_metrics(
+                        retrieved_docs, support_list, title_to_sentences, doc_content_to_title
+                    )
+                    result.kp_sf_precision = sf_metrics['sf_precision']
+                    result.kp_sf_recall = sf_metrics['sf_recall']
+                    result.kp_sf_f1 = sf_metrics['sf_f1']
+                    result.kp_doc_recall = sf_metrics['doc_recall']
+                    result.kp_mrr = sf_metrics['mrr']
+                    result.kp_support_found = sf_metrics['found']
+                    result.kp_support_total = sf_metrics['total']
             except Exception as e:
                 logger.error(f"KP evaluation failed for {question_id}: {e}")
                 result.error = f"KP error: {str(e)}"
@@ -754,12 +838,25 @@ class HotpotQABenchmark:
         # Query vector system
         if self.run_vector:
             try:
-                vector_answer, vector_latency = self.query_vector_system(question)
+                vector_answer, vector_latency, vector_retrieved = self.query_vector_system(question)
                 if vector_answer:
                     result.vector_answer = vector_answer
                     result.vector_latency_ms = vector_latency
                     result.vector_em = compute_exact_match(vector_answer, ground_truth)
                     result.vector_f1 = compute_f1(vector_answer, ground_truth)
+
+                # Compute vector Supporting Facts metrics
+                if vector_retrieved and support_list:
+                    v_sf_metrics = compute_supporting_facts_metrics(
+                        vector_retrieved, support_list, title_to_sentences, doc_content_to_title
+                    )
+                    result.vector_sf_precision = v_sf_metrics['sf_precision']
+                    result.vector_sf_recall = v_sf_metrics['sf_recall']
+                    result.vector_sf_f1 = v_sf_metrics['sf_f1']
+                    result.vector_doc_recall = v_sf_metrics['doc_recall']
+                    result.vector_mrr = v_sf_metrics['mrr']
+                    result.vector_support_found = v_sf_metrics['found']
+                    result.vector_support_total = v_sf_metrics['total']
             except Exception as e:
                 logger.error(f"Vector evaluation failed for {question_id}: {e}")
                 result.error = f"Vector error: {str(e)}"
@@ -788,33 +885,35 @@ class HotpotQABenchmark:
         questions = self.load_dataset()
 
         # Create namespace based on mode
-        if self.mode in ("cached", "seed"):
-            # Fixed namespace for cached/seed mode (deterministic with seed)
-            namespace = f"hotpotqa_validation_seed{self.seed}"
-            if self.mode == "seed":
-                logger.info(f"SEED MODE: Using namespace {namespace} (will ingest + trigger embeddings, skip evaluation)")
-            else:
-                logger.info(f"CACHED MODE: Using namespace {namespace}")
+        if self.mode == "smart":
+            # Deterministic namespace based on config (n, seed, k) for smart caching
+            namespace = f"hotpotqa_n{self.n_questions}_seed{self.seed}_k{self.top_k}"
+            logger.info(f"SMART MODE: Using namespace {namespace}")
         else:
-            # Timestamped namespace for fresh runs
+            # Timestamped namespace for fresh runs (CI/reproducibility)
             namespace = f"hotpotqa_{int(time.time())}"
-            logger.info(f"TIMESTAMPED MODE: Using namespace {namespace}")
+            logger.info(f"FRESH MODE: Using namespace {namespace}")
 
         # Prepare documents from all questions
         logger.info("Preparing documents...")
         all_documents = []
+        self.title_to_sentences = {}  # For Supporting Facts evaluation
         for q in questions:
-            docs = self.prepare_documents(q['context'])
+            docs, title_to_sents = self.prepare_documents(q['context'])
             all_documents.extend(docs)
+            # Merge title_to_sentences (each question's context may overlap)
+            self.title_to_sentences.update(title_to_sents)
 
-        # Deduplicate by title
+        # Deduplicate by title and build content->title mapping
         seen_titles = set()
         unique_documents = []
+        self.doc_content_to_title = {}  # For retrieval metrics
         for doc in all_documents:
             title = doc['metadata']['title']
             if title not in seen_titles:
                 seen_titles.add(title)
                 unique_documents.append(doc)
+                self.doc_content_to_title[doc['content']] = title
 
         logger.info(f"Prepared {len(unique_documents)} unique documents")
 
@@ -822,14 +921,17 @@ class HotpotQABenchmark:
         if self.run_kp:
             self.initialize_kp_system(namespace)
 
-            # Check if cached namespace already has data with embeddings
+            # Smart mode: auto-detect if cached data exists with embeddings
             skip_ingestion = False
-            if self.mode == "cached" and not self.mock_kp:
+            if self.mode == "smart" and not self.mock_kp:
                 skip_ingestion = self._check_cached_data_exists(namespace, len(unique_documents))
 
             if skip_ingestion:
-                logger.info(f"✓ Using cached embeddings from namespace: {namespace}")
+                logger.info(f"✓ Cache hit! Using existing embeddings from namespace: {namespace}")
             else:
+                if self.mode == "smart":
+                    logger.info(f"Cache miss - will ingest and generate embeddings")
+
                 if not self.ingest_kp_documents(unique_documents, namespace):
                     logger.warning("KP ingestion failed, skipping KP evaluation")
                     self.run_kp = False
@@ -838,23 +940,9 @@ class HotpotQABenchmark:
                     logger.info("Triggering embedding generation via REST API...")
                     self._trigger_embeddings(namespace)
 
-                    if self.mode == "seed":
-                        # Seed mode: don't wait, just trigger and exit early
-                        logger.info("=" * 60)
-                        logger.info("SEED MODE COMPLETE")
-                        logger.info(f"Namespace: {namespace}")
-                        logger.info(f"Documents ingested: {len(unique_documents)}")
-                        logger.info("Embeddings triggered - run background worker to generate")
-                        logger.info("Then use: --mode cached for fast evaluation")
-                        logger.info("=" * 60)
-                        return BenchmarkSummary(
-                            config={"mode": "seed", "namespace": namespace, "documents": len(unique_documents)},
-                            timing={"seed_time": time.time() - benchmark_start_time}
-                        )
-                    else:
-                        # Wait for embeddings to be generated
-                        logger.info("Waiting for embeddings to be generated...")
-                        self._wait_for_embeddings(namespace, timeout=300)
+                    # Wait for embeddings to be generated
+                    logger.info("Waiting for embeddings to be generated...")
+                    self._wait_for_embeddings(namespace, timeout=300)
 
         if self.run_vector:
             self.initialize_vector_baseline()
@@ -1070,17 +1158,18 @@ class HotpotQABenchmark:
             # Log question start
             logger.info(f"[BENCHMARK] Question {i+1}/{len(questions)}: {question_data['question'][:80]}...")
 
-            result = self.evaluate_question(question_data, namespace)
+            result = self.evaluate_question(question_data, namespace, self.doc_content_to_title, self.title_to_sentences)
             self.results.append(result)
 
             q_elapsed = time.time() - q_start
             self.question_times.append(q_elapsed)
 
-            # Log question result
-            kp_f1_str = f"{result.kp_f1:.3f}" if result.kp_f1 is not None else "N/A"
+            # Log question result with Supporting Facts metrics (PRIMARY)
+            sf_f1_str = f"{result.kp_sf_f1:.3f}" if result.kp_sf_f1 is not None else "N/A"
+            sf_recall_str = f"{result.kp_sf_recall:.2f}" if result.kp_sf_recall is not None else "N/A"
             logger.info(
                 f"[BENCHMARK] Question {i+1} complete: "
-                f"kp_f1={kp_f1_str} "
+                f"sf_f1={sf_f1_str} sf_recall={sf_recall_str} "
                 f"time={q_elapsed:.2f}s"
             )
 
@@ -1121,7 +1210,7 @@ class HotpotQABenchmark:
 
             for question_data in tqdm(batch, desc=f"Batch {batch_idx // self.batch_size + 1}"):
                 q_start = time.time()
-                result = self.evaluate_question(question_data, namespace)
+                result = self.evaluate_question(question_data, namespace, self.doc_content_to_title, self.title_to_sentences)
                 self.results.append(result)
 
                 q_elapsed = time.time() - q_start
@@ -1145,11 +1234,20 @@ class HotpotQABenchmark:
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
 
-            # Header
+            # Header with Supporting Facts metrics (PRIMARY)
             writer.writerow([
                 'question_id', 'question', 'ground_truth',
-                'kp_answer', 'kp_em', 'kp_f1', 'kp_latency_ms',
-                'vector_answer', 'vector_em', 'vector_f1', 'vector_latency_ms',
+                # KP Supporting Facts metrics (PRIMARY)
+                'kp_sf_f1', 'kp_sf_precision', 'kp_sf_recall',
+                'kp_doc_recall', 'kp_mrr', 'kp_support_found', 'kp_support_total',
+                'kp_latency_ms',
+                # Vector Supporting Facts metrics
+                'vector_sf_f1', 'vector_sf_precision', 'vector_sf_recall',
+                'vector_doc_recall', 'vector_mrr', 'vector_support_found', 'vector_support_total',
+                'vector_latency_ms',
+                # Legacy answer fields (kept for backwards compatibility)
+                'kp_answer', 'kp_em', 'kp_f1',
+                'vector_answer', 'vector_em', 'vector_f1',
                 'error'
             ])
 
@@ -1159,14 +1257,31 @@ class HotpotQABenchmark:
                     result.question_id,
                     result.question,
                     result.ground_truth,
+                    # KP Supporting Facts metrics (PRIMARY)
+                    f"{result.kp_sf_f1:.4f}" if result.kp_sf_f1 is not None else '',
+                    f"{result.kp_sf_precision:.4f}" if result.kp_sf_precision is not None else '',
+                    f"{result.kp_sf_recall:.4f}" if result.kp_sf_recall is not None else '',
+                    f"{result.kp_doc_recall:.4f}" if result.kp_doc_recall is not None else '',
+                    f"{result.kp_mrr:.4f}" if result.kp_mrr is not None else '',
+                    result.kp_support_found if result.kp_support_found is not None else '',
+                    result.kp_support_total if result.kp_support_total is not None else '',
+                    f"{result.kp_latency_ms:.2f}" if result.kp_latency_ms is not None else '',
+                    # Vector Supporting Facts metrics
+                    f"{result.vector_sf_f1:.4f}" if result.vector_sf_f1 is not None else '',
+                    f"{result.vector_sf_precision:.4f}" if result.vector_sf_precision is not None else '',
+                    f"{result.vector_sf_recall:.4f}" if result.vector_sf_recall is not None else '',
+                    f"{result.vector_doc_recall:.4f}" if result.vector_doc_recall is not None else '',
+                    f"{result.vector_mrr:.4f}" if result.vector_mrr is not None else '',
+                    result.vector_support_found if result.vector_support_found is not None else '',
+                    result.vector_support_total if result.vector_support_total is not None else '',
+                    f"{result.vector_latency_ms:.2f}" if result.vector_latency_ms is not None else '',
+                    # Legacy answer fields
                     result.kp_answer or '',
                     f"{result.kp_em:.4f}" if result.kp_em is not None else '',
                     f"{result.kp_f1:.4f}" if result.kp_f1 is not None else '',
-                    f"{result.kp_latency_ms:.2f}" if result.kp_latency_ms is not None else '',
                     result.vector_answer or '',
                     f"{result.vector_em:.4f}" if result.vector_em is not None else '',
                     f"{result.vector_f1:.4f}" if result.vector_f1 is not None else '',
-                    f"{result.vector_latency_ms:.2f}" if result.vector_latency_ms is not None else '',
                     result.error or ''
                 ])
 
@@ -1181,41 +1296,84 @@ class HotpotQABenchmark:
 
         # KP metrics
         if self.run_kp:
+            # Supporting Facts metrics (PRIMARY)
+            kp_sf_precisions = [r.kp_sf_precision for r in self.results if r.kp_sf_precision is not None]
+            kp_sf_recalls = [r.kp_sf_recall for r in self.results if r.kp_sf_recall is not None]
+            kp_sf_f1s = [r.kp_sf_f1 for r in self.results if r.kp_sf_f1 is not None]
+            kp_doc_recalls = [r.kp_doc_recall for r in self.results if r.kp_doc_recall is not None]
+            kp_mrrs = [r.kp_mrr for r in self.results if r.kp_mrr is not None]
+            kp_latencies = [r.kp_latency_ms for r in self.results if r.kp_latency_ms is not None]
+            kp_support_found = sum(r.kp_support_found or 0 for r in self.results)
+            kp_support_total = sum(r.kp_support_total or 0 for r in self.results)
+            # Legacy answer metrics
             kp_ems = [r.kp_em for r in self.results if r.kp_em is not None]
             kp_f1s = [r.kp_f1 for r in self.results if r.kp_f1 is not None]
-            kp_latencies = [r.kp_latency_ms for r in self.results if r.kp_latency_ms is not None]
 
             summary.kp = SystemMetrics(
+                # PRIMARY: Supporting Facts metrics
+                avg_sf_precision=np.mean(kp_sf_precisions) if kp_sf_precisions else 0.0,
+                avg_sf_recall=np.mean(kp_sf_recalls) if kp_sf_recalls else 0.0,
+                avg_sf_f1=np.mean(kp_sf_f1s) if kp_sf_f1s else 0.0,
+                avg_doc_recall=np.mean(kp_doc_recalls) if kp_doc_recalls else 0.0,
+                avg_mrr=np.mean(kp_mrrs) if kp_mrrs else 0.0,
+                avg_latency_ms=np.mean(kp_latencies) if kp_latencies else 0.0,
+                total_support_found=kp_support_found,
+                total_support_needed=kp_support_total,
+                # Legacy answer metrics
                 avg_em=np.mean(kp_ems) if kp_ems else 0.0,
                 avg_f1=np.mean(kp_f1s) if kp_f1s else 0.0,
-                avg_latency_ms=np.mean(kp_latencies) if kp_latencies else 0.0,
                 questions_evaluated=len(self.results),
-                questions_answered=len(kp_ems),
+                questions_answered=len(kp_sf_f1s),  # Count based on SF metrics now
                 errors=len([r for r in self.results if r.error and "KP" in r.error])
             )
 
         # Vector metrics
         if self.run_vector:
+            # Supporting Facts metrics (PRIMARY)
+            vector_sf_precisions = [r.vector_sf_precision for r in self.results if r.vector_sf_precision is not None]
+            vector_sf_recalls = [r.vector_sf_recall for r in self.results if r.vector_sf_recall is not None]
+            vector_sf_f1s = [r.vector_sf_f1 for r in self.results if r.vector_sf_f1 is not None]
+            vector_doc_recalls = [r.vector_doc_recall for r in self.results if r.vector_doc_recall is not None]
+            vector_mrrs = [r.vector_mrr for r in self.results if r.vector_mrr is not None]
+            vector_latencies = [r.vector_latency_ms for r in self.results if r.vector_latency_ms is not None]
+            vector_support_found = sum(r.vector_support_found or 0 for r in self.results)
+            vector_support_total = sum(r.vector_support_total or 0 for r in self.results)
+            # Legacy answer metrics
             vector_ems = [r.vector_em for r in self.results if r.vector_em is not None]
             vector_f1s = [r.vector_f1 for r in self.results if r.vector_f1 is not None]
-            vector_latencies = [r.vector_latency_ms for r in self.results if r.vector_latency_ms is not None]
 
             summary.vector = SystemMetrics(
+                # PRIMARY: Supporting Facts metrics
+                avg_sf_precision=np.mean(vector_sf_precisions) if vector_sf_precisions else 0.0,
+                avg_sf_recall=np.mean(vector_sf_recalls) if vector_sf_recalls else 0.0,
+                avg_sf_f1=np.mean(vector_sf_f1s) if vector_sf_f1s else 0.0,
+                avg_doc_recall=np.mean(vector_doc_recalls) if vector_doc_recalls else 0.0,
+                avg_mrr=np.mean(vector_mrrs) if vector_mrrs else 0.0,
+                avg_latency_ms=np.mean(vector_latencies) if vector_latencies else 0.0,
+                total_support_found=vector_support_found,
+                total_support_needed=vector_support_total,
+                # Legacy answer metrics
                 avg_em=np.mean(vector_ems) if vector_ems else 0.0,
                 avg_f1=np.mean(vector_f1s) if vector_f1s else 0.0,
-                avg_latency_ms=np.mean(vector_latencies) if vector_latencies else 0.0,
                 questions_evaluated=len(self.results),
-                questions_answered=len(vector_ems),
+                questions_answered=len(vector_sf_f1s),  # Count based on SF metrics now
                 errors=len([r for r in self.results if r.error and "Vector" in r.error])
             )
 
-        # Compute improvements
+        # Compute improvements (PRIMARY: SF metrics)
         if self.run_kp and self.run_vector:
             summary.improvement = {
+                # PRIMARY: Supporting Facts F1 (THE KEY METRIC)
+                'sf_f1_delta': summary.kp.avg_sf_f1 - summary.vector.avg_sf_f1,
+                'sf_f1_percent_change': ((summary.kp.avg_sf_f1 - summary.vector.avg_sf_f1) / summary.vector.avg_sf_f1 * 100) if summary.vector.avg_sf_f1 > 0 else 0.0,
+                'sf_precision_delta': summary.kp.avg_sf_precision - summary.vector.avg_sf_precision,
+                'sf_recall_delta': summary.kp.avg_sf_recall - summary.vector.avg_sf_recall,
+                # Document-level metrics
+                'doc_recall_delta': summary.kp.avg_doc_recall - summary.vector.avg_doc_recall,
+                'mrr_delta': summary.kp.avg_mrr - summary.vector.avg_mrr,
+                # Legacy answer metrics (kept for backwards compatibility)
                 'em_delta': summary.kp.avg_em - summary.vector.avg_em,
                 'f1_delta': summary.kp.avg_f1 - summary.vector.avg_f1,
-                'em_percent_change': ((summary.kp.avg_em - summary.vector.avg_em) / summary.vector.avg_em * 100) if summary.vector.avg_em > 0 else 0.0,
-                'f1_percent_change': ((summary.kp.avg_f1 - summary.vector.avg_f1) / summary.vector.avg_f1 * 100) if summary.vector.avg_f1 > 0 else 0.0
             }
 
         # Store config
@@ -1241,26 +1399,27 @@ class HotpotQABenchmark:
         Args:
             summary: Benchmark summary with metrics
         """
-        # Save detailed CSV
+        # Save detailed CSV with Supporting Facts metrics (PRIMARY)
         csv_path = self.output_dir / "hotpotqa_results.csv"
         logger.info(f"Saving results to {csv_path}")
 
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
 
-            # Header
+            # Header with Supporting Facts metrics (PRIMARY)
             writer.writerow([
-                'question_id',
-                'question',
-                'ground_truth',
-                'kp_answer',
-                'kp_em',
-                'kp_f1',
+                'question_id', 'question', 'ground_truth',
+                # KP Supporting Facts metrics (PRIMARY)
+                'kp_sf_f1', 'kp_sf_precision', 'kp_sf_recall',
+                'kp_doc_recall', 'kp_mrr', 'kp_support_found', 'kp_support_total',
                 'kp_latency_ms',
-                'vector_answer',
-                'vector_em',
-                'vector_f1',
+                # Vector Supporting Facts metrics
+                'vector_sf_f1', 'vector_sf_precision', 'vector_sf_recall',
+                'vector_doc_recall', 'vector_mrr', 'vector_support_found', 'vector_support_total',
                 'vector_latency_ms',
+                # Legacy answer fields
+                'kp_answer', 'kp_em', 'kp_f1',
+                'vector_answer', 'vector_em', 'vector_f1',
                 'error'
             ])
 
@@ -1270,14 +1429,31 @@ class HotpotQABenchmark:
                     result.question_id,
                     result.question,
                     result.ground_truth,
+                    # KP Supporting Facts metrics (PRIMARY)
+                    f"{result.kp_sf_f1:.4f}" if result.kp_sf_f1 is not None else '',
+                    f"{result.kp_sf_precision:.4f}" if result.kp_sf_precision is not None else '',
+                    f"{result.kp_sf_recall:.4f}" if result.kp_sf_recall is not None else '',
+                    f"{result.kp_doc_recall:.4f}" if result.kp_doc_recall is not None else '',
+                    f"{result.kp_mrr:.4f}" if result.kp_mrr is not None else '',
+                    result.kp_support_found if result.kp_support_found is not None else '',
+                    result.kp_support_total if result.kp_support_total is not None else '',
+                    f"{result.kp_latency_ms:.2f}" if result.kp_latency_ms is not None else '',
+                    # Vector Supporting Facts metrics
+                    f"{result.vector_sf_f1:.4f}" if result.vector_sf_f1 is not None else '',
+                    f"{result.vector_sf_precision:.4f}" if result.vector_sf_precision is not None else '',
+                    f"{result.vector_sf_recall:.4f}" if result.vector_sf_recall is not None else '',
+                    f"{result.vector_doc_recall:.4f}" if result.vector_doc_recall is not None else '',
+                    f"{result.vector_mrr:.4f}" if result.vector_mrr is not None else '',
+                    result.vector_support_found if result.vector_support_found is not None else '',
+                    result.vector_support_total if result.vector_support_total is not None else '',
+                    f"{result.vector_latency_ms:.2f}" if result.vector_latency_ms is not None else '',
+                    # Legacy answer fields
                     result.kp_answer or '',
                     f"{result.kp_em:.4f}" if result.kp_em is not None else '',
                     f"{result.kp_f1:.4f}" if result.kp_f1 is not None else '',
-                    f"{result.kp_latency_ms:.2f}" if result.kp_latency_ms is not None else '',
                     result.vector_answer or '',
                     f"{result.vector_em:.4f}" if result.vector_em is not None else '',
                     f"{result.vector_f1:.4f}" if result.vector_f1 is not None else '',
-                    f"{result.vector_latency_ms:.2f}" if result.vector_latency_ms is not None else '',
                     result.error or ''
                 ])
 
@@ -1309,19 +1485,17 @@ class HotpotQABenchmark:
         print("HotpotQA Benchmark Results")
         print("=" * 60)
 
-        # Check for seed mode
-        if summary.config.get('mode') == 'seed':
-            print("\n🌱 SEED MODE - Data ingested, no evaluation performed")
-            print(f"  Namespace: {summary.config.get('namespace', 'N/A')}")
-            print(f"  Documents: {summary.config.get('documents', 0)}")
-            print("\n  Next step: Run with --mode cached for fast evaluation")
-            print("=" * 60)
-            return
-
         if self.run_kp:
             print("\nKnowledgePlane:")
-            print(f"  Exact Match:    {summary.kp.avg_em * 100:.1f}%")
-            print(f"  F1 Score:       {summary.kp.avg_f1 * 100:.1f}%")
+            print("  --- Supporting Facts Metrics (PRIMARY) ---")
+            print(f"  SF F1 Score:    {summary.kp.avg_sf_f1 * 100:.1f}%  <- THE KEY METRIC")
+            print(f"  SF Precision:   {summary.kp.avg_sf_precision * 100:.1f}%")
+            print(f"  SF Recall:      {summary.kp.avg_sf_recall * 100:.1f}%")
+            print(f"  Support Found:  {summary.kp.total_support_found}/{summary.kp.total_support_needed}")
+            print("  --- Document-Level Metrics ---")
+            print(f"  Doc Recall:     {summary.kp.avg_doc_recall * 100:.1f}%")
+            print(f"  MRR:            {summary.kp.avg_mrr:.3f}")
+            print("  --- Performance ---")
             print(f"  Avg Latency:    {summary.kp.avg_latency_ms:.0f}ms")
             print(f"  Questions:      {summary.kp.questions_answered}/{summary.kp.questions_evaluated}")
             if summary.kp.errors > 0:
@@ -1329,24 +1503,39 @@ class HotpotQABenchmark:
 
         if self.run_vector:
             print("\nVector Baseline:")
-            print(f"  Exact Match:    {summary.vector.avg_em * 100:.1f}%")
-            print(f"  F1 Score:       {summary.vector.avg_f1 * 100:.1f}%")
+            print("  --- Supporting Facts Metrics (PRIMARY) ---")
+            print(f"  SF F1 Score:    {summary.vector.avg_sf_f1 * 100:.1f}%  <- THE KEY METRIC")
+            print(f"  SF Precision:   {summary.vector.avg_sf_precision * 100:.1f}%")
+            print(f"  SF Recall:      {summary.vector.avg_sf_recall * 100:.1f}%")
+            print(f"  Support Found:  {summary.vector.total_support_found}/{summary.vector.total_support_needed}")
+            print("  --- Document-Level Metrics ---")
+            print(f"  Doc Recall:     {summary.vector.avg_doc_recall * 100:.1f}%")
+            print(f"  MRR:            {summary.vector.avg_mrr:.3f}")
+            print("  --- Performance ---")
             print(f"  Avg Latency:    {summary.vector.avg_latency_ms:.0f}ms")
             print(f"  Questions:      {summary.vector.questions_answered}/{summary.vector.questions_evaluated}")
             if summary.vector.errors > 0:
                 print(f"  Errors:         {summary.vector.errors}")
 
         if self.run_kp and self.run_vector:
-            print("\nImprovement:")
-            em_delta = summary.improvement['em_delta']
-            f1_delta = summary.improvement['f1_delta']
-            print(f"  EM:             {em_delta:+.1f} percentage points ({summary.improvement['em_percent_change']:+.1f}%)")
-            print(f"  F1:             {f1_delta:+.1f} percentage points ({summary.improvement['f1_percent_change']:+.1f}%)")
+            print("\nImprovement (Supporting Facts - PRIMARY):")
+            sf_f1_delta = summary.improvement.get('sf_f1_delta', 0)
+            sf_precision_delta = summary.improvement.get('sf_precision_delta', 0)
+            sf_recall_delta = summary.improvement.get('sf_recall_delta', 0)
+            print(f"  SF F1:          {sf_f1_delta*100:+.1f} percentage points ({summary.improvement.get('sf_f1_percent_change', 0):+.1f}%)")
+            print(f"  SF Precision:   {sf_precision_delta*100:+.1f} percentage points")
+            print(f"  SF Recall:      {sf_recall_delta*100:+.1f} percentage points")
 
-            if em_delta > 0 and f1_delta > 0:
-                print("\n✓ KP demonstrates superior multi-hop reasoning!")
-            elif em_delta > 0 or f1_delta > 0:
-                print("\n~ KP shows mixed results compared to baseline")
+            print("\nImprovement (Document-Level):")
+            doc_recall_delta = summary.improvement.get('doc_recall_delta', 0)
+            mrr_delta = summary.improvement.get('mrr_delta', 0)
+            print(f"  Doc Recall:     {doc_recall_delta*100:+.1f} percentage points")
+            print(f"  MRR:            {mrr_delta:+.3f}")
+
+            if sf_f1_delta > 0:
+                print("\n✓ KP demonstrates superior evidence retrieval!")
+            elif sf_f1_delta == 0:
+                print("\n~ KP shows equal performance to baseline")
             else:
                 print("\n✗ Vector baseline outperforms KP on this benchmark")
 
@@ -1469,6 +1658,168 @@ def compute_f1(prediction: str, ground_truth: str) -> float:
     return f1
 
 
+def compute_supporting_facts_metrics(
+    retrieved_docs: List[str],
+    supporting_facts: List[Tuple[str, int]],
+    title_to_sentences: Dict[str, List[str]],
+    doc_content_to_title: Dict[str, str]
+) -> Dict[str, Any]:
+    """
+    Compute Supporting Facts metrics for HotPotQA.
+
+    This is THE PRIMARY METRIC for HotpotQA evaluation. It measures whether
+    we retrieved the specific sentences that contain the evidence needed
+    to answer the question.
+
+    HotPotQA supporting_facts are (title, sentence_index) pairs identifying
+    the exact sentences containing evidence.
+
+    Args:
+        retrieved_docs: List of retrieved document contents
+        supporting_facts: List of (title, sent_idx) from HotPotQA
+        title_to_sentences: Mapping of title -> list of sentences
+        doc_content_to_title: Mapping of doc content -> title
+
+    Returns:
+        Dict with sf_precision, sf_recall, sf_f1, doc_recall, mrr, found, total
+    """
+    if not supporting_facts:
+        return {
+            'sf_precision': 0.0, 'sf_recall': 0.0, 'sf_f1': 0.0,
+            'doc_recall': 0.0, 'mrr': 0.0, 'found': 0, 'total': 0
+        }
+
+    # Build set of gold supporting sentences
+    gold_sentences = set()
+    gold_titles = set()
+    for title, sent_idx in supporting_facts:
+        gold_titles.add(title)
+        sentences = title_to_sentences.get(title, [])
+        if sent_idx < len(sentences):
+            # Normalize the sentence for matching
+            gold_sentences.add(normalize_answer(sentences[sent_idx]))
+
+    total_gold = len(gold_sentences)
+    if total_gold == 0:
+        return {
+            'sf_precision': 0.0, 'sf_recall': 0.0, 'sf_f1': 0.0,
+            'doc_recall': 0.0, 'mrr': 0.0, 'found': 0, 'total': 0
+        }
+
+    # Check which gold sentences appear in retrieved docs
+    found_sentences = set()
+    found_titles = set()
+    first_relevant_rank = None
+    total_retrieved_sentences = 0
+
+    for rank, doc_content in enumerate(retrieved_docs, 1):
+        doc_title = doc_content_to_title.get(doc_content, "")
+
+        # Track document-level recall
+        if doc_title in gold_titles and doc_title not in found_titles:
+            found_titles.add(doc_title)
+            if first_relevant_rank is None:
+                first_relevant_rank = rank
+
+        # Check sentence-level matches
+        # Split retrieved content into sentences and check each
+        doc_sentences = re.split(r'[.!?]+', doc_content)
+        for sent in doc_sentences:
+            sent = sent.strip()
+            if not sent:
+                continue
+            total_retrieved_sentences += 1
+            normalized_sent = normalize_answer(sent)
+            if normalized_sent in gold_sentences:
+                found_sentences.add(normalized_sent)
+
+    found_count = len(found_sentences)
+
+    # Supporting Facts Precision: correct sentences / retrieved sentences
+    # (How many of our retrieved sentences were actually supporting facts?)
+    sf_precision = found_count / total_retrieved_sentences if total_retrieved_sentences > 0 else 0.0
+
+    # Supporting Facts Recall: found sentences / gold sentences
+    # (How many of the required supporting facts did we find?)
+    sf_recall = found_count / total_gold
+
+    # Supporting Facts F1: harmonic mean
+    if sf_precision + sf_recall > 0:
+        sf_f1 = 2 * sf_precision * sf_recall / (sf_precision + sf_recall)
+    else:
+        sf_f1 = 0.0
+
+    # Document-level recall (secondary metric)
+    doc_recall = len(found_titles) / len(gold_titles) if gold_titles else 0.0
+
+    # MRR: 1/rank of first relevant document
+    mrr = 1.0 / first_relevant_rank if first_relevant_rank else 0.0
+
+    return {
+        'sf_precision': sf_precision,
+        'sf_recall': sf_recall,
+        'sf_f1': sf_f1,
+        'doc_recall': doc_recall,
+        'mrr': mrr,
+        'found': found_count,
+        'total': total_gold
+    }
+
+
+def compute_retrieval_metrics(
+    retrieved_docs: List[str],
+    supporting_facts: List[Tuple[str, int]],
+    doc_titles: Dict[str, str]
+) -> Tuple[float, float, int, int]:
+    """
+    DEPRECATED: Use compute_supporting_facts_metrics instead.
+
+    Compute document-level retrieval metrics for HotPotQA.
+    This only checks if we retrieved documents with the right titles,
+    not the specific sentences - use compute_supporting_facts_metrics for that.
+
+    Args:
+        retrieved_docs: List of retrieved document contents
+        supporting_facts: List of [title, sent_idx] from HotPotQA
+        doc_titles: Mapping of doc content to title
+
+    Returns:
+        Tuple of (recall@k, mrr, support_found, support_total)
+    """
+    if not supporting_facts:
+        return 0.0, 0.0, 0, 0
+
+    # Extract unique supporting fact titles
+    support_titles = set(title for title, _ in supporting_facts)
+    support_total = len(support_titles)
+
+    if support_total == 0:
+        return 0.0, 0.0, 0, 0
+
+    # Check which supporting titles are in retrieved docs
+    found_titles = set()
+    first_rank = None
+
+    for rank, doc_content in enumerate(retrieved_docs, 1):
+        # Get title for this doc
+        doc_title = doc_titles.get(doc_content, "")
+
+        if doc_title in support_titles and doc_title not in found_titles:
+            found_titles.add(doc_title)
+            if first_rank is None:
+                first_rank = rank
+
+    support_found = len(found_titles)
+
+    # Recall@k: fraction of supporting facts found
+    recall_at_k = support_found / support_total
+
+    # MRR: 1/rank of first relevant document found
+    mrr = 1.0 / first_rank if first_rank else 0.0
+
+    return recall_at_k, mrr, support_found, support_total
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
@@ -1548,12 +1899,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--mode',
         type=str,
-        choices=['cached', 'timestamped', 'seed'],
-        default='timestamped',
-        help='''Namespace mode:
-  - cached: Reuse existing embeddings (fastest, requires prior seed run)
-  - timestamped: Fresh namespace each run (full pipeline, slow)
-  - seed: Ingest data + trigger embeddings, skip evaluation (prep for cached mode)'''
+        choices=['smart', 'fresh'],
+        default='smart',
+        help='''Execution mode:
+  - smart: Auto-detect cache, reuse if valid, seed if needed (default, fast iteration)
+  - fresh: Always start clean with timestamped namespace (for CI/reproducibility)'''
     )
 
     return parser.parse_args()

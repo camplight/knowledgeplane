@@ -1,0 +1,36 @@
+{
+  "kp": {
+    "avg_mrr": 0.3188888888888889,
+    "avg_recall_at_k": 0.65,
+    "avg_ndcg_at_k": 0.3976935643542925,
+    "avg_latency_ms": 342.23499298095703,
+    "queries_evaluated": 20,
+    "queries_answered": 20,
+    "errors": 0
+  },
+  "vector": {
+    "avg_mrr": 0.3108928571428572,
+    "avg_recall_at_k": 0.65,
+    "avg_ndcg_at_k": 0.39048358516072496,
+    "avg_latency_ms": 119.54878568649292,
+    "queries_evaluated": 20,
+    "queries_answered": 20,
+    "errors": 0
+  },
+  "improvement": {
+    "mrr_delta": 0.007996031746031695,
+    "recall_delta": 0.0,
+    "ndcg_delta": 0.007209979193567528,
+    "mrr_percent_change": 2.57195736805155,
+    "recall_percent_change": 0.0,
+    "ndcg_percent_change": 1.8464231193226384
+  },
+  "config": {
+    "n_queries": 20,
+    "k": 10,
+    "seed": 42,
+    "run_kp": true,
+    "run_vector": true,
+    "mock_kp": false
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "kp": {
+    "avg_sf_precision": 0.09961229702609012,
+    "avg_sf_recall": 0.6091666666666666,
+    "avg_sf_f1": 0.16722629801788103,
+    "avg_latency_ms": 797.4024534225464,
+    "total_support_found": 30,
+    "total_support_needed": 51,
+    "avg_doc_recall": 0.5,
+    "avg_mrr": 0.6166666666666666,
+    "avg_em": 0.0,
+    "avg_f1": 0.010317460317460317,
+    "questions_evaluated": 20,
+    "questions_answered": 20,
+    "errors": 0
+  },
+  "vector": null,
+  "improvement": {},
+  "config": {
+    "n_questions": 20,
+    "top_k": 5,
+    "seed": 42,
+    "run_kp": true,
+    "run_vector": false,
+    "mock_kp": false,
+    "sample_method": "random",
+    "batch_size": null,
+    "statistical_analysis": false,
+    "timestamp": "2026-02-17T15:50:55.110566"
+  },
+  "timing": {
+    "total_seconds": 196.54841923713684,
+    "avg_per_question": 9.827420961856841
+  },
+  "statistical_analysis": null
+}

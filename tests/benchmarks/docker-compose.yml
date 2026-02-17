@@ -1,8 +1,5 @@
-version: '3.8'
-
 services:
-  # Phase 1: Validation run (n=20, quick smoke test)
-  # ALWAYS RUN THIS FIRST to verify setup
+  # Quick validation run (n=20)
   benchmark-validation:
     build:
       context: .
@@ -11,17 +8,18 @@ services:
     container_name: kp-bench-validation
     volumes:
       - ./output:/app/output
-    env_file: .env
+    env_file: ../../.env
     environment:
       - PYTHONUNBUFFERED=1
+      - KP_API_URL=http://host.docker.internal:8081
+      - ARANGO_URL=http://host.docker.internal:8529
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: python3 bench_hotpotqa.py --n 20 --run_kp true --run_vector false --mode cached
+    command: python3 bench_hotpotqa.py --n 20 --run_kp true --run_vector false
     profiles:
       - validation
 
-  # Phase 2: Full run (n=500, both systems)
-  # ONLY RUN AFTER validation passes
+  # Full run (n=500)
   benchmark-full:
     build:
       context: .
@@ -30,16 +28,18 @@ services:
     container_name: kp-bench-full
     volumes:
       - ./output:/app/output
-    env_file: .env
+    env_file: ../../.env
     environment:
       - PYTHONUNBUFFERED=1
+      - KP_API_URL=http://host.docker.internal:8081
+      - ARANGO_URL=http://host.docker.internal:8529
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: python3 bench_hotpotqa.py --n 500 --run_kp true --run_vector true --mode timestamped
+    command: python3 bench_hotpotqa.py --n 500 --run_kp true --run_vector false --mode fresh
     profiles:
       - full
 
-  # MS MARCO benchmark (optional)
+  # MS MARCO benchmark
   benchmark-msmarco:
     build:
       context: .
@@ -48,32 +48,36 @@ services:
     container_name: kp-bench-msmarco
     volumes:
       - ./output:/app/output
-    env_file: .env
+    env_file: ../../.env
     environment:
       - PYTHONUNBUFFERED=1
+      - KP_API_URL=http://host.docker.internal:8081
+      - ARANGO_URL=http://host.docker.internal:8529
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: python3 bench_msmarco.py --n 100 --k 10 --run_kp true --run_vector true
+    command: python3 bench_msmarco.py --n 100 --k 10 --run_kp true --run_vector false
     profiles:
       - msmarco
 
-  # Complete suite (all benchmarks)
-  benchmark-all:
+  # Freshness benchmark (batch mode with FAISS comparison)
+  benchmark-freshness-batch:
     build:
       context: .
       dockerfile: Dockerfile
     image: kp-benchmarks:latest
-    container_name: kp-bench-all
+    container_name: kp-bench-freshness-batch
     volumes:
       - ./output:/app/output
-    env_file: .env
+    env_file: ../../.env
     environment:
       - PYTHONUNBUFFERED=1
+      - KP_API_URL=http://host.docker.internal:8081
+      - ARANGO_URL=http://host.docker.internal:8529
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: python3 run_all.py --n-hotpot 500 --run_kp --run_vector --freshness-mode skip
+    command: python3 bench_freshness.py --mode api --n 50 --run_baseline --corpus_size 1000
     profiles:
-      - all
+      - freshness-batch
 
   # Mock mode (for testing without KP server)
   benchmark-mock:
@@ -87,3 +91,5 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     command: python3 bench_hotpotqa.py --n 20 --mock_kp --run_vector false
+    profiles:
+      - mock
