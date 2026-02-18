@@ -28,6 +28,7 @@ EXTRA_ARGS=""
 DATASET="synthetic"
 WAIT_TIMEOUT=300
 USE_NLI=false
+AUTO_CLEAN=false
 
 show_help() {
     echo -e "${BOLD}${BLUE}KnowledgePlane Benchmark CLI${NC}"
@@ -49,6 +50,7 @@ show_help() {
     echo "    -n, --n <num>       Number of questions/samples/clusters (default: varies)"
     echo "    --quick             Use minimal sample size (n=10)"
     echo "    --full              Use full sample size (n=500)"
+    echo "    --clean             Clean benchmark data before running (RECOMMENDED)"
     echo "    --skip-preflight    Skip environment checks"
     echo "    --no-archive        Don't save results to runs/"
     echo "    -- <args>           Pass extra args directly to Python script"
@@ -143,6 +145,28 @@ run_preflight() {
             echo -e "${DIM}  Ensure background-workers is running: npm run dev:background-workers${NC}"
         else
             echo -e "${GREEN}✓${NC} CardConsolidator worker registered"
+        fi
+    fi
+
+    # Check for existing benchmark data (warn if not using --clean)
+    if [ "$AUTO_CLEAN" = false ]; then
+        local existing_facts
+        existing_facts=$(curl -s "http://localhost:8529/_db/knowledgeplane/_api/cursor" \
+            -u root:root -H "Content-Type: application/json" \
+            -d '{"query": "FOR f IN facts FILTER STARTS_WITH(f.metadata.namespace, \"relationrecall\") OR STARTS_WITH(f.metadata.namespace, \"hotpotqa\") RETURN 1"}' \
+            2>/dev/null | python3 -c "import sys,json; r=json.load(sys.stdin); print(len(r.get('result',[])))" 2>/dev/null || echo "0")
+
+        local existing_relations
+        existing_relations=$(curl -s "http://localhost:8529/_db/knowledgeplane/_api/cursor" \
+            -u root:root -H "Content-Type: application/json" \
+            -d '{"query": "FOR r IN relations RETURN 1"}' \
+            2>/dev/null | python3 -c "import sys,json; r=json.load(sys.stdin); print(len(r.get('result',[])))" 2>/dev/null || echo "0")
+
+        if [ "$existing_facts" -gt 0 ] || [ "$existing_relations" -gt 0 ]; then
+            echo ""
+            echo -e "${YELLOW}⚠${NC} Existing benchmark data detected:"
+            echo -e "    Facts: $existing_facts  |  Relations: $existing_relations"
+            echo -e "${DIM}  Consider using --clean to start fresh: ./bench relationrecall --clean${NC}"
         fi
     fi
 
@@ -326,6 +350,7 @@ clean_db() {
     echo -e "${BOLD}${BLUE}━━━ Cleaning Benchmark Data ━━━${NC}"
     echo ""
 
+    # Remove benchmark facts
     for ns in hotpotqa freshness msmarco relationrecall; do
         result=$(curl -s "http://localhost:8529/_db/knowledgeplane/_api/cursor" \
             -u root:root -H "Content-Type: application/json" \
@@ -333,6 +358,33 @@ clean_db() {
             | python3 -c "import sys,json; r=json.load(sys.stdin); print(len(r.get('result',[])))" 2>/dev/null || echo "0")
         echo "  Removed $result $ns facts"
     done
+
+    # Clean relations and knowledge_cards (for RelationRecall)
+    curl -s "http://localhost:8529/_db/knowledgeplane/_api/cursor" \
+        -u root:root -H "Content-Type: application/json" \
+        -d '{"query": "FOR r IN relations REMOVE r IN relations"}' > /dev/null 2>&1
+    echo "  Cleared relations collection"
+
+    curl -s "http://localhost:8529/_db/knowledgeplane/_api/cursor" \
+        -u root:root -H "Content-Type: application/json" \
+        -d '{"query": "FOR c IN knowledge_cards REMOVE c IN knowledge_cards"}' > /dev/null 2>&1
+    echo "  Cleared knowledge_cards collection"
+
+    # Drop problematic vector indexes (they block inserts on docs without embeddings)
+    for coll in relations knowledge_cards; do
+        idx_name=$(curl -s -u root:root "http://localhost:8529/_db/knowledgeplane/_api/index?collection=$coll" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); idxs=[i['name'] for i in d.get('indexes',[]) if i.get('type')=='vector']; print(idxs[0] if idxs else '')" 2>/dev/null)
+        if [ -n "$idx_name" ]; then
+            curl -s -u root:root -X DELETE "http://localhost:8529/_db/knowledgeplane/_api/index/$coll/$idx_name" > /dev/null 2>&1
+            echo "  Dropped vector index $idx_name from $coll"
+        fi
+    done
+
+    # Clear worker triggers
+    curl -s "http://localhost:8529/_db/knowledgeplane/_api/cursor" \
+        -u root:root -H "Content-Type: application/json" \
+        -d '{"query": "FOR t IN worker_triggers REMOVE t IN worker_triggers"}' > /dev/null 2>&1
+    echo "  Cleared worker_triggers"
 
     echo -e "${GREEN}Done!${NC}"
 }
@@ -359,6 +411,8 @@ while [[ $# -gt 0 ]]; do
             WAIT_TIMEOUT=$2; shift 2 ;;
         --use-nli)
             USE_NLI=true; shift ;;
+        --clean)
+            AUTO_CLEAN=true; shift ;;
         --)
             shift; EXTRA_ARGS="$*"; break ;;
         *)
@@ -379,9 +433,11 @@ case $COMMAND in
         clean_db ;;
     relationrecall)
         [ "$SKIP_PREFLIGHT" = false ] && run_preflight true  # Check workers for relationrecall
+        [ "$AUTO_CLEAN" = true ] && clean_db
         run_relationrecall ;;
     hotpot|freshness|msmarco|all)
         [ "$SKIP_PREFLIGHT" = false ] && run_preflight
+        [ "$AUTO_CLEAN" = true ] && clean_db
         run_$COMMAND ;;
     *)
         echo -e "${RED}Unknown command: $COMMAND${NC}"

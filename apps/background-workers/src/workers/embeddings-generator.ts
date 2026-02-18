@@ -643,11 +643,15 @@ export class EmbeddingsGenerator {
       );
 
       // Ensure vector indexes exist (even if no new embeddings were generated this run)
-      // The ensureVectorIndex function checks if embeddings exist before creating index
+      // NOTE: ArangoDB vector indexes block inserts on documents without embeddings.
+      // Facts get embeddings immediately via sync_embedding, so vector index works.
+      // Relations and knowledge_cards are created without embeddings (added later by this worker),
+      // so we cannot create vector indexes on them until all docs have embeddings.
       console.log('Checking/creating vector indexes...');
       await ensureVectorIndex('facts');
-      await ensureVectorIndex('relations');
-      await ensureVectorIndex('knowledge_cards');
+      // Skip relations and knowledge_cards vector indexes for now
+      // await ensureVectorIndex('relations');
+      // await ensureVectorIndex('knowledge_cards');
     } catch (err: any) {
       error = err.message || String(err);
       const executionTime = Date.now() - startTime;

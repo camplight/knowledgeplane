@@ -746,46 +746,101 @@ class RelationRecallBenchmark:
         api_url = os.getenv("KP_API_URL", "http://localhost:8081")
         workspace_id = os.getenv("KP_WORKSPACE_ID")
 
+        # Get username/email from adapter for consistent auth
+        username = getattr(self.adapter, 'username', 'bench_default')
+        email = getattr(self.adapter, 'email', 'bench_default@benchmark.local')
+
+        # Get benchmark's fact IDs for precise relation detection
+        benchmark_fact_ids = list(self.local_to_kp_id.values()) if self.local_to_kp_id else []
+        logger.info(f"Querying relations: api_url={api_url}, workspace_id={workspace_id}, tracking {len(benchmark_fact_ids)} facts")
+
         last_relation_count = 0
         stable_count = 0
 
         while time.time() - start_time < self.consolidation_timeout:
+            elapsed = int(time.time() - start_time)
+
             try:
-                # Query relations via REST API
-                response = requests.get(
-                    f"{api_url}/api/relations",
-                    params={
-                        "workspace_id": workspace_id,
-                        "limit": 1000,
-                    },
-                    timeout=10
-                )
-
-                if response.status_code == 200:
-                    relations = response.json().get("relations", [])
+                # Use direct DB query to count relations between our benchmark's facts
+                # This is more reliable than REST API and avoids counting old relations
+                if benchmark_fact_ids:
+                    relations = self._get_relations_for_facts(benchmark_fact_ids)
                     current_count = len(relations)
-
-                    elapsed = int(time.time() - start_time)
-                    logger.info(f"[{elapsed}s] Relations found: {current_count}")
-
-                    # Check if count is stable (consolidation complete)
-                    if current_count > 0 and current_count == last_relation_count:
-                        stable_count += 1
-                        if stable_count >= 3:  # Stable for 3 checks
-                            logger.info(f"Consolidation complete: {current_count} relations created")
-                            return True
+                else:
+                    # Fallback to REST API if no fact IDs (shouldn't happen)
+                    response = requests.get(
+                        f"{api_url}/api/relations",
+                        params={
+                            "workspace_id": workspace_id,
+                            "username": username,
+                            "email": email,
+                            "limit": 1000,
+                        },
+                        timeout=10
+                    )
+                    if response.status_code == 200:
+                        relations = response.json().get("relations", [])
+                        current_count = len(relations)
                     else:
-                        stable_count = 0
+                        logger.warning(f"[{elapsed}s] API returned {response.status_code}")
+                        current_count = 0
 
-                    last_relation_count = current_count
+                logger.info(f"[{elapsed}s] Relations found: {current_count}")
+
+                # Check if count is stable (consolidation complete)
+                if current_count > 0 and current_count == last_relation_count:
+                    stable_count += 1
+                    if stable_count >= 3:  # Stable for 3 checks
+                        logger.info(f"Consolidation complete: {current_count} relations created")
+                        return True
+                else:
+                    stable_count = 0
+
+                last_relation_count = current_count
 
             except Exception as e:
-                logger.warning(f"Error checking relations: {e}")
+                elapsed = int(time.time() - start_time)
+                logger.warning(f"[{elapsed}s] Error checking relations: {e}")
 
             time.sleep(self.consolidation_poll_interval)
 
+        # Timeout - try direct DB query as fallback
         logger.warning(f"Consolidation timeout after {self.consolidation_timeout}s")
+        logger.info("Attempting direct database query as fallback...")
+
+        try:
+            db_count = self._count_relations_direct(workspace_id)
+            if db_count > 0:
+                logger.warning(f"Found {db_count} relations via direct DB query - REST API may have issues")
+        except Exception as e:
+            logger.debug(f"Direct DB query failed: {e}")
+
         return False
+
+    def _count_relations_direct(self, workspace_id: str) -> int:
+        """Direct database query to count relations (debugging fallback)."""
+        arango_url = os.environ.get("ARANGO_URL", "http://localhost:8529")
+        db_name = os.environ.get("ARANGO_DB_NAME", "knowledgeplane")
+
+        query = {
+            "query": """
+                FOR r IN relations
+                FILTER r.workspace_id == @workspace_id AND r.deleted_at == null
+                RETURN 1
+            """,
+            "bindVars": {"workspace_id": workspace_id}
+        }
+
+        response = requests.post(
+            f"{arango_url}/_db/{db_name}/_api/cursor",
+            json=query,
+            auth=("root", "root"),
+            timeout=10
+        )
+
+        if response.status_code == 201:
+            return len(response.json().get("result", []))
+        return 0
 
     def _create_mock_relations(self) -> None:
         """Create mock relations for testing without a server."""
@@ -823,11 +878,20 @@ class RelationRecallBenchmark:
         api_url = os.getenv("KP_API_URL", "http://localhost:8081")
         workspace_id = os.getenv("KP_WORKSPACE_ID")
 
+        # Get username/email from adapter for consistent auth
+        username = getattr(self.adapter, 'username', 'bench_default')
+        email = getattr(self.adapter, 'email', 'bench_default@benchmark.local')
+
+        relations = []
+
+        # First try REST API
         try:
             response = requests.get(
                 f"{api_url}/api/relations",
                 params={
                     "workspace_id": workspace_id,
+                    "username": username,
+                    "email": email,
                     "limit": 1000,
                 },
                 timeout=30
@@ -835,15 +899,92 @@ class RelationRecallBenchmark:
 
             if response.status_code == 200:
                 relations = response.json().get("relations", [])
-                logger.info(f"Retrieved {len(relations)} relations")
-                return relations
+                logger.info(f"Retrieved {len(relations)} relations via REST API")
             else:
-                logger.error(f"Failed to fetch relations: {response.status_code}")
-                return []
+                logger.warning(f"REST API returned {response.status_code}: {response.text[:200]}")
 
         except Exception as e:
-            logger.error(f"Error fetching relations: {e}")
+            logger.warning(f"REST API error: {e}")
+
+        # Fallback to direct DB query by fact IDs (more reliable)
+        if not relations and self.local_to_kp_id:
+            logger.info("Attempting direct database query by fact IDs...")
+            try:
+                benchmark_fact_ids = list(self.local_to_kp_id.values())
+                relations = self._get_relations_for_facts(benchmark_fact_ids)
+                if relations:
+                    logger.info(f"Retrieved {len(relations)} relations via direct DB query")
+            except Exception as e:
+                logger.warning(f"Direct DB query failed: {e}")
+
+        # Note: _get_relations_for_facts already filters to benchmark's facts
+        return relations
+
+    def _get_relations_direct(self, workspace_id: str) -> List[Dict]:
+        """Direct database query to get relations (fallback)."""
+        arango_url = os.environ.get("ARANGO_URL", "http://localhost:8529")
+        db_name = os.environ.get("ARANGO_DB_NAME", "knowledgeplane")
+
+        query = {
+            "query": """
+                FOR r IN relations
+                FILTER r.workspace_id == @workspace_id AND r.deleted_at == null
+                RETURN {
+                    id: r._id,
+                    from_fact: r.from_fact,
+                    to_fact: r.to_fact,
+                    type: r.type,
+                    workspace_id: r.workspace_id
+                }
+            """,
+            "bindVars": {"workspace_id": workspace_id}
+        }
+
+        response = requests.post(
+            f"{arango_url}/_db/{db_name}/_api/cursor",
+            json=query,
+            auth=("root", "root"),
+            timeout=30
+        )
+
+        if response.status_code == 201:
+            return response.json().get("result", [])
+        return []
+
+    def _get_relations_for_facts(self, fact_ids: List[str]) -> List[Dict]:
+        """Get relations involving specific fact IDs (more precise for benchmark)."""
+        if not fact_ids:
             return []
+
+        arango_url = os.environ.get("ARANGO_URL", "http://localhost:8529")
+        db_name = os.environ.get("ARANGO_DB_NAME", "knowledgeplane")
+
+        query = {
+            "query": """
+                FOR r IN relations
+                FILTER r.deleted_at == null
+                FILTER r.from_fact IN @fact_ids AND r.to_fact IN @fact_ids
+                RETURN {
+                    id: r._id,
+                    from_fact: r.from_fact,
+                    to_fact: r.to_fact,
+                    type: r.type,
+                    workspace_id: r.workspace_id
+                }
+            """,
+            "bindVars": {"fact_ids": fact_ids}
+        }
+
+        response = requests.post(
+            f"{arango_url}/_db/{db_name}/_api/cursor",
+            json=query,
+            auth=("root", "root"),
+            timeout=30
+        )
+
+        if response.status_code == 201:
+            return response.json().get("result", [])
+        return []
 
     def compute_metrics(self, created_relations: List[Dict]) -> RelationMetrics:
         """

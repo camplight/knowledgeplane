@@ -321,12 +321,12 @@ export class CardConsolidator {
 
         // Create relations that don't already exist
         for (const relation of relations) {
-          const fromFact = batch.find(
-            (f) => f.content === relation.from_content,
-          );
-          const toFact = batch.find((f) => f.content === relation.to_content);
+          // Use 1-based indices from AI response (convert to 0-based for array access)
+          const fromFact = batch[relation.from_index - 1];
+          const toFact = batch[relation.to_index - 1];
 
           if (!fromFact || !toFact) {
+            console.warn(`Invalid fact indices: from=${relation.from_index}, to=${relation.to_index}`);
             continue; // Skip if facts not found in batch
           }
 
@@ -361,43 +361,26 @@ export class CardConsolidator {
 
           if (existingRelations.length === 0) {
             try {
-              // Ensure metadata is always an object (handle cases where AI returns array/null/undefined)
-              let metadata: Record<string, any> = {};
-              if (relation.metadata && typeof relation.metadata === "object" && !Array.isArray(relation.metadata)) {
-                metadata = { ...relation.metadata };
-              }
-              
               await FactRelation.create({
                 from_fact: fromFactId,
                 to_fact: toFactId,
                 type: relation.type,
                 workspace_id: fromFactWorkspaceId,
                 metadata: {
-                  ...metadata,
+                  reason: relation.reason || "",
                   source: "card-consolidator",
                   created_at: new Date().toISOString(),
                 },
                 created_by: "system",
               });
               relationsCreated++;
+              console.log(`Created relation: ${fromFactId} --[${relation.type}]--> ${toFactId}`);
             } catch (error: any) {
               // Relation might already exist or there's a constraint issue, skip
               console.warn(
                 `Failed to create relation between ${fromFactId} and ${toFactId}:`,
                 error.message,
               );
-              // Log additional details for debugging
-              if (error.message?.includes("Array") || error.message?.includes("type")) {
-                console.warn("Relation creation error details:", {
-                  fromFactId,
-                  toFactId,
-                  type: relation.type,
-                  metadata: relation.metadata,
-                  metadataType: typeof relation.metadata,
-                  isArray: Array.isArray(relation.metadata),
-                  error: error.message,
-                });
-              }
             }
           }
         }
@@ -415,41 +398,58 @@ export class CardConsolidator {
 
   private async identifyRelationsWithAI(facts: any[]): Promise<
     Array<{
-      from_content: string;
-      to_content: string;
+      from_index: number;
+      to_index: number;
       type: string;
-      metadata?: Record<string, any>;
+      reason?: string;
     }>
   > {
-    const systemPrompt = `You are a knowledge graph relation identification agent. Your task is to analyze a collection of facts and identify meaningful relationships between them.
+    // Valid relation types - constrained to prevent arbitrary types
+    const VALID_RELATION_TYPES = [
+      "references",
+      "depends_on",
+      "related_to",
+      "part_of",
+      "causes",
+      "enables",
+      "contradicts",
+      "supports",
+    ];
 
-For each pair of facts that are related, identify:
-- The type of relationship (e.g., "references", "depends_on", "related_to", "part_of", "causes", "enables", "contradicts", "supports", etc.)
-- Any relevant metadata about the relationship
+    const systemPrompt = `You are a knowledge graph relation identification agent. Analyze facts and identify meaningful relationships.
 
-Only identify relationships that are meaningful and useful. Don't create relations for every possible pair - focus on significant connections.
+IMPORTANT: Use fact NUMBERS (1-based index) to identify facts, NOT the fact content.
 
-Return your response as JSON with the following structure:
+Valid relationship types (use ONLY these):
+${VALID_RELATION_TYPES.map(t => `- "${t}"`).join("\n")}
+
+Return JSON with this EXACT structure:
 {
   "relations": [
     {
-      "from_content": "Source fact content",
-      "to_content": "Target fact content",
-      "type": "relationship_type",
-      "metadata": {}
+      "from_index": 1,
+      "to_index": 2,
+      "type": "related_to",
+      "reason": "Brief explanation"
     }
   ]
-}`;
+}
+
+Rules:
+- from_index and to_index must be valid fact numbers (1 to N)
+- type must be one of the valid types listed above
+- Only identify meaningful relationships, not every possible pair
+- Focus on significant connections`;
 
     const factContents = facts
       .map((f, idx) => `${idx + 1}. ${f.content}`)
       .join("\n");
 
-    const userPrompt = `Analyze the following facts and identify meaningful relationships between them:
+    const userPrompt = `Analyze these ${facts.length} facts and identify meaningful relationships:
 
 ${factContents}
 
-Identify relationships that would be useful for organizing and understanding these facts. Provide your response as JSON.`;
+Return relationships using fact NUMBERS (1-${facts.length}), not content.`;
 
     const provider = this.aiClient.getProvider();
     const messages: ChatMessage[] = [
@@ -459,7 +459,7 @@ Identify relationships that would be useful for organizing and understanding the
 
     const chatOptions: ChatCompletionOptions = {
       model: getChatModel(),
-      temperature: 0.5,
+      temperature: 0.3, // Lower temperature for more consistent output
       responseFormat: "json_object",
     };
 
@@ -470,7 +470,32 @@ Identify relationships that would be useful for organizing and understanding the
     }
 
     const parsed = JSON.parse(response.content);
-    return parsed.relations || [];
+    const relations = parsed.relations || [];
+
+    // Validate and filter relations
+    return relations.filter((rel: any) => {
+      // Validate indices are within range
+      if (
+        typeof rel.from_index !== "number" ||
+        typeof rel.to_index !== "number" ||
+        rel.from_index < 1 ||
+        rel.from_index > facts.length ||
+        rel.to_index < 1 ||
+        rel.to_index > facts.length ||
+        rel.from_index === rel.to_index
+      ) {
+        console.warn(`Invalid relation indices: from=${rel.from_index}, to=${rel.to_index}, max=${facts.length}`);
+        return false;
+      }
+
+      // Validate relation type
+      if (!VALID_RELATION_TYPES.includes(rel.type)) {
+        console.warn(`Invalid relation type: ${rel.type}, using "related_to"`);
+        rel.type = "related_to"; // Fallback to generic type
+      }
+
+      return true;
+    });
   }
 
   private async groupRelatedFacts(facts: any[]): Promise<any[][]> {
