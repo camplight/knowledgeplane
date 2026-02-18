@@ -14,7 +14,11 @@ import {
 } from "@knowledgeplane/aimodel";
 
 // Gap #3 fix: Embedding similarity threshold for pre-filtering relation candidates
-const EMBEDDING_SIMILARITY_THRESHOLD = 0.45; // Include pairs with >= 45% cosine similarity (raised from 30%)
+// With reranker: Lower threshold to 30% (over-fetch), then reranker filters to high-quality pairs
+// Without reranker: Use higher threshold 45%
+const EMBEDDING_SIMILARITY_THRESHOLD = 0.30; // Over-fetch candidates for reranking
+const RERANKER_THRESHOLD = 0.5; // Cross-encoder reranker score threshold
+const RERANKER_URL = process.env.RERANKER_URL || "http://localhost:8082";
 
 export class CardConsolidator {
   private aiClient: ReturnType<typeof createAIModelClient>;
@@ -329,9 +333,13 @@ export class CardConsolidator {
       }
 
       try {
-        // Gap #3 fix: Pre-filter using embedding similarity
+        // Gap #3 fix: Pre-filter using embedding similarity (over-fetch with low threshold)
         const similarPairs = this.findSimilarPairs(batch);
-        const relations = await this.identifyRelationsWithAI(batch, similarPairs);
+
+        // Step 2: Cross-encoder reranking to filter weak candidates
+        const rerankedPairs = await this.rerankPairs(batch, similarPairs);
+
+        const relations = await this.identifyRelationsWithAI(batch, rerankedPairs);
 
         // Gap #6 (validation pass) was tested but DECREASED F1 from 57.6% to 30.5%
         // The validator rejected correct relations while keeping false positives
@@ -451,6 +459,69 @@ export class CardConsolidator {
 
     console.log(`Embedding pre-filter: ${pairs.length} similar pairs found (threshold >= ${EMBEDDING_SIMILARITY_THRESHOLD})`);
     return pairs;
+  }
+
+  /**
+   * Step 2: Cross-encoder reranking using BGE-M3 model.
+   * Filters embedding-similar pairs to only those with strong semantic relevance.
+   * Falls back gracefully if reranker service is unavailable.
+   */
+  private async rerankPairs(
+    facts: any[],
+    pairs: Array<{ i: number; j: number; similarity: number }>
+  ): Promise<Array<{ i: number; j: number; similarity: number; rerankScore?: number }>> {
+    if (pairs.length === 0) {
+      return pairs;
+    }
+
+    try {
+      // Build request payload with fact content pairs
+      const requestPairs = pairs.map(p => ({
+        fact_a: facts[p.i - 1]?.content || "",
+        fact_b: facts[p.j - 1]?.content || "",
+      }));
+
+      const response = await fetch(`${RERANKER_URL}/rerank`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pairs: requestPairs,
+          threshold: RERANKER_THRESHOLD,
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn(`Reranker service returned ${response.status}, using embedding scores only`);
+        return pairs;
+      }
+
+      const data = (await response.json()) as { results?: Array<{ index: number; score: number; keep: boolean }> };
+      const results = data.results || [];
+
+      // Filter pairs that passed reranker threshold
+      const rerankedPairs: Array<{ i: number; j: number; similarity: number; rerankScore: number }> = [];
+      for (const result of results) {
+        if (result.keep && result.index < pairs.length) {
+          const originalPair = pairs[result.index];
+          rerankedPairs.push({
+            ...originalPair,
+            rerankScore: result.score,
+          });
+        }
+      }
+
+      // Sort by rerank score (highest first)
+      rerankedPairs.sort((a, b) => (b.rerankScore || 0) - (a.rerankScore || 0));
+
+      const filtered = pairs.length - rerankedPairs.length;
+      console.log(`Reranker: ${rerankedPairs.length} pairs kept, ${filtered} filtered (threshold >= ${RERANKER_THRESHOLD})`);
+
+      return rerankedPairs;
+    } catch (error: any) {
+      // Graceful fallback if reranker is unavailable
+      console.warn(`Reranker service unavailable (${error.message}), using embedding scores only`);
+      return pairs;
+    }
   }
 
   /**
