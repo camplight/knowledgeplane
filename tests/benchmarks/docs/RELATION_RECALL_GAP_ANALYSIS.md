@@ -91,7 +91,7 @@ This report consolidates findings from swarm agent audits and SOTA web research 
 
 **SOTA Solution:** [EDC Framework](https://arxiv.org/html/2510.20345v1): Extract → Define → Canonicalize (3 stages)
 
-**Recommendation:** Add validation pass to verify extracted relations.
+**Status:** ❌ **TESTED BUT REVERTED** - Validation pass decreased F1 from 57.6% to 30.5%. The validator rejected correct relations while keeping false positives. May need different prompt engineering or model.
 
 ---
 

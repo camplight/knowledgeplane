@@ -333,6 +333,10 @@ export class CardConsolidator {
         const similarPairs = this.findSimilarPairs(batch);
         const relations = await this.identifyRelationsWithAI(batch, similarPairs);
 
+        // Gap #6 (validation pass) was tested but DECREASED F1 from 57.6% to 30.5%
+        // The validator rejected correct relations while keeping false positives
+        // Keeping extraction-only approach for now
+
         // Create relations that don't already exist
         for (const relation of relations) {
           // Use 1-based indices from AI response (convert to 0-based for array access)
@@ -530,10 +534,11 @@ Return relationships using fact NUMBERS (1-${facts.length}), not content.`;
 
     const chatOptions: ChatCompletionOptions = {
       model: getChatModel(),
-      temperature: 0.3, // Lower temperature for more consistent output
+      temperature: 0.2, // Lower temperature for more consistency
       responseFormat: "json_object",
     };
 
+    // Single pass extraction (voting tested but 3x slower with no improvement)
     const response = await provider.chatCompletion(messages, chatOptions);
 
     if (!response.content) {
@@ -567,6 +572,97 @@ Return relationships using fact NUMBERS (1-${facts.length}), not content.`;
 
       return true;
     });
+  }
+
+  /**
+   * Gap #6 fix: Validation pass to verify extracted relations.
+   * Asks the LLM to review and confirm each relation, filtering out false positives.
+   */
+  private async validateRelationsWithAI(
+    facts: any[],
+    relations: Array<{ from_index: number; to_index: number; type: string; reason?: string }>
+  ): Promise<Array<{ from_index: number; to_index: number; type: string; reason?: string }>> {
+    if (relations.length === 0) {
+      return [];
+    }
+
+    // Build a concise representation of relations to validate
+    const relationsToValidate = relations.map((rel, idx) => ({
+      id: idx + 1,
+      from: rel.from_index,
+      to: rel.to_index,
+      type: rel.type,
+      from_content: facts[rel.from_index - 1]?.content?.substring(0, 100) || "?",
+      to_content: facts[rel.to_index - 1]?.content?.substring(0, 100) || "?",
+    }));
+
+    const systemPrompt = `You are a knowledge graph quality reviewer. Your task is to validate proposed relationships between facts.
+
+For each proposed relation, determine if it represents a REAL, MEANINGFUL connection or if it's a false positive.
+
+Return JSON with this structure:
+{
+  "validated": [1, 3, 5],  // IDs of relations that ARE valid
+  "rejected": [2, 4],      // IDs of relations that are NOT valid
+  "reasoning": "Brief explanation of rejections"
+}
+
+Reject relations that are:
+- Coincidental (share keywords but no real connection)
+- Too vague or generic
+- Factually incorrect
+- Redundant (same information restated)
+
+Keep relations that have:
+- Clear semantic connection
+- Meaningful dependency or reference
+- Factual support for the relationship type`;
+
+    const userPrompt = `Review these ${relations.length} proposed relations and validate which ones are correct:
+
+${relationsToValidate.map(r =>
+  `[${r.id}] Fact ${r.from} --[${r.type}]--> Fact ${r.to}
+   From: "${r.from_content}..."
+   To: "${r.to_content}..."`
+).join("\n\n")}
+
+Return the IDs of valid relations in the "validated" array.`;
+
+    const provider = this.aiClient.getProvider();
+    const messages: ChatMessage[] = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ];
+
+    const chatOptions: ChatCompletionOptions = {
+      model: getChatModel(),
+      temperature: 0.1, // Very low temperature for consistent validation
+      responseFormat: "json_object",
+    };
+
+    try {
+      const response = await provider.chatCompletion(messages, chatOptions);
+
+      if (!response.content) {
+        console.warn("Validation pass returned no content, keeping all relations");
+        return relations;
+      }
+
+      const parsed = JSON.parse(response.content);
+      const validatedIds = new Set(parsed.validated || []);
+      const rejectedCount = (parsed.rejected || []).length;
+
+      console.log(`Validation pass: ${validatedIds.size} validated, ${rejectedCount} rejected`);
+      if (parsed.reasoning) {
+        console.log(`Rejection reasoning: ${parsed.reasoning}`);
+      }
+
+      // Filter to only validated relations
+      return relations.filter((_, idx) => validatedIds.has(idx + 1));
+    } catch (error: any) {
+      console.warn(`Validation pass failed: ${error.message}, keeping all relations`);
+      return relations; // On error, keep all relations (fail open)
+    }
   }
 
   private async groupRelatedFacts(facts: any[]): Promise<any[][]> {
