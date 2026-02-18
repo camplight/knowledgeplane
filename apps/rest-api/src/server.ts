@@ -148,16 +148,26 @@ async function resolveContext(
     userId = user.id;
   }
 
-  let workspaceId = query.workspace_id as string | undefined;
-  if (!workspaceId && authContext?.workspaceId) {
+  // SECURITY FIX: workspace_id from query parameter is NO LONGER allowed to override auth context
+  // This prevented users from claiming access to arbitrary workspaces by passing ?workspace_id=xxx
+  // Priority order: 1) Auth context workspace, 2) User's first workspace membership
+  let workspaceId: string | undefined;
+
+  // First priority: workspace from authenticated API key or token
+  if (authContext?.workspaceId) {
     workspaceId = authContext.workspaceId;
   }
+
+  // Second priority: user's first workspace membership (if authenticated but no workspace in token)
   if (!workspaceId && userId) {
     const userWorkspaces = await WorkspaceMember.findByUser(userId, 1, 0);
     if (userWorkspaces.length > 0) {
       workspaceId = userWorkspaces[0].workspace_id;
     }
   }
+
+  // NOTE: query.workspace_id is intentionally NOT used here to prevent workspace override attacks
+  // If you need to support workspace switching, implement proper workspace membership verification
 
   return { userId, workspaceId, authContext };
 }
@@ -168,6 +178,43 @@ function requireWorkspace(ctx: RequestContext, reply: any) {
     return { error: "workspace_id is required or must be inferred from auth" };
   }
   return null;
+}
+
+/**
+ * SECURITY FIX: Verify that a resource belongs to the user's workspace.
+ * Prevents IDOR attacks where users access resources by guessing IDs.
+ */
+async function requireWorkspaceOwnership(
+  resourceWorkspaceId: string | undefined,
+  ctx: RequestContext,
+  reply: any,
+  resourceType: string = "Resource"
+): Promise<boolean> {
+  if (!ctx.workspaceId) {
+    reply.code(400);
+    reply.send({ error: "workspace_id is required" });
+    return false;
+  }
+
+  if (!resourceWorkspaceId) {
+    // Resource has no workspace - could be legacy data
+    reply.code(403);
+    reply.send({ error: `${resourceType} has no workspace association` });
+    return false;
+  }
+
+  // Normalize both to compare (handle "workspaces/123" vs "123")
+  const normalizeWsId = (id: string) => id.includes('/') ? id : `workspaces/${id}`;
+  const normalizedResource = normalizeWsId(resourceWorkspaceId);
+  const normalizedContext = normalizeWsId(ctx.workspaceId);
+
+  if (normalizedResource !== normalizedContext) {
+    reply.code(403);
+    reply.send({ error: `${resourceType} does not belong to your workspace` });
+    return false;
+  }
+
+  return true;
 }
 
 export async function createServer(options?: { skipDbInit?: boolean }) {
@@ -204,6 +251,11 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
   });
 
   server.get("/api/facts/:id", async (request, reply) => {
+    const ctx = await resolveContext(request, reply);
+    if (!ctx) return;
+    const workspaceError = requireWorkspace(ctx, reply);
+    if (workspaceError) return workspaceError;
+
     const { id } = request.params as { id: string };
     const fact = await Fact.findById(id);
 
@@ -211,6 +263,10 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       reply.code(404);
       return { error: "Fact not found" };
     }
+
+    // SECURITY: Verify fact belongs to user's workspace
+    const hasAccess = await requireWorkspaceOwnership(fact.workspace_id, ctx, reply, "Fact");
+    if (!hasAccess) return;
 
     return { fact: stripEmbeddings(fact) };
   });
@@ -320,6 +376,9 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
   server.put("/api/facts/:id", async (request, reply) => {
     const ctx = await resolveContext(request, reply);
     if (!ctx) return;
+    const workspaceError = requireWorkspace(ctx, reply);
+    if (workspaceError) return workspaceError;
+
     const { id } = request.params as { id: string };
     const body = request.body as any;
     const lastUpdatedBy = body.last_updated_by || ctx.userId;
@@ -327,6 +386,15 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       reply.code(401);
       return { error: "User ID is required for updates" };
     }
+
+    // SECURITY: Verify fact exists and belongs to user's workspace
+    const existingFact = await Fact.findById(id);
+    if (!existingFact) {
+      reply.code(404);
+      return { error: "Fact not found" };
+    }
+    const hasAccess = await requireWorkspaceOwnership(existingFact.workspace_id, ctx, reply, "Fact");
+    if (!hasAccess) return;
 
     const fact = await Fact.update({
       id,
@@ -341,6 +409,9 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
   server.delete("/api/facts/:id", async (request, reply) => {
     const ctx = await resolveContext(request, reply);
     if (!ctx) return;
+    const workspaceError = requireWorkspace(ctx, reply);
+    if (workspaceError) return workspaceError;
+
     const { id } = request.params as { id: string };
     const { last_updated_by } = request.query as any;
     const lastUpdatedBy = last_updated_by || ctx.userId;
@@ -348,6 +419,15 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       reply.code(401);
       return { error: "User ID is required for deletes" };
     }
+
+    // SECURITY: Verify fact exists and belongs to user's workspace
+    const existingFact = await Fact.findById(id);
+    if (!existingFact) {
+      reply.code(404);
+      return { error: "Fact not found" };
+    }
+    const hasAccess = await requireWorkspaceOwnership(existingFact.workspace_id, ctx, reply, "Fact");
+    if (!hasAccess) return;
 
     const fact = await Fact.trash(id, lastUpdatedBy);
     return { fact: stripEmbeddings(fact) };
@@ -466,6 +546,9 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
   server.delete("/api/relations/:id", async (request, reply) => {
     const ctx = await resolveContext(request, reply);
     if (!ctx) return;
+    const workspaceError = requireWorkspace(ctx, reply);
+    if (workspaceError) return workspaceError;
+
     const { id } = request.params as { id: string };
     const { deleted_by } = request.query as any;
     const deletedBy = deleted_by || ctx.userId;
@@ -473,6 +556,15 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       reply.code(401);
       return { error: "User ID is required for deletes" };
     }
+
+    // SECURITY: Verify relation exists and belongs to user's workspace
+    const existingRelation = await FactRelation.findById(id);
+    if (!existingRelation) {
+      reply.code(404);
+      return { error: "Relation not found" };
+    }
+    const hasAccess = await requireWorkspaceOwnership(existingRelation.workspace_id, ctx, reply, "Relation");
+    if (!hasAccess) return;
 
     try {
       const relation = await FactRelation.delete(id, deletedBy);
@@ -527,46 +619,56 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
   });
 
   server.get("/api/facts/:id/relations", async (request, reply) => {
+    const ctx = await resolveContext(request, reply);
+    if (!ctx) return;
+    const workspaceError = requireWorkspace(ctx, reply);
+    if (workspaceError) return workspaceError;
+
     const { id } = request.params as { id: string };
     const { type } = request.query as any;
+
+    // SECURITY: Verify fact exists and belongs to user's workspace
+    const fact = await Fact.findById(id);
+    if (!fact) {
+      reply.code(404);
+      return { error: "Fact not found" };
+    }
+    const hasAccess = await requireWorkspaceOwnership(fact.workspace_id, ctx, reply, "Fact");
+    if (!hasAccess) return;
 
     const outgoing = await FactRelation.getRelatedFacts(id, type);
     const incoming = await FactRelation.getIncomingRelations(id, type);
 
+    // SECURITY: Filter relations to only those in user's workspace
+    const filterByWorkspace = (items: any[]) => items.filter(r => {
+      const wsId = r.relation?.workspace_id || r.fact?.workspace_id;
+      if (!wsId) return false;
+      const normalizeWsId = (id: string) => id.includes('/') ? id : `workspaces/${id}`;
+      return normalizeWsId(wsId) === normalizeWsId(ctx.workspaceId!);
+    });
+
     return {
-      outgoing: outgoing.map((r) => ({
+      outgoing: filterByWorkspace(outgoing).map((r) => ({
         relation: stripEmbeddings(r.relation),
         fact: stripEmbeddings(r.fact),
       })),
-      incoming: incoming.map((r) => ({
+      incoming: filterByWorkspace(incoming).map((r) => ({
         relation: stripEmbeddings(r.relation),
         fact: stripEmbeddings(r.fact),
       })),
     };
   });
 
+  // SECURITY: Raw AQL query endpoint DISABLED
+  // This endpoint allowed arbitrary database queries without authorization.
+  // It has been disabled to prevent cross-tenant data access and SQL injection-like attacks.
+  // If you need this functionality, implement specific endpoints with proper authorization.
   server.post("/api/query", async (request, reply) => {
-    const { query, bindVars } = request.body as {
-      query: string;
-      bindVars?: any;
+    reply.code(403);
+    return {
+      error: "This endpoint has been disabled for security reasons",
+      message: "Raw AQL queries are no longer permitted. Use specific API endpoints instead.",
     };
-
-    if (!query) {
-      reply.code(400);
-      return { error: "Query is required" };
-    }
-
-    try {
-      const cursor = await collections.facts.database.query(
-        query,
-        bindVars || {},
-      );
-      const results = await cursor.all();
-      return { results: stripEmbeddingsDeep(results) };
-    } catch (error: any) {
-      reply.code(400);
-      return { error: error.message };
-    }
   });
 
   server.get("/api/knowledge-cards", async (request, reply) => {
@@ -581,6 +683,11 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
   });
 
   server.get("/api/knowledge-cards/:id", async (request, reply) => {
+    const ctx = await resolveContext(request, reply);
+    if (!ctx) return;
+    const workspaceError = requireWorkspace(ctx, reply);
+    if (workspaceError) return workspaceError;
+
     const { id } = request.params as { id: string };
     const card = await KnowledgeCard.findById(id);
 
@@ -588,6 +695,10 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       reply.code(404);
       return { error: "Knowledge card not found" };
     }
+
+    // SECURITY: Verify card belongs to user's workspace
+    const hasAccess = await requireWorkspaceOwnership(card.workspace_id, ctx, reply, "Knowledge card");
+    if (!hasAccess) return;
 
     return { card: stripEmbeddings(card) };
   });
@@ -642,6 +753,9 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
   server.put("/api/knowledge-cards/:id", async (request, reply) => {
     const ctx = await resolveContext(request, reply);
     if (!ctx) return;
+    const workspaceError = requireWorkspace(ctx, reply);
+    if (workspaceError) return workspaceError;
+
     const { id } = request.params as { id: string };
     const body = request.body as any;
     const lastUpdatedBy = body.last_updated_by || ctx.userId;
@@ -649,6 +763,15 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       reply.code(401);
       return { error: "User ID is required for updates" };
     }
+
+    // SECURITY: Verify card exists and belongs to user's workspace
+    const existingCard = await KnowledgeCard.findById(id);
+    if (!existingCard) {
+      reply.code(404);
+      return { error: "Knowledge card not found" };
+    }
+    const hasAccess = await requireWorkspaceOwnership(existingCard.workspace_id, ctx, reply, "Knowledge card");
+    if (!hasAccess) return;
 
     const card = await KnowledgeCard.update({
       id,
@@ -740,12 +863,24 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
   server.delete("/api/knowledge-cards/:id", async (request, reply) => {
     const ctx = await resolveContext(request, reply);
     if (!ctx) return;
+    const workspaceError = requireWorkspace(ctx, reply);
+    if (workspaceError) return workspaceError;
+
     const { id } = request.params as { id: string };
     const deletedBy = ctx.userId || (request.query as any)?.deleted_by;
     if (!deletedBy) {
       reply.code(401);
       return { error: "User ID is required for deletes" };
     }
+
+    // SECURITY: Verify card exists and belongs to user's workspace
+    const existingCard = await KnowledgeCard.findById(id);
+    if (!existingCard) {
+      reply.code(404);
+      return { error: "Knowledge card not found" };
+    }
+    const hasAccess = await requireWorkspaceOwnership(existingCard.workspace_id, ctx, reply, "Knowledge card");
+    if (!hasAccess) return;
 
     try {
       await KnowledgeCard.delete(id, deletedBy);
@@ -793,8 +928,22 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
   });
 
   server.put("/api/webhooks/:id", async (request, reply) => {
+    const ctx = await resolveContext(request, reply);
+    if (!ctx) return;
+    const workspaceError = requireWorkspace(ctx, reply);
+    if (workspaceError) return workspaceError;
+
     const { id } = request.params as { id: string };
     const body = request.body as any;
+
+    // SECURITY: Verify webhook exists and belongs to user's workspace
+    const existingWebhook = await Webhook.findById(id);
+    if (!existingWebhook) {
+      reply.code(404);
+      return { error: "Webhook not found" };
+    }
+    const hasAccess = await requireWorkspaceOwnership(existingWebhook.workspace_id, ctx, reply, "Webhook");
+    if (!hasAccess) return;
 
     const webhook = await Webhook.update({
       id,
@@ -808,7 +957,22 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
   });
 
   server.delete("/api/webhooks/:id", async (request, reply) => {
+    const ctx = await resolveContext(request, reply);
+    if (!ctx) return;
+    const workspaceError = requireWorkspace(ctx, reply);
+    if (workspaceError) return workspaceError;
+
     const { id } = request.params as { id: string };
+
+    // SECURITY: Verify webhook exists and belongs to user's workspace
+    const existingWebhook = await Webhook.findById(id);
+    if (!existingWebhook) {
+      reply.code(404);
+      return { error: "Webhook not found" };
+    }
+    const hasAccess = await requireWorkspaceOwnership(existingWebhook.workspace_id, ctx, reply, "Webhook");
+    if (!hasAccess) return;
+
     await Webhook.delete(id);
     return { success: true };
   });
