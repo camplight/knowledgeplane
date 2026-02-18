@@ -17,7 +17,7 @@ import {
 // With reranker: Lower threshold to 30% (over-fetch), then reranker filters to high-quality pairs
 // Without reranker: Use higher threshold 45%
 const EMBEDDING_SIMILARITY_THRESHOLD = 0.30; // Over-fetch candidates for reranking
-const RERANKER_THRESHOLD = 0.5; // Cross-encoder reranker score threshold
+const RERANKER_THRESHOLD = 0.35; // Cross-encoder reranker score threshold (tuned: F1=61.5% vs 60% baseline)
 const RERANKER_URL = process.env.RERANKER_URL || "http://localhost:8082";
 
 export class CardConsolidator {

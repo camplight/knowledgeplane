@@ -218,11 +218,11 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
         self.username = username or f"bench_{ws_slug}"
         self.email = email or f"bench_{ws_slug}@benchmark.local"
 
-        # Set headers for REST API
-        # NOTE: We use username/email query params for auth instead of API key header
-        # to support auto-user creation when the workspace doesn't exist
+        # Set headers for REST API authentication
+        # API key header enables workspace resolution from auth context
         self.session.headers.update({
             'Content-Type': 'application/json',
+            'knowledgeplane-key': api_key,
         })
 
         sync_status = "enabled (facts immediately searchable)" if sync_embedding else "disabled (async)"

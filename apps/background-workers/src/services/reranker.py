@@ -88,7 +88,7 @@ def rerank_pairs(pairs: List[Dict[str, str]], threshold: float = 0.5) -> List[Di
         results.append({
             "index": i,
             "score": float(normalized_score),
-            "keep": normalized_score >= threshold
+            "keep": bool(normalized_score >= threshold)
         })
 
     return results

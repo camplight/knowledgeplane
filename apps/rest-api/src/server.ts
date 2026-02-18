@@ -148,9 +148,8 @@ async function resolveContext(
     userId = user.id;
   }
 
-  // SECURITY FIX: workspace_id from query parameter is NO LONGER allowed to override auth context
-  // This prevented users from claiming access to arbitrary workspaces by passing ?workspace_id=xxx
-  // Priority order: 1) Auth context workspace, 2) User's first workspace membership
+  // SECURITY FIX: workspace_id from query parameter requires verification
+  // Priority order: 1) Auth context workspace, 2) Verified query param workspace, 3) User's first workspace
   let workspaceId: string | undefined;
 
   // First priority: workspace from authenticated API key or token
@@ -158,16 +157,29 @@ async function resolveContext(
     workspaceId = authContext.workspaceId;
   }
 
-  // Second priority: user's first workspace membership (if authenticated but no workspace in token)
+  // Second priority: query param workspace_id with membership verification
+  // User must be a member of the workspace to use it
+  if (!workspaceId && query.workspace_id && userId) {
+    const requestedWorkspaceId = query.workspace_id;
+    // Verify user is a member of the requested workspace
+    const userWorkspaces = await WorkspaceMember.findByUser(userId, 100, 0);
+    const isMember = userWorkspaces.some(
+      (m) => m.workspace_id === requestedWorkspaceId ||
+             m.workspace_id === `workspaces/${requestedWorkspaceId}`
+    );
+    if (isMember) {
+      workspaceId = requestedWorkspaceId;
+    }
+    // If not a member, silently ignore (fall through to default workspace)
+  }
+
+  // Third priority: user's first workspace membership (if authenticated but no workspace yet)
   if (!workspaceId && userId) {
     const userWorkspaces = await WorkspaceMember.findByUser(userId, 1, 0);
     if (userWorkspaces.length > 0) {
       workspaceId = userWorkspaces[0].workspace_id;
     }
   }
-
-  // NOTE: query.workspace_id is intentionally NOT used here to prevent workspace override attacks
-  // If you need to support workspace switching, implement proper workspace membership verification
 
   return { userId, workspaceId, authContext };
 }
