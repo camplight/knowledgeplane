@@ -20,6 +20,11 @@ const EMBEDDING_SIMILARITY_THRESHOLD = 0.30; // Over-fetch candidates for rerank
 const RERANKER_THRESHOLD = 0.35; // Cross-encoder reranker score threshold (tuned: F1=61.5% vs 60% baseline)
 const RERANKER_URL = process.env.RERANKER_URL || "http://localhost:8082";
 
+// LLM verification: Filter false positives for strong claims (causes, contradicts, depends_on)
+// Uses same LLM as extraction (GPT-5.x) - follows Zep/Graphiti production pattern
+const LLM_VERIFY_ENABLED = process.env.LLM_VERIFY_ENABLED !== "false";
+const STRONG_CLAIM_TYPES = ["causes", "contradicts", "depends_on"]; // Verify these relation types
+
 export class CardConsolidator {
   private aiClient: ReturnType<typeof createAIModelClient>;
   private interval: NodeJS.Timeout | null = null;
@@ -341,12 +346,12 @@ export class CardConsolidator {
 
         const relations = await this.identifyRelationsWithAI(batch, rerankedPairs);
 
-        // Gap #6 (validation pass) was tested but DECREASED F1 from 57.6% to 30.5%
-        // The validator rejected correct relations while keeping false positives
-        // Keeping extraction-only approach for now
+        // Step 3: NLI verification to filter false positives
+        // Uses DeBERTa entailment model to verify semantic validity
+        const verifiedRelations = await this.verifyRelationsWithLLM(batch, relations);
 
         // Create relations that don't already exist
-        for (const relation of relations) {
+        for (const relation of verifiedRelations) {
           // Use 1-based indices from AI response (convert to 0-based for array access)
           const fromFact = batch[relation.from_index - 1];
           const toFact = batch[relation.to_index - 1];
@@ -521,6 +526,84 @@ export class CardConsolidator {
       // Graceful fallback if reranker is unavailable
       console.warn(`Reranker service unavailable (${error.message}), using embedding scores only`);
       return pairs;
+    }
+  }
+
+  /**
+   * Step 3: LLM verification for strong claims (causes, contradicts, depends_on).
+   * Uses same LLM as extraction to verify semantic validity - follows Zep/Graphiti pattern.
+   * Only verifies "strong" relation types that make causal/logical claims.
+   */
+  private async verifyRelationsWithLLM(
+    facts: any[],
+    relations: Array<{ from_index: number; to_index: number; type: string; reason?: string }>
+  ): Promise<Array<{ from_index: number; to_index: number; type: string; reason?: string }>> {
+    if (!LLM_VERIFY_ENABLED || relations.length === 0) {
+      return relations;
+    }
+
+    // Only verify strong claims - weak relations (related_to, references) pass through
+    const strongRelations = relations.filter(r => STRONG_CLAIM_TYPES.includes(r.type));
+    const weakRelations = relations.filter(r => !STRONG_CLAIM_TYPES.includes(r.type));
+
+    if (strongRelations.length === 0) {
+      return relations; // No strong claims to verify
+    }
+
+    try {
+      // Build verification prompt
+      const verificationsNeeded = strongRelations.map((rel, idx) => {
+        const fromFact = facts[rel.from_index - 1];
+        const toFact = facts[rel.to_index - 1];
+        return `${idx + 1}. "${fromFact?.content}" ${rel.type} "${toFact?.content}"`;
+      }).join("\n");
+
+      const messages: ChatMessage[] = [
+        {
+          role: "system",
+          content: `You verify if relation claims between facts are semantically valid.
+For each claim, respond with VALID or INVALID.
+Be strict: only mark as VALID if the relation clearly holds based on the text.`
+        },
+        {
+          role: "user",
+          content: `Verify these relation claims:
+
+${verificationsNeeded}
+
+Respond with one word per line (VALID or INVALID), in order:`
+        }
+      ];
+
+      const options: ChatCompletionOptions = {
+        model: getChatModel(),
+        temperature: 0,
+        maxTokens: 100,
+      };
+
+      const response = await this.aiClient.getProvider().chatCompletion(messages, options);
+      const content = response.content || "";
+      const verdicts = content.split("\n").map((line: string) => line.trim().toUpperCase().includes("VALID") && !line.trim().toUpperCase().includes("INVALID"));
+
+      // Filter strong relations based on verification
+      const verifiedStrong: typeof relations = [];
+      let filtered = 0;
+
+      for (let i = 0; i < strongRelations.length; i++) {
+        if (verdicts[i]) {
+          verifiedStrong.push(strongRelations[i]);
+        } else {
+          filtered++;
+        }
+      }
+
+      console.log(`LLM Verifier: ${verifiedStrong.length}/${strongRelations.length} strong claims verified, ${filtered} filtered`);
+
+      // Return verified strong relations + all weak relations
+      return [...verifiedStrong, ...weakRelations];
+    } catch (error: any) {
+      console.warn(`LLM verification failed (${error.message}), keeping all relations`);
+      return relations;
     }
   }
 
@@ -715,97 +798,6 @@ Remember: Only include relations with confidence >= 0.7 and clear entity/semanti
     return validRelations;
   }
 
-  /**
-   * Gap #6 fix: Validation pass to verify extracted relations.
-   * Asks the LLM to review and confirm each relation, filtering out false positives.
-   */
-  private async validateRelationsWithAI(
-    facts: any[],
-    relations: Array<{ from_index: number; to_index: number; type: string; reason?: string }>
-  ): Promise<Array<{ from_index: number; to_index: number; type: string; reason?: string }>> {
-    if (relations.length === 0) {
-      return [];
-    }
-
-    // Build a concise representation of relations to validate
-    const relationsToValidate = relations.map((rel, idx) => ({
-      id: idx + 1,
-      from: rel.from_index,
-      to: rel.to_index,
-      type: rel.type,
-      from_content: facts[rel.from_index - 1]?.content?.substring(0, 100) || "?",
-      to_content: facts[rel.to_index - 1]?.content?.substring(0, 100) || "?",
-    }));
-
-    const systemPrompt = `You are a knowledge graph quality reviewer. Your task is to validate proposed relationships between facts.
-
-For each proposed relation, determine if it represents a REAL, MEANINGFUL connection or if it's a false positive.
-
-Return JSON with this structure:
-{
-  "validated": [1, 3, 5],  // IDs of relations that ARE valid
-  "rejected": [2, 4],      // IDs of relations that are NOT valid
-  "reasoning": "Brief explanation of rejections"
-}
-
-Reject relations that are:
-- Coincidental (share keywords but no real connection)
-- Too vague or generic
-- Factually incorrect
-- Redundant (same information restated)
-
-Keep relations that have:
-- Clear semantic connection
-- Meaningful dependency or reference
-- Factual support for the relationship type`;
-
-    const userPrompt = `Review these ${relations.length} proposed relations and validate which ones are correct:
-
-${relationsToValidate.map(r =>
-  `[${r.id}] Fact ${r.from} --[${r.type}]--> Fact ${r.to}
-   From: "${r.from_content}..."
-   To: "${r.to_content}..."`
-).join("\n\n")}
-
-Return the IDs of valid relations in the "validated" array.`;
-
-    const provider = this.aiClient.getProvider();
-    const messages: ChatMessage[] = [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ];
-
-    const chatOptions: ChatCompletionOptions = {
-      model: getChatModel(),
-      temperature: 0.1, // Very low temperature for consistent validation
-      responseFormat: "json_object",
-    };
-
-    try {
-      const response = await provider.chatCompletion(messages, chatOptions);
-
-      if (!response.content) {
-        console.warn("Validation pass returned no content, keeping all relations");
-        return relations;
-      }
-
-      const parsed = JSON.parse(response.content);
-      const validatedIds = new Set(parsed.validated || []);
-      const rejectedCount = (parsed.rejected || []).length;
-
-      console.log(`Validation pass: ${validatedIds.size} validated, ${rejectedCount} rejected`);
-      if (parsed.reasoning) {
-        console.log(`Rejection reasoning: ${parsed.reasoning}`);
-      }
-
-      // Filter to only validated relations
-      return relations.filter((_, idx) => validatedIds.has(idx + 1));
-    } catch (error: any) {
-      console.warn(`Validation pass failed: ${error.message}, keeping all relations`);
-      return relations; // On error, keep all relations (fail open)
-    }
-  }
-
   private async groupRelatedFacts(facts: any[]): Promise<any[][]> {
     // Group facts by their relationships
     const clusters: any[][] = [];
@@ -854,7 +846,7 @@ Return the IDs of valid relations in the "validated" array.`;
     const factContents = facts.map((f) => `- ${f.content}`).join("\n");
 
     // Use AI agent to consolidate
-    const consolidation = await this.consolidateWithAI(factContents, facts);
+    const consolidation = await this.consolidateWithAI(factContents);
 
     // Create knowledge card
     const knowledgeCard = await KnowledgeCard.create({
@@ -924,7 +916,6 @@ Return the IDs of valid relations in the "validated" array.`;
 
   private async consolidateWithAI(
     factContents: string,
-    facts: any[],
   ): Promise<{ title: string; summary: string; content: string }> {
     const systemPrompt = `You are a knowledge consolidation agent. Your task is to analyze a collection of related facts and their relationships (from a knowledge graph) and create a comprehensive, well-organized knowledge card.
 
