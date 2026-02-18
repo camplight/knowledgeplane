@@ -21,18 +21,15 @@ This report consolidates findings from swarm agent audits and SOTA web research 
 ## Critical Gaps
 
 ### 1. Content-Based Matching is Fragile
-**Location:** `card-consolidator.ts:323-329`
+**Location:** `card-consolidator.ts:339`
 
-**Problem:** The AI returns fact text in `from_content` and `to_content`, which are matched back to facts using exact string comparison:
-```typescript
-const fromFact = batch.find((f) => f.content === relation.from_content);
-```
+**Problem:** The AI previously returned fact text in `from_content` and `to_content`, matched using exact string comparison.
 
-**Impact:** Fails if the AI paraphrases, summarizes, or has any whitespace differences.
+**Impact:** Failed if the AI paraphrased, summarized, or had whitespace differences.
 
 **SOTA Solution:** [SF-GPT](https://www.sciencedirect.com/science/article/abs/pii/S0925231224014978) uses Entity Alignment Generator with semantic clustering for fuzzy matching.
 
-**Recommendation:** Use embedding similarity + entity alignment instead of exact string match.
+**Status:** ✅ **FIXED** - Changed to index-based matching with `from_index` and `to_index` (1-based indices). AI prompt explicitly requests fact numbers instead of content.
 
 ---
 
@@ -165,28 +162,32 @@ const fromFact = batch.find((f) => f.content === relation.from_content);
 
 ## Fixed in This Session
 
-1. ✅ **Model Migration**: `gpt-4o` → `gpt-5.1` with single source of truth
-2. ✅ **Relation Types Sync**: Added `contradicts` to benchmark
-3. ✅ **CLI Rename**: `librarian` → `relationrecall` (pragmatic)
+1. ✅ **Gap #1 - Index-Based Matching**: Changed from content matching to `from_index`/`to_index`
+2. ✅ **Gap #2 - Sliding Window**: 50% overlap batching catches cross-batch relations
+3. ✅ **Gap #3 - Hybrid Retrieval**: Embedding pre-filtering with AI hints
+4. ✅ **Gap #4 - Model Migration**: `gpt-4o` → `gpt-5.1`
+5. ✅ **Gap #10 - Relation Types Sync**: Added `contradicts` to benchmark
+
+**Results Improvement:**
+- Baseline (n=5): F1=30.8%, P=25%, R=40%
+- Current (n=10): F1=**57.6%**, P=43.6%, R=85%
+- **Total improvement: +26.8 percentage points**
 
 ---
 
-## Recommended Next Steps
+## Remaining Gaps (Medium/Low Priority)
 
-### Before Running Benchmark
-1. ~~Update model to gpt-5.1~~ ✅ Done
-2. ~~Sync relation types~~ ✅ Done
-3. Verify background-workers is running with new model
+### Short-Term
+- Gap #5: Structured Outputs for type constraints (requires aimodel changes)
+- Gap #6: Validation pass to reduce false positives
 
-### Short-Term Improvements
-4. Add embedding pre-filtering for relation candidates
-5. Implement sliding window batching
-6. Use Structured Outputs for type constraints
+### Medium-Term
+- Gap #7: Temporal validity fields (`valid_from`, `valid_until`)
+- Gap #8: REST API endpoint for consolidation trigger
+- Gap #9: Worker completion status (replace poll-based stability check)
 
-### Medium-Term Improvements
-7. Add consolidation trigger API
-8. Add consolidation status API
-9. Add temporal validity fields
+### Low Priority
+- Gap #11: Stress test mode with 50+ fact clusters
 
 ---
 
