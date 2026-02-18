@@ -453,6 +453,10 @@ export class CardConsolidator {
     return pairs;
   }
 
+  /**
+   * Combined approach: Entity extraction + CoT + Confidence filtering
+   * Single LLM call that extracts entities inline and reasons about relations
+   */
   private async identifyRelationsWithAI(
     facts: any[],
     similarPairs?: Array<{ i: number; j: number; similarity: number }>
@@ -476,55 +480,96 @@ export class CardConsolidator {
       "supports",
     ];
 
-    const systemPrompt = `You are a knowledge graph relation identification agent. Analyze facts and identify meaningful relationships.
+    // Combined Entity + CoT + Confidence + Few-shot prompt
+    const systemPrompt = `You are a knowledge graph expert. Your task is to identify meaningful relationships between facts.
 
-IMPORTANT: Use fact NUMBERS (1-based index) to identify facts, NOT the fact content.
+PROCESS (follow these steps):
+1. EXTRACT ENTITIES: For each fact, identify key entities (people, places, concepts, products, organizations)
+2. FIND SHARED ENTITIES: Note which facts share the same or related entities
+3. REASON ABOUT RELATIONS: For facts that share entities, determine if there's a meaningful relationship
+4. ASSIGN CONFIDENCE: Rate your confidence (0.0-1.0) based on how clear the connection is
 
 Valid relationship types (use ONLY these):
 ${VALID_RELATION_TYPES.map(t => `- "${t}"`).join("\n")}
 
-Return JSON with this EXACT structure:
+=== EXAMPLES ===
+
+GOOD relation (include):
+Facts:
+1. "Python 3.9 introduced the walrus operator for assignment expressions"
+2. "The walrus operator (:=) allows assignment within expressions in Python"
+→ Relation: 1 -> 2, type="supports", confidence=0.95, shared_entity="walrus operator"
+Why: Same specific concept, fact 2 explains what fact 1 introduced.
+
+GOOD relation (include):
+Facts:
+1. "Tesla uses lithium-ion batteries in their electric vehicles"
+2. "Lithium-ion batteries require careful thermal management"
+→ Relation: 1 -> 2, type="depends_on", confidence=0.85, shared_entity="lithium-ion batteries"
+Why: Fact 1's subject depends on the constraint in fact 2.
+
+BAD relation (DO NOT include):
+Facts:
+1. "Python is a programming language"
+2. "JavaScript is also a programming language"
+→ No relation. Why: Just because both are programming languages doesn't create a meaningful relationship. No causal, supporting, or referential connection.
+
+BAD relation (DO NOT include):
+Facts:
+1. "The company was founded in 2010"
+2. "2010 was a leap year"
+→ No relation. Why: Coincidental year mention, no semantic connection.
+
+=== END EXAMPLES ===
+
+Return JSON with this structure:
 {
+  "entity_analysis": {
+    "1": ["entity1", "entity2"],
+    "2": ["entity2", "entity3"]
+  },
+  "shared_entities": ["Facts 1 & 2 share: entity2"],
   "relations": [
     {
       "from_index": 1,
       "to_index": 2,
       "type": "related_to",
-      "reason": "Brief explanation"
+      "confidence": 0.85,
+      "shared_entity": "entity2",
+      "reason": "Both facts discuss entity2 in the context of X"
     }
   ]
 }
 
-Rules:
-- from_index and to_index must be valid fact numbers (1 to N)
-- type must be one of the valid types listed above
-- Only identify meaningful relationships, not every possible pair
-- Focus on significant connections`;
+IMPORTANT RULES:
+- Use fact NUMBERS (1-based), not content
+- confidence must be 0.0-1.0 (be conservative - only high confidence relations)
+- ONLY create relations where facts share an entity AND have meaningful semantic connection
+- Avoid relations based on coincidental keyword matches
+- Quality over quantity: 3 confident relations > 10 uncertain ones`;
 
     const factContents = facts
       .map((f, idx) => `${idx + 1}. ${f.content}`)
       .join("\n");
 
-    // Gap #3: Include embedding similarity hints to focus AI attention
+    // Gap #3: Include embedding similarity hints
     let embeddingHints = "";
     if (similarPairs && similarPairs.length > 0) {
-      const topPairs = similarPairs.slice(0, 10); // Top 10 most similar
+      const topPairs = similarPairs.slice(0, 10);
       const pairDescriptions = topPairs
-        .map(p => `  - Facts ${p.i} & ${p.j} (similarity: ${(p.similarity * 100).toFixed(0)}%)`)
+        .map(p => `  - Facts ${p.i} & ${p.j} (${(p.similarity * 100).toFixed(0)}% similar)`)
         .join("\n");
       embeddingHints = `
-EMBEDDING ANALYSIS suggests these fact pairs may be related (by semantic similarity):
+EMBEDDING SIMILARITY (semantically related pairs):
 ${pairDescriptions}
-
-Pay special attention to these pairs, but also look for other meaningful relationships.
 `;
     }
 
-    const userPrompt = `Analyze these ${facts.length} facts and identify meaningful relationships:
+    const userPrompt = `Analyze these ${facts.length} facts. Extract entities, find shared entities, then identify high-confidence relationships:
 
 ${factContents}
 ${embeddingHints}
-Return relationships using fact NUMBERS (1-${facts.length}), not content.`;
+Remember: Only include relations with confidence >= 0.7 and clear entity/semantic connections.`;
 
     const provider = this.aiClient.getProvider();
     const messages: ChatMessage[] = [
@@ -534,11 +579,10 @@ Return relationships using fact NUMBERS (1-${facts.length}), not content.`;
 
     const chatOptions: ChatCompletionOptions = {
       model: getChatModel(),
-      temperature: 0.2, // Lower temperature for more consistency
+      temperature: 0.15, // Lower for more consistent entity extraction
       responseFormat: "json_object",
     };
 
-    // Single pass extraction (voting tested but 3x slower with no improvement)
     const response = await provider.chatCompletion(messages, chatOptions);
 
     if (!response.content) {
@@ -546,10 +590,22 @@ Return relationships using fact NUMBERS (1-${facts.length}), not content.`;
     }
 
     const parsed = JSON.parse(response.content);
+
+    // Log entity analysis if provided
+    if (parsed.entity_analysis) {
+      const entityCount = Object.values(parsed.entity_analysis).flat().length;
+      console.log(`Entity+CoT: Extracted ${entityCount} entities from ${Object.keys(parsed.entity_analysis).length} facts`);
+    }
+    if (parsed.shared_entities && parsed.shared_entities.length > 0) {
+      console.log(`Entity+CoT: Found ${parsed.shared_entities.length} shared entity pairs`);
+    }
+
     const relations = parsed.relations || [];
+    const CONFIDENCE_THRESHOLD = 0.7;
+    let filteredByConfidence = 0;
 
     // Validate and filter relations
-    return relations.filter((rel: any) => {
+    const validRelations = relations.filter((rel: any) => {
       // Validate indices are within range
       if (
         typeof rel.from_index !== "number" ||
@@ -564,14 +620,28 @@ Return relationships using fact NUMBERS (1-${facts.length}), not content.`;
         return false;
       }
 
+      // Filter by confidence threshold
+      const confidence = typeof rel.confidence === "number" ? rel.confidence : 0.5;
+      if (confidence < CONFIDENCE_THRESHOLD) {
+        filteredByConfidence++;
+        return false;
+      }
+
       // Validate relation type
       if (!VALID_RELATION_TYPES.includes(rel.type)) {
         console.warn(`Invalid relation type: ${rel.type}, using "related_to"`);
-        rel.type = "related_to"; // Fallback to generic type
+        rel.type = "related_to";
       }
 
       return true;
     });
+
+    if (filteredByConfidence > 0) {
+      console.log(`Entity+CoT: Filtered ${filteredByConfidence} low-confidence relations (threshold=${CONFIDENCE_THRESHOLD})`);
+    }
+    console.log(`Entity+CoT: Returning ${validRelations.length} high-confidence relations`);
+
+    return validRelations;
   }
 
   /**
