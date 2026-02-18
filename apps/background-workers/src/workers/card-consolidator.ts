@@ -14,7 +14,7 @@ import {
 } from "@knowledgeplane/aimodel";
 
 // Gap #3 fix: Embedding similarity threshold for pre-filtering relation candidates
-const EMBEDDING_SIMILARITY_THRESHOLD = 0.3; // Include pairs with >= 30% cosine similarity
+const EMBEDDING_SIMILARITY_THRESHOLD = 0.45; // Include pairs with >= 45% cosine similarity (raised from 30%)
 
 export class CardConsolidator {
   private aiClient: ReturnType<typeof createAIModelClient>;
