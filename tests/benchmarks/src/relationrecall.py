@@ -49,6 +49,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Any, Tuple, Set
 import requests
+import scipy.stats as stats
 
 import numpy as np
 from tqdm import tqdm
@@ -400,6 +401,34 @@ class BenchmarkSummary:
     timing: Dict[str, float] = field(default_factory=dict)
     consolidation_triggered: bool = False
     consolidation_completed: bool = False
+
+
+@dataclass
+class MultiRunStatistics:
+    """Statistical summary from multiple benchmark runs."""
+    n_runs: int = 0
+    # F1 statistics
+    f1_mean: float = 0.0
+    f1_std: float = 0.0
+    f1_ci_low: float = 0.0
+    f1_ci_high: float = 0.0
+    # Precision statistics
+    precision_mean: float = 0.0
+    precision_std: float = 0.0
+    precision_ci_low: float = 0.0
+    precision_ci_high: float = 0.0
+    # Recall statistics
+    recall_mean: float = 0.0
+    recall_std: float = 0.0
+    recall_ci_low: float = 0.0
+    recall_ci_high: float = 0.0
+    # Individual run results
+    f1_values: List[float] = field(default_factory=list)
+    precision_values: List[float] = field(default_factory=list)
+    recall_values: List[float] = field(default_factory=list)
+    # Timing
+    total_time_seconds: float = 0.0
+    avg_run_time_seconds: float = 0.0
 
 
 # =====================================================================
@@ -1355,6 +1384,241 @@ class RelationRecallBenchmark:
 
         print("\n" + "=" * 60)
 
+    def run_multiple(self, n_runs: int, clean_between_runs: bool = True) -> MultiRunStatistics:
+        """
+        Run the benchmark multiple times and compute statistical summary.
+
+        This addresses inherent LLM non-determinism by running multiple times
+        and reporting mean ± std with 95% confidence intervals, following
+        the approach used by Zep/Mem0/Graphiti.
+
+        Args:
+            n_runs: Number of times to run the benchmark
+            clean_between_runs: Whether to clean DB between runs
+
+        Returns:
+            MultiRunStatistics with aggregated results
+        """
+        logger.info("=" * 60)
+        logger.info(f"Starting Multi-Run Benchmark ({n_runs} runs)")
+        logger.info("=" * 60)
+
+        multi_start = time.time()
+
+        f1_values = []
+        precision_values = []
+        recall_values = []
+        run_summaries = []
+
+        for run_idx in range(n_runs):
+            logger.info(f"\n{'='*40}")
+            logger.info(f"Run {run_idx + 1}/{n_runs}")
+            logger.info(f"{'='*40}")
+
+            # Use different seed for each run to ensure independence
+            # Original seed + run_idx gives reproducible but different runs
+            original_seed = self.seed
+            self.seed = original_seed + run_idx
+            np.random.seed(self.seed)
+            random.seed(self.seed)
+
+            # Reset state for clean run
+            self.local_to_kp_id = {}
+            self.cluster_results = []
+
+            # Clean DB between runs if requested
+            if clean_between_runs and run_idx > 0:
+                self._clean_benchmark_data()
+
+            try:
+                # Reinitialize for fresh data with new seed
+                self.load_test_data()
+
+                # Run single benchmark
+                summary = self.run_benchmark()
+                run_summaries.append(summary)
+
+                # Collect metrics
+                f1_values.append(summary.overall_metrics.f1)
+                precision_values.append(summary.overall_metrics.precision)
+                recall_values.append(summary.overall_metrics.recall)
+
+                logger.info(f"Run {run_idx + 1} F1: {summary.overall_metrics.f1 * 100:.1f}%")
+
+            except Exception as e:
+                logger.error(f"Run {run_idx + 1} failed: {e}")
+                # Continue with remaining runs
+                continue
+            finally:
+                # Restore original seed for next iteration
+                self.seed = original_seed
+
+        # Compute statistics
+        multi_stats = self._compute_statistics(
+            f1_values, precision_values, recall_values, n_runs
+        )
+        multi_stats.total_time_seconds = time.time() - multi_start
+        multi_stats.avg_run_time_seconds = multi_stats.total_time_seconds / max(len(f1_values), 1)
+
+        # Save multi-run results
+        self._save_multirun_results(multi_stats, run_summaries)
+
+        return multi_stats
+
+    def _compute_statistics(
+        self,
+        f1_values: List[float],
+        precision_values: List[float],
+        recall_values: List[float],
+        n_runs: int
+    ) -> MultiRunStatistics:
+        """Compute mean, std, and 95% CI for metrics."""
+        if not f1_values:
+            return MultiRunStatistics(n_runs=0)
+
+        n = len(f1_values)
+
+        def compute_ci(values: List[float]) -> Tuple[float, float, float, float]:
+            """Compute mean, std, and 95% CI for a list of values."""
+            arr = np.array(values)
+            mean = float(np.mean(arr))
+            std = float(np.std(arr, ddof=1)) if n > 1 else 0.0
+
+            # 95% confidence interval using t-distribution
+            if n > 1:
+                sem = std / np.sqrt(n)
+                t_critical = stats.t.ppf(0.975, df=n-1)
+                ci_low = mean - t_critical * sem
+                ci_high = mean + t_critical * sem
+            else:
+                ci_low = ci_high = mean
+
+            return mean, std, ci_low, ci_high
+
+        f1_mean, f1_std, f1_ci_low, f1_ci_high = compute_ci(f1_values)
+        p_mean, p_std, p_ci_low, p_ci_high = compute_ci(precision_values)
+        r_mean, r_std, r_ci_low, r_ci_high = compute_ci(recall_values)
+
+        return MultiRunStatistics(
+            n_runs=n,
+            f1_mean=f1_mean,
+            f1_std=f1_std,
+            f1_ci_low=f1_ci_low,
+            f1_ci_high=f1_ci_high,
+            precision_mean=p_mean,
+            precision_std=p_std,
+            precision_ci_low=p_ci_low,
+            precision_ci_high=p_ci_high,
+            recall_mean=r_mean,
+            recall_std=r_std,
+            recall_ci_low=r_ci_low,
+            recall_ci_high=r_ci_high,
+            f1_values=f1_values,
+            precision_values=precision_values,
+            recall_values=recall_values,
+        )
+
+    def _clean_benchmark_data(self) -> None:
+        """Clean benchmark data from DB between runs."""
+        logger.info("Cleaning benchmark data for fresh run...")
+        arango_url = os.environ.get("ARANGO_URL", "http://localhost:8529")
+        db_name = os.environ.get("ARANGO_DB_NAME", "knowledgeplane")
+
+        # Clean facts, relations, knowledge_cards, worker_triggers
+        for collection in ["facts", "relations", "knowledge_cards", "worker_triggers"]:
+            try:
+                query = {
+                    "query": f"FOR doc IN {collection} "
+                             f"FILTER STARTS_WITH(doc.metadata.namespace, 'relationrecall') "
+                             f"OR doc.metadata.namespace == null "
+                             f"REMOVE doc IN {collection}"
+                }
+                if collection != "facts":
+                    # For relations/cards/triggers, remove all
+                    query = {"query": f"FOR doc IN {collection} REMOVE doc IN {collection}"}
+
+                requests.post(
+                    f"{arango_url}/_db/{db_name}/_api/cursor",
+                    json=query,
+                    auth=("root", "root"),
+                    timeout=30
+                )
+            except Exception as e:
+                logger.warning(f"Failed to clean {collection}: {e}")
+
+        logger.info("Cleanup complete")
+
+    def _save_multirun_results(
+        self,
+        multi_stats: MultiRunStatistics,
+        run_summaries: List[BenchmarkSummary]
+    ) -> None:
+        """Save multi-run results to output files."""
+        json_path = self.output_dir / "relationrecall_multirun.json"
+        logger.info(f"Saving multi-run results to {json_path}")
+
+        with open(json_path, 'w') as f:
+            json.dump({
+                "n_runs": multi_stats.n_runs,
+                "statistics": {
+                    "f1": {
+                        "mean": multi_stats.f1_mean,
+                        "std": multi_stats.f1_std,
+                        "ci_95_low": multi_stats.f1_ci_low,
+                        "ci_95_high": multi_stats.f1_ci_high,
+                        "values": multi_stats.f1_values,
+                    },
+                    "precision": {
+                        "mean": multi_stats.precision_mean,
+                        "std": multi_stats.precision_std,
+                        "ci_95_low": multi_stats.precision_ci_low,
+                        "ci_95_high": multi_stats.precision_ci_high,
+                        "values": multi_stats.precision_values,
+                    },
+                    "recall": {
+                        "mean": multi_stats.recall_mean,
+                        "std": multi_stats.recall_std,
+                        "ci_95_low": multi_stats.recall_ci_low,
+                        "ci_95_high": multi_stats.recall_ci_high,
+                        "values": multi_stats.recall_values,
+                    },
+                },
+                "timing": {
+                    "total_seconds": multi_stats.total_time_seconds,
+                    "avg_run_seconds": multi_stats.avg_run_time_seconds,
+                },
+                "config": {
+                    "n_clusters": self.n_clusters,
+                    "facts_per_cluster": self.facts_per_cluster,
+                    "base_seed": self.seed,
+                    "dataset": self.dataset,
+                    "use_nli": self.use_nli,
+                    "timestamp": datetime.now().isoformat(),
+                },
+            }, f, indent=2)
+
+    def print_multirun_summary(self, multi_stats: MultiRunStatistics) -> None:
+        """Print multi-run statistical summary."""
+        print("\n" + "=" * 60)
+        print(f"RelationRecall Results ({multi_stats.n_runs} runs)")
+        print("=" * 60)
+
+        print(f"\n  F1:        {multi_stats.f1_mean * 100:.1f}% ± {multi_stats.f1_std * 100:.1f}%  "
+              f"[95% CI: {multi_stats.f1_ci_low * 100:.1f}%, {multi_stats.f1_ci_high * 100:.1f}%]")
+        print(f"  Precision: {multi_stats.precision_mean * 100:.1f}% ± {multi_stats.precision_std * 100:.1f}%  "
+              f"[95% CI: {multi_stats.precision_ci_low * 100:.1f}%, {multi_stats.precision_ci_high * 100:.1f}%]")
+        print(f"  Recall:    {multi_stats.recall_mean * 100:.1f}% ± {multi_stats.recall_std * 100:.1f}%  "
+              f"[95% CI: {multi_stats.recall_ci_low * 100:.1f}%, {multi_stats.recall_ci_high * 100:.1f}%]")
+
+        print("\n  Individual F1 scores:")
+        for i, f1 in enumerate(multi_stats.f1_values):
+            print(f"    Run {i+1}: {f1 * 100:.1f}%")
+
+        print(f"\n  Total time:    {multi_stats.total_time_seconds:.1f}s")
+        print(f"  Avg run time:  {multi_stats.avg_run_time_seconds:.1f}s")
+
+        print("\n" + "=" * 60)
+
 
 # =====================================================================
 # CLI
@@ -1437,6 +1701,20 @@ def parse_args() -> argparse.Namespace:
         help='Execution mode: smart (reuse cache) or fresh (always clean)'
     )
 
+    parser.add_argument(
+        '--runs',
+        type=int,
+        default=1,
+        help='Number of benchmark runs for statistical reporting (default: 1). '
+             'Use 5-10 for production benchmarks to handle LLM non-determinism.'
+    )
+
+    parser.add_argument(
+        '--no-clean-between-runs',
+        action='store_true',
+        help='Do not clean DB between multi-run iterations (not recommended)'
+    )
+
     return parser.parse_args()
 
 
@@ -1477,8 +1755,19 @@ def main():
 
     # Run benchmark
     try:
-        summary = benchmark.run_benchmark()
-        benchmark.print_summary(summary)
+        if args.runs > 1:
+            # Multi-run mode for statistical reporting
+            logger.info(f"Running {args.runs} iterations for statistical reporting")
+            clean_between = not args.no_clean_between_runs
+            multi_stats = benchmark.run_multiple(
+                n_runs=args.runs,
+                clean_between_runs=clean_between
+            )
+            benchmark.print_multirun_summary(multi_stats)
+        else:
+            # Single run mode (original behavior)
+            summary = benchmark.run_benchmark()
+            benchmark.print_summary(summary)
         return 0
     except Exception as e:
         logger.error(f"Benchmark failed: {e}", exc_info=True)

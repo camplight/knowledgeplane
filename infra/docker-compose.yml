@@ -77,6 +77,8 @@ services:
       - ARANGO_URL=http://db:8529
       # Reranker service URL (when running with reranker profile)
       - RERANKER_URL=http://reranker:8082
+      # LLM verification for strong claims (causes, contradicts, depends_on)
+      - LLM_VERIFY_ENABLED=true
     depends_on:
       db:
         condition: service_healthy

@@ -29,6 +29,7 @@ DATASET="synthetic"
 WAIT_TIMEOUT=300
 USE_NLI=false
 AUTO_CLEAN=false
+NUM_RUNS=1
 
 show_help() {
     echo -e "${BOLD}${BLUE}KnowledgePlane Benchmark CLI${NC}"
@@ -59,6 +60,8 @@ show_help() {
     echo "    --dataset <name>    Dataset: synthetic (default), redocred (HuggingFace)"
     echo "    --wait <secs>       Consolidation timeout in seconds (default: 300)"
     echo "    --use-nli           Enable NLI-based relation verification"
+    echo "    --runs <num>        Number of runs for statistical reporting (default: 1)"
+    echo "                        Use 5-10 for production benchmarks (handles LLM variance)"
     echo ""
     echo -e "${BOLD}EXAMPLES${NC}"
     echo "    ./bench hotpot                  # Quick validation (n=20)"
@@ -70,6 +73,7 @@ show_help() {
     echo "    ./bench relationrecall --wait 600  # Extended consolidation timeout"
     echo "    ./bench relationrecall --dataset redocred  # Use Re-DocRED"
     echo "    ./bench relationrecall --use-nli   # With NLI verification"
+    echo "    ./bench relationrecall --runs 5    # Statistical reporting (5 runs)"
     echo "    ./bench all --quick             # All benchmarks, minimal size"
     echo "    ./bench runs                    # List past runs"
     echo ""
@@ -261,10 +265,14 @@ run_relationrecall() {
     local timeout=${WAIT_TIMEOUT:-300}
     local dataset=${DATASET:-synthetic}
     local use_nli=${USE_NLI:-false}
+    local runs=${NUM_RUNS:-1}
 
     echo -e "${BOLD}${BLUE}━━━ RelationRecall Benchmark (n=$n clusters) ━━━${NC}"
     echo -e "${DIM}Metric: Relation Extraction F1${NC}"
     echo -e "${DIM}Dataset: $dataset | Consolidation timeout: ${timeout}s${NC}"
+    if [ "$runs" -gt 1 ]; then
+        echo -e "${DIM}Statistical reporting: $runs runs (handles LLM variance)${NC}"
+    fi
     if [ "$use_nli" = true ]; then
         echo -e "${DIM}NLI verification: enabled${NC}"
     fi
@@ -275,11 +283,36 @@ run_relationrecall() {
         nli_flag="--use-nli"
     fi
 
-    run_docker relationrecall --n "$n" --dataset "$dataset" --consolidation-timeout "$timeout" $nli_flag
+    local runs_flag=""
+    if [ "$runs" -gt 1 ]; then
+        runs_flag="--runs $runs"
+    fi
+
+    run_docker relationrecall --n "$n" --dataset "$dataset" --consolidation-timeout "$timeout" $nli_flag $runs_flag
 
     [ "$ARCHIVE" = true ] && archive_results "relationrecall_n${n}"
 
-    if [ -f "output/relationrecall_summary.json" ]; then
+    # Check for multi-run results first
+    if [ -f "output/relationrecall_multirun.json" ] && [ "$runs" -gt 1 ]; then
+        echo ""
+        echo -e "${BOLD}Results (Statistical - $runs runs):${NC}"
+        python3 -c "
+import json
+with open('output/relationrecall_multirun.json') as f:
+    d = json.load(f)
+s = d.get('statistics', {})
+f1 = s.get('f1', {})
+p = s.get('precision', {})
+r = s.get('recall', {})
+print(f\"  F1:        {f1.get('mean', 0)*100:.1f}% ± {f1.get('std', 0)*100:.1f}%  [95% CI: {f1.get('ci_95_low', 0)*100:.1f}%, {f1.get('ci_95_high', 0)*100:.1f}%]  <- KEY METRIC\")
+print(f\"  Precision: {p.get('mean', 0)*100:.1f}% ± {p.get('std', 0)*100:.1f}%\")
+print(f\"  Recall:    {r.get('mean', 0)*100:.1f}% ± {r.get('std', 0)*100:.1f}%\")
+print()
+print('  Individual runs:')
+for i, v in enumerate(f1.get('values', [])):
+    print(f\"    Run {i+1}: {v*100:.1f}%\")
+"
+    elif [ -f "output/relationrecall_summary.json" ]; then
         echo ""
         echo -e "${BOLD}Results:${NC}"
         python3 -c "
@@ -411,6 +444,8 @@ while [[ $# -gt 0 ]]; do
             WAIT_TIMEOUT=$2; shift 2 ;;
         --use-nli)
             USE_NLI=true; shift ;;
+        --runs)
+            NUM_RUNS=$2; shift 2 ;;
         --clean)
             AUTO_CLEAN=true; shift ;;
         --)

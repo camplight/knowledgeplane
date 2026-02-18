@@ -19,6 +19,7 @@ import {
 const EMBEDDING_SIMILARITY_THRESHOLD = 0.30; // Over-fetch candidates for reranking
 const RERANKER_THRESHOLD = 0.35; // Cross-encoder reranker score threshold (tuned: F1=61.5% vs 60% baseline)
 const RERANKER_URL = process.env.RERANKER_URL || "http://localhost:8082";
+const THRESHOLD_EPSILON = 1e-9; // Epsilon for floating-point threshold comparisons
 
 // LLM verification: Filter false positives for strong claims (causes, contradicts, depends_on)
 // Uses same LLM as extraction (GPT-5.x) - follows Zep/Graphiti production pattern
@@ -210,6 +211,12 @@ export class CardConsolidator {
 
       // Process each workspace separately
       for (const [workspaceId, workspaceFacts] of factsByWorkspace) {
+        // Sort facts by ID for deterministic batch ordering
+        workspaceFacts.sort((a, b) => {
+          const aId = a._key || a._id || "";
+          const bId = b._key || b._id || "";
+          return aId.localeCompare(bId);
+        });
         console.log(`Processing ${workspaceFacts.length} facts for workspace ${workspaceId}`);
 
         // Create fact relations before grouping
@@ -310,6 +317,7 @@ export class CardConsolidator {
             RETURN true
         )
         FILTER LENGTH(inCard) == 0
+        SORT fact._key ASC
         LIMIT 100
         RETURN fact
     `;
@@ -561,29 +569,38 @@ export class CardConsolidator {
       const messages: ChatMessage[] = [
         {
           role: "system",
-          content: `You verify if relation claims between facts are semantically valid.
-For each claim, respond with VALID or INVALID.
-Be strict: only mark as VALID if the relation clearly holds based on the text.`
+          content: `You verify if causal/logical relation claims between facts are reasonable.
+Return a JSON object with "verdicts" array containing true/false for each claim.
+Mark true if the relation is plausible given the text - don't require explicit proof.
+Only mark false if the relation is clearly wrong or nonsensical.`
         },
         {
           role: "user",
-          content: `Verify these relation claims:
+          content: `Verify these ${strongRelations.length} relation claims:
 
 ${verificationsNeeded}
 
-Respond with one word per line (VALID or INVALID), in order:`
+Return JSON: {"verdicts": [true/false for each claim in order]}`
         }
       ];
 
       const options: ChatCompletionOptions = {
         model: getChatModel(),
         temperature: 0,
-        maxTokens: 100,
+        maxTokens: 200,
+        responseFormat: "json_object",
       };
 
       const response = await this.aiClient.getProvider().chatCompletion(messages, options);
-      const content = response.content || "";
-      const verdicts = content.split("\n").map((line: string) => line.trim().toUpperCase().includes("VALID") && !line.trim().toUpperCase().includes("INVALID"));
+      const content = response.content || "{}";
+      let verdicts: boolean[] = [];
+      try {
+        const parsed = JSON.parse(content);
+        verdicts = Array.isArray(parsed.verdicts) ? parsed.verdicts : [];
+      } catch {
+        console.warn("LLM Verifier: Failed to parse JSON, keeping all relations");
+        return relations;
+      }
 
       // Filter strong relations based on verification
       const verifiedStrong: typeof relations = [];
@@ -733,7 +750,7 @@ Remember: Only include relations with confidence >= 0.7 and clear entity/semanti
 
     const chatOptions: ChatCompletionOptions = {
       model: getChatModel(),
-      temperature: 0.15, // Lower for more consistent entity extraction
+      temperature: 0, // Deterministic extraction for reproducible benchmarks
       responseFormat: "json_object",
     };
 
