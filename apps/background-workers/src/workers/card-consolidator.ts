@@ -4,6 +4,7 @@ import {
   FactRelation,
   WorkerLog,
   collections,
+  cosineSimilarity,
 } from "@knowledgeplane/db";
 import {
   createAIModelClient,
@@ -11,6 +12,9 @@ import {
   type ChatCompletionOptions,
   getChatModel,
 } from "@knowledgeplane/aimodel";
+
+// Gap #3 fix: Embedding similarity threshold for pre-filtering relation candidates
+const EMBEDDING_SIMILARITY_THRESHOLD = 0.3; // Include pairs with >= 30% cosine similarity
 
 export class CardConsolidator {
   private aiClient: ReturnType<typeof createAIModelClient>;
@@ -311,13 +315,23 @@ export class CardConsolidator {
 
     let relationsCreated = 0;
     const batchSize = 20; // Process facts in batches to avoid overwhelming the AI
+    const overlap = 10; // 50% overlap for sliding window to catch cross-batch relations
+    const step = batchSize - overlap; // Move by 10 facts each iteration
 
-    // Process facts in batches
-    for (let i = 0; i < facts.length; i += batchSize) {
+    // Process facts with SLIDING WINDOW (Gap #2 fix: catch cross-batch relations)
+    // Batches: 0-19, 10-29, 20-39, 30-49... ensuring boundary facts get paired
+    for (let i = 0; i < facts.length; i += step) {
       const batch = facts.slice(i, Math.min(i + batchSize, facts.length));
 
+      // Skip if batch is too small (last partial batch with < 2 facts)
+      if (batch.length < 2) {
+        break;
+      }
+
       try {
-        const relations = await this.identifyRelationsWithAI(batch);
+        // Gap #3 fix: Pre-filter using embedding similarity
+        const similarPairs = this.findSimilarPairs(batch);
+        const relations = await this.identifyRelationsWithAI(batch, similarPairs);
 
         // Create relations that don't already exist
         for (const relation of relations) {
@@ -386,17 +400,59 @@ export class CardConsolidator {
         }
       } catch (error: any) {
         console.error(
-          `Error creating relations for batch ${i}-${Math.min(i + batchSize, facts.length)}:`,
+          `Error creating relations for sliding window [${i}:${Math.min(i + batchSize, facts.length)}]:`,
           error.message,
         );
-        // Continue with next batch
+        // Continue with next window
       }
     }
+
+    console.log(`Sliding window processing complete: ${Math.ceil(Math.max(0, facts.length - batchSize) / step) + 1} windows, ${relationsCreated} relations created`);
 
     return relationsCreated;
   }
 
-  private async identifyRelationsWithAI(facts: any[]): Promise<
+  /**
+   * Gap #3 fix: Pre-filter fact pairs using embedding similarity.
+   * Returns pairs of (1-based) indices with similarity >= threshold.
+   */
+  private findSimilarPairs(facts: any[]): Array<{ i: number; j: number; similarity: number }> {
+    const pairs: Array<{ i: number; j: number; similarity: number }> = [];
+
+    for (let i = 0; i < facts.length; i++) {
+      for (let j = i + 1; j < facts.length; j++) {
+        const embA = facts[i].embedding;
+        const embB = facts[j].embedding;
+
+        // Skip if either fact lacks embeddings (placeholder zero vectors have embedding_model: null)
+        if (!embA || !embB || !facts[i].embedding_model || !facts[j].embedding_model) {
+          continue;
+        }
+
+        try {
+          const similarity = cosineSimilarity(embA, embB);
+          if (similarity >= EMBEDDING_SIMILARITY_THRESHOLD) {
+            // Use 1-based indices for AI prompt consistency
+            pairs.push({ i: i + 1, j: j + 1, similarity });
+          }
+        } catch (error: any) {
+          // Skip pair if embedding dimensions don't match
+          console.warn(`Embedding mismatch for facts ${i+1}-${j+1}: ${error.message}`);
+        }
+      }
+    }
+
+    // Sort by similarity descending (most similar first)
+    pairs.sort((a, b) => b.similarity - a.similarity);
+
+    console.log(`Embedding pre-filter: ${pairs.length} similar pairs found (threshold >= ${EMBEDDING_SIMILARITY_THRESHOLD})`);
+    return pairs;
+  }
+
+  private async identifyRelationsWithAI(
+    facts: any[],
+    similarPairs?: Array<{ i: number; j: number; similarity: number }>
+  ): Promise<
     Array<{
       from_index: number;
       to_index: number;
@@ -445,10 +501,25 @@ Rules:
       .map((f, idx) => `${idx + 1}. ${f.content}`)
       .join("\n");
 
+    // Gap #3: Include embedding similarity hints to focus AI attention
+    let embeddingHints = "";
+    if (similarPairs && similarPairs.length > 0) {
+      const topPairs = similarPairs.slice(0, 10); // Top 10 most similar
+      const pairDescriptions = topPairs
+        .map(p => `  - Facts ${p.i} & ${p.j} (similarity: ${(p.similarity * 100).toFixed(0)}%)`)
+        .join("\n");
+      embeddingHints = `
+EMBEDDING ANALYSIS suggests these fact pairs may be related (by semantic similarity):
+${pairDescriptions}
+
+Pay special attention to these pairs, but also look for other meaningful relationships.
+`;
+    }
+
     const userPrompt = `Analyze these ${facts.length} facts and identify meaningful relationships:
 
 ${factContents}
-
+${embeddingHints}
 Return relationships using fact NUMBERS (1-${facts.length}), not content.`;
 
     const provider = this.aiClient.getProvider();

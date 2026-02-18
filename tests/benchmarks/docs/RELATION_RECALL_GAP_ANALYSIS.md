@@ -37,7 +37,7 @@ const fromFact = batch.find((f) => f.content === relation.from_content);
 ---
 
 ### 2. Batch Size Limits Cross-Batch Relations
-**Location:** `card-consolidator.ts:312`
+**Location:** `card-consolidator.ts:316`
 
 **Problem:** Facts are processed in fixed batches of 20. Relations can only be discovered *within* a batch.
 
@@ -45,7 +45,7 @@ const fromFact = batch.find((f) => f.content === relation.from_content);
 
 **SOTA Solution:** Use sliding window batching with overlap (e.g., sentence size 3, overlap 1) to ensure cross-batch relation discovery.
 
-**Recommendation:** Implement sliding window or multi-pass extraction.
+**Status:** ✅ **FIXED** - Implemented sliding window with 50% overlap (step=10, batch=20). Batches now: 0-19, 10-29, 20-39, etc.
 
 ---
 
@@ -56,7 +56,7 @@ const fromFact = batch.find((f) => f.content === relation.from_content);
 
 **SOTA Solution:** [Graphiti/Zep](https://github.com/getzep/graphiti) uses embeddings + BM25 + graph traversal with **no LLM calls during retrieval** (P95 latency: 300ms).
 
-**Recommendation:** Pre-filter relation candidates using embedding similarity before sending to LLM.
+**Status:** ✅ **FIXED** - Added embedding pre-filtering with `findSimilarPairs()` (threshold >= 30%). AI prompt now includes top 10 similar pairs as hints.
 
 ---
 
