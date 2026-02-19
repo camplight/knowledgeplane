@@ -26,11 +26,17 @@ const THRESHOLD_EPSILON = 1e-9; // Epsilon for floating-point threshold comparis
 const LLM_VERIFY_ENABLED = process.env.LLM_VERIFY_ENABLED !== "false";
 const STRONG_CLAIM_TYPES = ["causes", "contradicts", "depends_on"]; // Verify these relation types
 
+// LLM Verification confidence threshold (only accept high-confidence verdicts)
+const VERIFICATION_CONFIDENCE_THRESHOLD = 0.75;
+
 export class CardConsolidator {
   private aiClient: ReturnType<typeof createAIModelClient>;
   private interval: NodeJS.Timeout | null = null;
   private triggerCheckInterval: NodeJS.Timeout | null = null;
   private running = false;
+
+  // Track analyzed fact pairs to avoid redundant LLM calls across sliding windows
+  private analyzedPairKeys = new Set<string>();
 
   constructor() {
     const apiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY;
@@ -325,10 +331,53 @@ export class CardConsolidator {
     return await Fact.queryAQL(aql);
   }
 
+  /**
+   * Generate a canonical key for a fact pair (order-independent).
+   * Used to track which pairs have already been analyzed.
+   */
+  private getPairKey(factIdA: string, factIdB: string): string {
+    return factIdA < factIdB ? `${factIdA}:${factIdB}` : `${factIdB}:${factIdA}`;
+  }
+
+  /**
+   * Filter out pairs that have already been analyzed in previous windows.
+   * This prevents redundant LLM calls for the 50% overlap region.
+   */
+  private filterUnanalyzedPairs(
+    facts: any[],
+    pairs: Array<{ i: number; j: number; similarity: number }>
+  ): Array<{ i: number; j: number; similarity: number }> {
+    const newPairs: typeof pairs = [];
+    let skipped = 0;
+
+    for (const pair of pairs) {
+      const factA = facts[pair.i - 1];
+      const factB = facts[pair.j - 1];
+      if (!factA || !factB) continue;
+
+      const key = this.getPairKey(factA._id || factA.id, factB._id || factB.id);
+      if (this.analyzedPairKeys.has(key)) {
+        skipped++;
+        continue;
+      }
+      this.analyzedPairKeys.add(key);
+      newPairs.push(pair);
+    }
+
+    if (skipped > 0) {
+      console.log(`Pair tracking: Skipped ${skipped} already-analyzed pairs, ${newPairs.length} new pairs`);
+    }
+
+    return newPairs;
+  }
+
   private async createFactRelations(facts: any[]): Promise<number> {
     if (facts.length < 2) {
       return 0; // Need at least 2 facts to create relations
     }
+
+    // Reset pair tracking for this consolidation run
+    this.analyzedPairKeys.clear();
 
     let relationsCreated = 0;
     const batchSize = 20; // Process facts in batches to avoid overwhelming the AI
@@ -349,8 +398,17 @@ export class CardConsolidator {
         // Gap #3 fix: Pre-filter using embedding similarity (over-fetch with low threshold)
         const similarPairs = this.findSimilarPairs(batch);
 
+        // Filter out pairs already analyzed in previous windows (avoid redundant LLM calls)
+        const newPairs = this.filterUnanalyzedPairs(batch, similarPairs);
+
+        // Skip LLM calls if all pairs were already analyzed
+        if (newPairs.length === 0) {
+          console.log(`Window [${i}:${Math.min(i + batchSize, facts.length)}]: All pairs already analyzed, skipping`);
+          continue;
+        }
+
         // Step 2: Cross-encoder reranking to filter weak candidates
-        const rerankedPairs = await this.rerankPairs(batch, similarPairs);
+        const rerankedPairs = await this.rerankPairs(batch, newPairs);
 
         const relations = await this.identifyRelationsWithAI(batch, rerankedPairs);
 
@@ -539,8 +597,8 @@ export class CardConsolidator {
 
   /**
    * Step 3: LLM verification for strong claims (causes, contradicts, depends_on).
-   * Uses same LLM as extraction to verify semantic validity - follows Zep/Graphiti pattern.
-   * Only verifies "strong" relation types that make causal/logical claims.
+   * Uses Chain-of-Thought reasoning with evidence requirements and confidence scoring.
+   * Includes negative examples to calibrate rejection of spurious relations.
    */
   private async verifyRelationsWithLLM(
     facts: any[],
@@ -559,62 +617,163 @@ export class CardConsolidator {
     }
 
     try {
-      // Build verification prompt
+      // Build verification prompt with numbered claims
       const verificationsNeeded = strongRelations.map((rel, idx) => {
         const fromFact = facts[rel.from_index - 1];
         const toFact = facts[rel.to_index - 1];
-        return `${idx + 1}. "${fromFact?.content}" ${rel.type} "${toFact?.content}"`;
-      }).join("\n");
+        return `Claim ${idx + 1}:
+  Fact A: "${fromFact?.content}"
+  Fact B: "${toFact?.content}"
+  Relation: "${rel.type}"`;
+      }).join("\n\n");
+
+      // CoT verification prompt with negative examples and confidence scoring
+      const systemPrompt = `You are a rigorous fact-relation verifier. Your task is to verify whether causal/logical claims between facts are actually supported by the text.
+
+FOR EACH CLAIM, follow these Chain-of-Thought reasoning steps:
+1. EXTRACT: What specific claim does Fact A make?
+2. EXTRACT: What specific claim does Fact B make?
+3. ANALYZE: Does Fact A truly have a "${strongRelations[0]?.type || 'causal'}" relationship with Fact B?
+4. EVIDENCE: Quote the specific words/phrases that support or refute this relation.
+5. VERDICT: true (clearly supported), false (not supported or spurious)
+6. CONFIDENCE: Score from 0.0 to 1.0 based on evidence strength
+
+RELATION TYPE DEFINITIONS:
+- "causes": Fact A describes something that DIRECTLY leads to or produces the outcome in Fact B. Must have explicit causal mechanism.
+- "contradicts": Fact A and Fact B make INCOMPATIBLE claims that cannot both be true simultaneously.
+- "depends_on": Fact A REQUIRES or PRESUPPOSES the condition/state described in Fact B to be true.
+
+=== FALSE POSITIVE EXAMPLES (you MUST mark these as FALSE) ===
+
+Example 1 - Spurious correlation:
+  Fact A: "Python was created by Guido van Rossum in 1991"
+  Fact B: "Modern programming languages need interpreters or compilers"
+  Relation: "causes"
+  VERDICT: FALSE, CONFIDENCE: 0.1
+  REASON: Both facts are about programming but there is NO causal link. Python's creation doesn't cause the need for interpreters.
+
+Example 2 - Topic overlap without causation:
+  Fact A: "Tesla stock rose 5% yesterday"
+  Fact B: "Electric vehicles are becoming more popular worldwide"
+  Relation: "causes"
+  VERDICT: FALSE, CONFIDENCE: 0.2
+  REASON: Correlation is not causation. Stock price changes don't cause EV popularity (or vice versa in this framing).
+
+Example 3 - General advice vs specific behavior:
+  Fact A: "The API endpoint returns a JSON response"
+  Fact B: "JSON responses should be validated before use"
+  Relation: "depends_on"
+  VERDICT: FALSE, CONFIDENCE: 0.15
+  REASON: Returning JSON doesn't depend on validation practices - these are independent statements.
+
+Example 4 - Temporal sequence without causation:
+  Fact A: "The company was founded in 2010"
+  Fact B: "The company went public in 2020"
+  Relation: "causes"
+  VERDICT: FALSE, CONFIDENCE: 0.2
+  REASON: Founding preceded IPO but didn't cause it - many founded companies never go public.
+
+=== TRUE POSITIVE EXAMPLES (mark these as TRUE) ===
+
+Example 1 - Direct causal mechanism:
+  Fact A: "Buffer overflow occurs when input data exceeds allocated memory bounds"
+  Fact B: "The system crashed due to a buffer overflow in the input handler"
+  Relation: "causes"
+  VERDICT: TRUE, CONFIDENCE: 0.9
+  REASON: Explicit causal chain - buffer overflow (defined in A) caused the crash (stated in B).
+
+Example 2 - Clear dependency:
+  Fact A: "The payment API requires OAuth2 authentication tokens"
+  Fact B: "Users must login to obtain authentication tokens"
+  Relation: "depends_on"
+  VERDICT: TRUE, CONFIDENCE: 0.85
+  REASON: Using the payment API depends on having tokens, which requires login.
+
+Return JSON with this structure:
+{
+  "reasoning": [
+    {
+      "claim_index": 1,
+      "fact_a_summary": "brief summary of Fact A's claim",
+      "fact_b_summary": "brief summary of Fact B's claim",
+      "analysis": "step-by-step reasoning about whether the relation holds",
+      "evidence_for": "quoted text supporting the relation, or 'none'",
+      "evidence_against": "reasons why the relation might be spurious, or 'none'",
+      "verdict": true or false,
+      "confidence": 0.0 to 1.0
+    }
+  ],
+  "verdicts": [true/false for each claim in order],
+  "confidences": [0.0-1.0 for each claim in order]
+}`;
 
       const messages: ChatMessage[] = [
         {
           role: "system",
-          content: `You verify if causal/logical relation claims between facts are reasonable.
-Return a JSON object with "verdicts" array containing true/false for each claim.
-Mark true if the relation is plausible given the text - don't require explicit proof.
-Only mark false if the relation is clearly wrong or nonsensical.`
+          content: systemPrompt
         },
         {
           role: "user",
-          content: `Verify these ${strongRelations.length} relation claims:
+          content: `Verify these ${strongRelations.length} relation claims. Be SKEPTICAL - only mark TRUE if there is clear textual evidence for the causal/logical relationship.
 
 ${verificationsNeeded}
 
-Return JSON: {"verdicts": [true/false for each claim in order]}`
+Apply the Chain-of-Thought reasoning process for each claim. Return the structured JSON with reasoning, verdicts, and confidence scores.`
         }
       ];
 
       const options: ChatCompletionOptions = {
         model: getChatModel(),
         temperature: 0,
-        maxTokens: 200,
+        maxTokens: 1500, // Increased for CoT reasoning output
         responseFormat: "json_object",
       };
 
       const response = await this.aiClient.getProvider().chatCompletion(messages, options);
       const content = response.content || "{}";
+
       let verdicts: boolean[] = [];
+      let confidences: number[] = [];
+      let reasoning: Array<{ claim_index: number; analysis: string; verdict: boolean; confidence: number }> = [];
+
       try {
         const parsed = JSON.parse(content);
         verdicts = Array.isArray(parsed.verdicts) ? parsed.verdicts : [];
+        confidences = Array.isArray(parsed.confidences) ? parsed.confidences : [];
+        reasoning = Array.isArray(parsed.reasoning) ? parsed.reasoning : [];
       } catch {
         console.warn("LLM Verifier: Failed to parse JSON, keeping all relations");
         return relations;
       }
 
-      // Filter strong relations based on verification
+      // Filter strong relations based on verification AND confidence threshold
       const verifiedStrong: typeof relations = [];
-      let filtered = 0;
+      let filteredByVerdict = 0;
+      let filteredByConfidence = 0;
 
       for (let i = 0; i < strongRelations.length; i++) {
-        if (verdicts[i]) {
-          verifiedStrong.push(strongRelations[i]);
+        const verdict = verdicts[i];
+        const confidence = confidences[i] ?? 1.0; // Default to 1.0 if not provided
+        const reasoningEntry = reasoning[i];
+
+        if (!verdict) {
+          filteredByVerdict++;
+          // Log rejected relations for debugging
+          if (reasoningEntry?.analysis) {
+            console.log(`LLM Verifier rejected (verdict=false): ${strongRelations[i].type}`);
+            console.log(`  Analysis: ${reasoningEntry.analysis.substring(0, 150)}...`);
+          }
+        } else if (confidence < VERIFICATION_CONFIDENCE_THRESHOLD) {
+          filteredByConfidence++;
+          console.log(`LLM Verifier rejected (low confidence=${confidence.toFixed(2)}): ${strongRelations[i].type}`);
         } else {
-          filtered++;
+          verifiedStrong.push(strongRelations[i]);
         }
       }
 
-      console.log(`LLM Verifier: ${verifiedStrong.length}/${strongRelations.length} strong claims verified, ${filtered} filtered`);
+      const totalFiltered = filteredByVerdict + filteredByConfidence;
+      console.log(`LLM Verifier: ${verifiedStrong.length}/${strongRelations.length} strong claims verified`);
+      console.log(`  Filtered: ${filteredByVerdict} by verdict, ${filteredByConfidence} by confidence (<${VERIFICATION_CONFIDENCE_THRESHOLD})`);
 
       // Return verified strong relations + all weak relations
       return [...verifiedStrong, ...weakRelations];
