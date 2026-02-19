@@ -503,22 +503,42 @@ export async function init() {
       }
     }
     // Vector index for facts embeddings (dimension 1536 for text-embedding-3-small)
+    // All facts now have embeddings (placeholder zero vectors if not yet generated)
+    // This enables APPROX_NEAR_COSINE for O(log n) vector search
     try {
+      // Count documents with embeddings (including placeholder zeros)
+      const factCountQuery = `
+        LET count = LENGTH(
+          FOR fact IN facts
+            FILTER fact.embedding != null
+            RETURN 1
+        )
+        RETURN count
+      `;
+      const factCountCursor = await collections.facts.database.query(factCountQuery);
+      const factVectorCount = (await factCountCursor.next()) || 0;
+
+      // nLists must be between 16 and 100, and <= vector count
+      // Default to 16 for small collections, scale up for larger ones
+      const nLists = Math.min(Math.max(16, Math.min(factVectorCount, 100)), 100);
+
       await collections.facts.ensureIndex({
         type: "vector",
         fields: ["embedding"],
         name: "idx_fact_embedding_vector",
         params: {
           metric: "cosine",
-          dimension: 1536, // OpenAI text-embedding-3-small dimension
-          nLists: 100,
+          dimension: 1536,
+          nLists: nLists,
         },
-      } as any);
-      console.log("Vector index for facts created");
+      });
+      console.log(`Vector index for facts created/verified with nLists=${nLists} (${factVectorCount} documents)`);
     } catch (error: any) {
       if (error.errorNum !== 1710) {
         // 1710 = index already exists
         console.warn("Vector index creation warning for facts:", error.message);
+      } else {
+        console.log("Vector index for facts already exists");
       }
     }
     await collections.users.ensureIndex({
@@ -604,17 +624,34 @@ export async function init() {
     });
     // Vector index for relations embeddings
     try {
-      await collections.relations.ensureIndex({
-        type: "vector",
-        fields: ["embedding"],
-        name: "idx_relation_embedding_vector",
-        params: {
-          metric: "cosine",
-          dimension: 1536,
-          nLists: 100,
-        },
-      } as any);
-      console.log("Vector index for relations created");
+      // Count vectors to ensure collection isn't empty (nLists must be <= vector count)
+      const relationCountQuery = `
+        LET count = LENGTH(
+          FOR relation IN relations
+            FILTER relation.embedding != null
+            RETURN relation
+        )
+        RETURN count
+      `;
+      const relationCountCursor = await collections.relations.database.query(relationCountQuery);
+      const relationVectorCount = (await relationCountCursor.next()) || 0;
+
+      if (relationVectorCount === 0) {
+        console.log("Skipping vector index for relations (no embeddings yet - will be created when first embedding is added)");
+      } else {
+        const nLists = Math.min(Math.max(16, relationVectorCount), 100);
+        await collections.relations.ensureIndex({
+          type: "vector",
+          fields: ["embedding"],
+          name: "idx_relation_embedding_vector",
+          params: {
+            metric: "cosine",
+            dimension: 1536,
+            nLists: nLists,
+          },
+        });
+        console.log(`Vector index for relations created with nLists=${nLists} (${relationVectorCount} vectors)`);
+      }
     } catch (error: any) {
       if (error.errorNum !== 1710) {
         console.warn(
@@ -714,14 +751,17 @@ export async function init() {
         await collections.knowledge_cards.database.query(countQuery);
       const vectorCount = (await countCursor.next()) || 0;
 
+      // Skip index creation if no vectors yet (nLists cannot exceed vector count)
+      if (vectorCount === 0) {
+        console.log("Skipping vector index for knowledge_cards (no embeddings yet - will be created when first embedding is added)");
+        return; // Exit early, don't try to create index
+      }
+
       // nLists must be <= vectorCount (ArangoDB requirement)
       // Use reasonable defaults:
-      // - Minimum: 16 (for small datasets, but only if we have at least 16 vectors)
+      // - Minimum: 16 (for small datasets)
       // - Maximum: 100 (for large datasets)
-      // - If no vectors yet, use 16 (will work when vectors are added)
-      // - If vectors < 16, use vectorCount (or 1 if vectorCount is 0)
-      const nLists =
-        vectorCount > 0 ? Math.min(Math.max(1, vectorCount), 100) : 16;
+      const nLists = Math.min(Math.max(16, vectorCount), 100);
 
       await collections.knowledge_cards.ensureIndex({
         type: "vector",
@@ -732,7 +772,7 @@ export async function init() {
           dimension: 1536,
           nLists: nLists,
         },
-      } as any);
+      });
       console.log(
         `Vector index for knowledge_cards created with nLists=${nLists} (${vectorCount} vectors with embeddings)`,
       );
@@ -746,6 +786,38 @@ export async function init() {
     }
   } catch (error: any) {
     console.warn("Index creation warning:", error.message);
+  }
+
+  // Create ArangoSearch view for BM25 full-text scoring
+  // This replaces the deprecated FULLTEXT index with proper BM25 ranking
+  try {
+    const viewName = "facts_search_view";
+    const existingViews = await db.views();
+    const viewExists = existingViews.some((v: any) => v.name === viewName);
+
+    if (!viewExists) {
+      await db.createView(viewName, {
+        type: "arangosearch",
+        links: {
+          facts: {
+            includeAllFields: false,
+            fields: {
+              content: {
+                analyzers: ["text_en"],  // English text analyzer for BM25
+              },
+              workspace_id: {},  // For filtering
+              trashed: {},       // For filtering
+              embedding_model: {},  // For filtering placeholder zeros
+            },
+          },
+        },
+      });
+      console.log("ArangoSearch view 'facts_search_view' created for BM25 scoring");
+    } else {
+      console.log("ArangoSearch view 'facts_search_view' already exists");
+    }
+  } catch (error: any) {
+    console.warn("ArangoSearch view creation warning:", error.message);
   }
 
   // Create knowledge graph
@@ -781,4 +853,85 @@ export async function ensureInitialized() {
   initPromise = init();
   await initPromise;
   initPromise = null;
+}
+
+/**
+ * Ensure vector index exists for a collection.
+ * Creates the index if embeddings exist but no vector index is present.
+ * Safe to call multiple times (idempotent).
+ *
+ * @param collectionName - Name of collection (facts, relations, knowledge_cards)
+ * @returns true if index exists or was created, false if no embeddings yet
+ */
+export async function ensureVectorIndex(
+  collectionName: 'facts' | 'relations' | 'knowledge_cards'
+): Promise<boolean> {
+  await ensureInitialized();
+
+  const collection = collections[collectionName];
+  if (!collection) {
+    console.warn(`Collection ${collectionName} not found`);
+    return false;
+  }
+
+  try {
+    // Check if index already exists
+    const indexes = await collection.indexes();
+    const vectorIndexExists = indexes.some(
+      (idx: any) => idx.type === 'vector' && idx.name?.includes('embedding')
+    );
+
+    if (vectorIndexExists) {
+      console.log(`Vector index already exists for ${collectionName}`);
+      return true;
+    }
+
+    // Count vectors to ensure collection has embeddings
+    const countQuery = `
+      LET count = LENGTH(
+        FOR doc IN ${collectionName}
+          FILTER doc.embedding != null
+          RETURN doc
+      )
+      RETURN count
+    `;
+    const countCursor = await collection.database.query(countQuery);
+    const vectorCount = (await countCursor.next()) || 0;
+
+    if (vectorCount === 0) {
+      console.log(`No embeddings in ${collectionName} yet, skipping vector index`);
+      return false;
+    }
+
+    // Create vector index
+    // In arangojs 10.x, params MUST be nested, and fields is a tuple [string]
+    const nLists = Math.min(Math.max(16, vectorCount), 100);
+    await collection.ensureIndex({
+      type: "vector",
+      fields: ["embedding"],  // Tuple with single field
+      name: `idx_${collectionName}_embedding_vector`,
+      params: {  // params is required and must be nested
+        metric: "cosine",
+        dimension: 1536,
+        nLists: nLists,
+      },
+    });
+
+    console.log(`✓ Created vector index for ${collectionName} (nLists=${nLists}, ${vectorCount} vectors)`);
+    return true;
+  } catch (error: any) {
+    if (error.errorNum === 1710) {
+      // Index already exists (race condition)
+      console.log(`Vector index already exists for ${collectionName} (concurrent creation)`);
+      return true;
+    }
+    console.error(`Failed to create vector index for ${collectionName}:`, {
+      message: error.message,
+      errorNum: error.errorNum,
+      code: error.code,
+      response: error.response?.body,
+      stack: error.stack,
+    });
+    return false;
+  }
 }

@@ -18,10 +18,10 @@
   "dependencies": {
     "@knowledgeplane/aimodel": "*",
     "@knowledgeplane/db": "*",
-    "exceljs": "^4.4.0"
+    "exceljs": "4.4.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.6.3"
+    "@types/node": "22.0.0",
+    "typescript": "5.6.3"
   }
 }

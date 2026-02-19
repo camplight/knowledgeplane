@@ -4,26 +4,26 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "dotenv -e .env.dev -- tsx watch src/index.ts",
+    "dev": "dotenv -e ../../.env -e .env.dev -- tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "tsx src/index.ts",
     "lint": "eslint .",
     "test": "vitest"
   },
   "dependencies": {
-    "@fastify/cors": "^10.0.0",
+    "@fastify/cors": "10.0.0",
     "@knowledgeplane/api-core": "*",
     "@knowledgeplane/db": "*",
-    "dotenv": "^16.4.5",
-    "fastify": "^5.0.0",
+    "dotenv": "16.4.5",
+    "fastify": "5.0.0",
     "undici": "7.21.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "dotenv-cli": "^7.4.2",
-    "eslint": "^9.0.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.6.3",
-    "vitest": "^4.0.18"
+    "@types/node": "22.0.0",
+    "dotenv-cli": "7.4.2",
+    "eslint": "9.0.0",
+    "tsx": "4.19.0",
+    "typescript": "5.6.3",
+    "vitest": "4.0.18"
   }
 }

@@ -4,7 +4,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "dotenv -e .env.dev -- tsx watch src/index.ts",
+    "dev": "dotenv -e ../../.env -e .env.dev -- tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "lint": "eslint .",
@@ -13,17 +13,17 @@
   "dependencies": {
     "@knowledgeplane/aimodel": "*",
     "@knowledgeplane/db": "*",
-    "adm-zip": "^0.5.16",
-    "dotenv": "^16.4.5",
+    "adm-zip": "0.5.16",
+    "dotenv": "16.4.5",
     "undici": "7.21.0"
   },
   "devDependencies": {
-    "@types/adm-zip": "^0.5.7",
-    "@types/node": "^22.0.0",
-    "dotenv-cli": "^7.4.2",
-    "eslint": "^9.0.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.6.3",
-    "vitest": "^4.0.18"
+    "@types/adm-zip": "0.5.7",
+    "@types/node": "22.0.0",
+    "dotenv-cli": "7.4.2",
+    "eslint": "9.0.0",
+    "tsx": "4.19.0",
+    "typescript": "5.6.3",
+    "vitest": "4.0.18"
   }
 }

@@ -20,15 +20,16 @@
     "dev": "tsc --noEmit --watch"
   },
   "dependencies": {
-    "arangojs": "^10.0.0",
-    "jsonwebtoken": "^9.0.2",
-    "jwks-rsa": "^3.2.0",
-    "server-only": "^0.0.1",
-    "undici": "^7.21.0"
+    "arangojs": "10.2.2",
+    "dotenv": "17.3.1",
+    "jsonwebtoken": "9.0.2",
+    "jwks-rsa": "3.2.0",
+    "server-only": "0.0.1",
+    "undici": "7.21.0"
   },
   "devDependencies": {
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^22.0.0",
-    "typescript": "^5.6.3"
+    "@types/jsonwebtoken": "9.0.10",
+    "@types/node": "22.0.0",
+    "typescript": "5.6.3"
   }
 }
