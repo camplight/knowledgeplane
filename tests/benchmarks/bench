@@ -28,8 +28,16 @@ EXTRA_ARGS=""
 DATASET="synthetic"
 WAIT_TIMEOUT=300
 USE_NLI=false
-AUTO_CLEAN=false
+AUTO_CLEAN=true  # Default: clean before each run for determinism
 NUM_RUNS=1
+SWEEP_PARAM="reranker"
+SWEEP_VALUES=""
+LONGMEMEVAL_SETTING="oracle"
+LONGMEMEVAL_ABILITY=""
+LONGMEMEVAL_FULL_PIPELINE=false
+LONGMEMEVAL_GRAPH_EXPANSION=false
+LONGMEMEVAL_SYNC_CONSOLIDATION=false
+VERBOSE=false
 
 show_help() {
     echo -e "${BOLD}${BLUE}KnowledgePlane Benchmark CLI${NC}"
@@ -38,23 +46,34 @@ show_help() {
     echo "    ./bench <command> [options]"
     echo ""
     echo -e "${BOLD}COMMANDS${NC}"
+    echo -e "    ${CYAN}longmemeval${NC} 🎯 LongMemEval memory benchmark (ICLR 2025) ${GREEN}[PRIMARY]${NC}"
     echo -e "    ${CYAN}hotpot${NC}      HotpotQA multi-hop reasoning (SF F1 metric)"
     echo -e "    ${CYAN}freshness${NC}   Write-to-searchable latency"
     echo -e "    ${CYAN}msmarco${NC}     MS MARCO passage retrieval"
-    echo -e "    ${CYAN}relationrecall${NC}   Relation extraction quality (AI Librarian)"
+    echo -e "    ${CYAN}relationrecall${NC}   Relation extraction quality (internal)"
+    echo -e "    ${CYAN}sweep${NC}       Hyperparameter sweep with statistical validation"
     echo -e "    ${CYAN}all${NC}         Run all benchmarks"
     echo -e "    ${CYAN}preflight${NC}   Check environment (runs automatically)"
     echo -e "    ${CYAN}runs${NC}        List archived benchmark runs"
+    echo -e "    ${CYAN}compare${NC}     Compare experiments across runs (config vs accuracy)"
     echo -e "    ${CYAN}clean${NC}       Remove old benchmark data from DB"
     echo ""
     echo -e "${BOLD}OPTIONS${NC}"
     echo "    -n, --n <num>       Number of questions/samples/clusters (default: varies)"
     echo "    --quick             Use minimal sample size (n=10)"
     echo "    --full              Use full sample size (n=500)"
-    echo "    --clean             Clean benchmark data before running (RECOMMENDED)"
+    echo "    --no-clean          Skip cleaning (default: clean before each run)"
     echo "    --skip-preflight    Skip environment checks"
     echo "    --no-archive        Don't save results to runs/"
+    echo "    -v, --verbose       Enable verbose output (DEBUG logging, real-time streaming)"
     echo "    -- <args>           Pass extra args directly to Python script"
+    echo ""
+    echo -e "${BOLD}LONGMEMEVAL OPTIONS${NC}"
+    echo "    --setting <name>    Dataset setting: oracle (default), s (115K tokens), m (1.5M tokens)"
+    echo "    --ability <name>    Filter by ability: ie, mr, tr, ku, abs (default: all)"
+    echo "    --full-pipeline     🔥 Enable sync consolidation + graph expansion + reranking"
+    echo "    --graph-expansion   Enable graph expansion only (1-hop traversal + reranking)"
+    echo "    --sync-consolidation Enable sync consolidation only (no graph expansion)"
     echo ""
     echo -e "${BOLD}RELATIONRECALL OPTIONS${NC}"
     echo "    --dataset <name>    Dataset: synthetic (default), redocred (HuggingFace)"
@@ -63,17 +82,26 @@ show_help() {
     echo "    --runs <num>        Number of runs for statistical reporting (default: 1)"
     echo "                        Use 5-10 for production benchmarks (handles LLM variance)"
     echo ""
+    echo -e "${BOLD}SWEEP OPTIONS${NC}"
+    echo "    --param <name>      Parameter to sweep: reranker (default), embedding"
+    echo "    --values <list>     Comma-separated threshold values to test"
+    echo "                        Default reranker: 0.25,0.30,0.35,0.40,0.45"
+    echo "                        Default embedding: 0.20,0.25,0.30,0.35,0.40"
+    echo ""
     echo -e "${BOLD}EXAMPLES${NC}"
-    echo "    ./bench hotpot                  # Quick validation (n=20)"
+    echo "    ./bench longmemeval             # 🎯 PRIMARY: LongMemEval oracle (evidence only)"
+    echo "    ./bench longmemeval --full-pipeline # 🔥 Use full KP pipeline (sync consolidation + graph + rerank)"
+    echo "    ./bench longmemeval --setting s # Full standard setting (115K tokens)"
+    echo "    ./bench longmemeval --setting m # Extended setting (1.5M tokens)"
+    echo "    ./bench longmemeval --ability tr  # Test temporal reasoning only"
+    echo "    ./bench hotpot                  # HotpotQA quick validation (n=20)"
     echo "    ./bench hotpot -n 100           # Custom size"
     echo "    ./bench hotpot --full           # Full benchmark (n=500)"
     echo "    ./bench hotpot -- --run_vector false  # Pass args to Python"
     echo "    ./bench freshness               # Freshness with FAISS comparison"
-    echo "    ./bench relationrecall -n 10    # RelationRecall with 10 clusters"
-    echo "    ./bench relationrecall --wait 600  # Extended consolidation timeout"
-    echo "    ./bench relationrecall --dataset redocred  # Use Re-DocRED"
-    echo "    ./bench relationrecall --use-nli   # With NLI verification"
+    echo "    ./bench relationrecall -n 10    # RelationRecall (internal) with 10 clusters"
     echo "    ./bench relationrecall --runs 5    # Statistical reporting (5 runs)"
+    echo "    ./bench sweep --runs 3             # Sweep reranker threshold (3 runs each)"
     echo "    ./bench all --quick             # All benchmarks, minimal size"
     echo "    ./bench runs                    # List past runs"
     echo ""
@@ -112,6 +140,14 @@ run_preflight() {
     else
         echo -e "${RED}✗${NC} ArangoDB not accessible"
         errors=$((errors + 1))
+    fi
+
+    # Cross-encoder Reranker (optional but recommended for precision)
+    if curl -s --connect-timeout 2 http://localhost:8082/health >/dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Reranker sidecar (port 8082)"
+    else
+        echo -e "${YELLOW}⚠${NC} Reranker not running (using embedding-only filtering)"
+        echo -e "${DIM}  Start with: cd infra && docker compose --profile with-reranker up -d reranker${NC}"
     fi
 
     # Docker image
@@ -181,6 +217,42 @@ run_preflight() {
     fi
 }
 
+check_reranker_status() {
+    # Check if reranker is responding on port 8082
+    local reranker_url="${RERANKER_URL:-http://localhost:8082}"
+    if curl -s --connect-timeout 2 "${reranker_url}/health" >/dev/null 2>&1; then
+        echo "enabled"
+    elif curl -s --connect-timeout 2 "${reranker_url}" >/dev/null 2>&1; then
+        echo "enabled"
+    else
+        echo "disabled"
+    fi
+}
+
+get_env_value() {
+    # Get env var value, checking .env.benchmark first, then environment
+    local var_name=$1
+    local default_val=${2:-""}
+
+    # Check if set in environment
+    local env_val="${!var_name}"
+    if [ -n "$env_val" ]; then
+        echo "$env_val"
+        return
+    fi
+
+    # Check .env.benchmark file
+    if [ -f "../../.env.benchmark" ]; then
+        local file_val=$(grep "^${var_name}=" "../../.env.benchmark" 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+        if [ -n "$file_val" ]; then
+            echo "$file_val"
+            return
+        fi
+    fi
+
+    echo "$default_val"
+}
+
 archive_results() {
     local benchmark=$1
     local timestamp=$(date +%Y%m%d_%H%M%S)
@@ -188,13 +260,48 @@ archive_results() {
 
     mkdir -p "$run_dir"
 
+    # Collect experiment configuration
+    local reranker_status=$(check_reranker_status)
+    local skip_consolidation=$(get_env_value "SKIP_CONSOLIDATION" "false")
+    local window_size=$(get_env_value "SLIDING_WINDOW_SIZE" "20")
+    local window_overlap=$(get_env_value "SLIDING_WINDOW_OVERLAP" "10")
+    local parallel_windows=$(get_env_value "PARALLEL_WINDOWS" "false")
+    local max_concurrent=$(get_env_value "MAX_CONCURRENT_WINDOWS" "3")
+    local reranker_threshold=$(get_env_value "RERANKER_THRESHOLD" "0.5")
+
     cat > "$run_dir/metadata.json" << EOF
 {
   "timestamp": "$timestamp",
   "benchmark": "$benchmark",
   "n_questions": "${N_QUESTIONS:-default}",
   "git_commit": "$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')",
-  "git_branch": "$(git branch --show-current 2>/dev/null || echo 'unknown')"
+  "git_branch": "$(git branch --show-current 2>/dev/null || echo 'unknown')",
+  "experiment_config": {
+    "reranker": {
+      "status": "$reranker_status",
+      "url": "${RERANKER_URL:-http://localhost:8082}",
+      "threshold": "$reranker_threshold"
+    },
+    "consolidation": {
+      "skip_consolidation": $skip_consolidation,
+      "sliding_window_size": $window_size,
+      "sliding_window_overlap": $window_overlap,
+      "parallel_windows": $parallel_windows,
+      "max_concurrent_windows": $max_concurrent
+    },
+    "pipeline": {
+      "full_pipeline": $LONGMEMEVAL_FULL_PIPELINE,
+      "graph_expansion": $LONGMEMEVAL_GRAPH_EXPANSION,
+      "sync_consolidation": $LONGMEMEVAL_SYNC_CONSOLIDATION,
+      "setting": "${LONGMEMEVAL_SETTING:-oracle}"
+    }
+  },
+  "environment": {
+    "python_version": "$(python3 --version 2>/dev/null | cut -d' ' -f2 || echo 'unknown')",
+    "node_version": "$(node --version 2>/dev/null || echo 'unknown')",
+    "os": "$(uname -s) $(uname -r)",
+    "arch": "$(uname -m)"
+  }
 }
 EOF
 
@@ -202,14 +309,37 @@ EOF
     cp output/msmarco_*.{csv,json} "$run_dir/" 2>/dev/null || true
     cp output/freshness*.json "$run_dir/" 2>/dev/null || true
     cp output/relationrecall_*.{csv,json} "$run_dir/" 2>/dev/null || true
+    cp output/longmemeval_*.{csv,json} "$run_dir/" 2>/dev/null || true
 
     echo -e "${GREEN}Results archived to:${NC} $run_dir"
+
+    # Show experiment config summary
+    echo -e "${DIM}  Reranker: $reranker_status | Window: ${window_size} | Skip consolidation: $skip_consolidation${NC}"
 }
 
 run_docker() {
     local script=$1
     shift
-    docker compose run --rm benchmark python3 "src/${script}.py" "$@" $EXTRA_ARGS
+
+    local env_flags=""
+    local build_flags=""
+
+    if [ "$VERBOSE" = true ]; then
+        echo -e "${DIM}[verbose] LOG_LEVEL=DEBUG, streaming output${NC}"
+        env_flags="-e LOG_LEVEL=DEBUG"
+    else
+        build_flags="--quiet"
+    fi
+
+    # Build image (quiet unless verbose)
+    if [ "$VERBOSE" = true ]; then
+        docker compose build
+    else
+        docker compose build --quiet 2>/dev/null || docker compose build
+    fi
+
+    # Run container
+    docker compose run --rm $env_flags benchmark python3 "src/${script}.py" "$@" $EXTRA_ARGS
 }
 
 run_hotpot() {
@@ -258,6 +388,67 @@ run_msmarco() {
     run_docker msmarco --n "$n" --k 10 --run_kp true --run_vector false
 
     [ "$ARCHIVE" = true ] && archive_results "msmarco_n${n}"
+}
+
+run_longmemeval() {
+    local n=${N_QUESTIONS:-500}
+    local setting=${LONGMEMEVAL_SETTING:-oracle}
+    local ability=${LONGMEMEVAL_ABILITY:-""}
+    local full_pipeline=${LONGMEMEVAL_FULL_PIPELINE:-false}
+    local graph_expansion=${LONGMEMEVAL_GRAPH_EXPANSION:-false}
+    local sync_consolidation=${LONGMEMEVAL_SYNC_CONSOLIDATION:-false}
+
+    echo -e "${BOLD}${BLUE}━━━ 🎯 LongMemEval Benchmark (ICLR 2025) ━━━${NC}"
+    echo -e "${DIM}Metric: QA Accuracy (GPT-4o judge), Recall@k, NDCG@k${NC}"
+    echo -e "${DIM}Setting: $setting | Questions: $n${NC}"
+    if [ -n "$ability" ]; then
+        echo -e "${DIM}Ability filter: $ability${NC}"
+    fi
+    if [ "$full_pipeline" = true ]; then
+        echo -e "${CYAN}🔥 Full Pipeline: sync consolidation + graph expansion + reranking${NC}"
+    elif [ "$graph_expansion" = true ]; then
+        echo -e "${CYAN}Graph expansion enabled (1-hop + reranking)${NC}"
+    elif [ "$sync_consolidation" = true ]; then
+        echo -e "${CYAN}Sync consolidation enabled${NC}"
+    fi
+    echo -e "${GREEN}This is the PRIMARY external benchmark for credibility.${NC}"
+    echo ""
+
+    local ability_flag=""
+    if [ -n "$ability" ]; then
+        ability_flag="--ability $ability"
+    fi
+
+    local pipeline_flags=""
+    if [ "$full_pipeline" = true ]; then
+        pipeline_flags="--full-pipeline"
+    elif [ "$graph_expansion" = true ]; then
+        pipeline_flags="--graph-expansion"
+    elif [ "$sync_consolidation" = true ]; then
+        pipeline_flags="--sync-consolidation"
+    fi
+
+    run_docker longmemeval --n "$n" --setting "$setting" $ability_flag $pipeline_flags
+
+    [ "$ARCHIVE" = true ] && archive_results "longmemeval_${setting}_n${n}"
+
+    if [ -f "output/longmemeval_summary.json" ]; then
+        echo ""
+        echo -e "${BOLD}Results:${NC}"
+        python3 -c "
+import json
+with open('output/longmemeval_summary.json') as f:
+    d = json.load(f)
+m = d.get('metrics', {})
+print(f\"  QA Accuracy:    {m.get('accuracy', 0)*100:.1f}%  <- KEY METRIC\")
+print(f\"  Recall@5:       {m.get('recall_at_5', 0)*100:.1f}%\")
+print(f\"  NDCG@5:         {m.get('ndcg_at_5', 0):.3f}\")
+print()
+print('  By Ability:')
+for ability, acc in m.get('by_ability', {}).items():
+    print(f\"    {ability}: {acc*100:.1f}%\")
+"
+    fi
 }
 
 run_relationrecall() {
@@ -335,6 +526,176 @@ if 'nli_f1' in m:
     fi
 }
 
+run_sweep() {
+    local param=${SWEEP_PARAM:-reranker}
+    local n=${N_QUESTIONS:-10}
+    local runs=${NUM_RUNS:-3}
+    local values=${SWEEP_VALUES}
+
+    # Set default values based on parameter
+    if [ -z "$values" ]; then
+        if [ "$param" = "reranker" ]; then
+            values="0.25,0.30,0.35,0.40,0.45"
+        elif [ "$param" = "embedding" ]; then
+            values="0.20,0.25,0.30,0.35,0.40"
+        else
+            echo -e "${RED}Unknown parameter: $param (use: reranker, embedding)${NC}"
+            exit 1
+        fi
+    fi
+
+    # Convert to array
+    IFS=',' read -ra VALUE_ARRAY <<< "$values"
+    local total_runs=$((${#VALUE_ARRAY[@]} * runs))
+
+    echo -e "${BOLD}${BLUE}━━━ Hyperparameter Sweep ━━━${NC}"
+    echo -e "Parameter:    ${CYAN}${param}_threshold${NC}"
+    echo -e "Values:       ${CYAN}${values}${NC}"
+    echo -e "Runs/value:   ${CYAN}${runs}${NC}"
+    echo -e "Clusters:     ${CYAN}${n}${NC}"
+    echo -e "Total runs:   ${CYAN}${total_runs}${NC}"
+    echo ""
+
+    # Create sweep results directory
+    local sweep_dir="runs/sweep_$(date +%Y%m%d_%H%M%S)_${param}"
+    mkdir -p "$sweep_dir"
+
+    # Store sweep config
+    cat > "$sweep_dir/config.json" << EOF
+{
+  "parameter": "${param}_threshold",
+  "values": [${values}],
+  "runs_per_value": ${runs},
+  "n_clusters": ${n},
+  "timestamp": "$(date -Iseconds)"
+}
+EOF
+
+    # Project root for worker restart
+    local project_root="$SCRIPT_DIR/../.."
+
+    # Track best (use files instead of associative arrays for macOS compatibility)
+    local best_threshold=""
+    local best_mean=0
+
+    for threshold in "${VALUE_ARRAY[@]}"; do
+        echo -e "${BOLD}${CYAN}━━━ Testing threshold: $threshold ━━━${NC}"
+
+        # Set env var for this threshold
+        local env_var=""
+        if [ "$param" = "reranker" ]; then
+            env_var="RERANKER_THRESHOLD=$threshold"
+        else
+            env_var="EMBEDDING_THRESHOLD=$threshold"
+        fi
+
+        # Restart workers with new threshold
+        echo -e "${DIM}Restarting workers with $env_var...${NC}"
+        pkill -f "tsx.*background-workers" 2>/dev/null || true
+        sleep 2
+
+        cd "$project_root"
+        eval "$env_var npm run dev:background-workers" > /tmp/kp-workers-sweep.log 2>&1 &
+        sleep 5
+
+        if ! pgrep -f "background-workers" > /dev/null; then
+            echo -e "${RED}Failed to start workers${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}Workers restarted${NC}"
+
+        # Run multiple times
+        local f1_values=()
+        for ((run_num=1; run_num<=runs; run_num++)); do
+            echo -e "${DIM}Run $run_num/$runs...${NC}"
+
+            cd "$SCRIPT_DIR"
+
+            # Run benchmark and extract F1
+            local output
+            output=$(./bench relationrecall --clean -n "$n" --skip-preflight --no-archive 2>&1)
+
+            local f1
+            # macOS compatible - use sed instead of grep -P
+            f1=$(echo "$output" | grep "F1 Score:" | head -1 | sed 's/.*F1 Score:[[:space:]]*//' | sed 's/%.*//')
+            if [ -z "$f1" ]; then
+                f1=$(echo "$output" | grep "Relation F1:" | head -1 | sed 's/.*Relation F1:[[:space:]]*//' | sed 's/%.*//')
+            fi
+
+            f1_values+=("$f1")
+            echo -e "  F1: ${GREEN}${f1}%${NC}"
+
+            # Save individual run
+            echo "$f1" >> "$sweep_dir/threshold_${threshold}.txt"
+        done
+
+        # Calculate mean
+        local sum=0
+        for v in "${f1_values[@]}"; do
+            sum=$(echo "$sum + $v" | bc)
+        done
+        local mean=$(echo "scale=2; $sum / ${#f1_values[@]}" | bc)
+
+        # Calculate std dev
+        local sq_sum=0
+        for v in "${f1_values[@]}"; do
+            local diff=$(echo "$v - $mean" | bc)
+            sq_sum=$(echo "$sq_sum + ($diff * $diff)" | bc)
+        done
+        local variance=$(echo "scale=4; $sq_sum / ${#f1_values[@]}" | bc)
+        local std=$(echo "scale=2; sqrt($variance)" | bc)
+
+        # Save result to file (macOS compatible - no associative arrays)
+        echo "$mean $std" > "$sweep_dir/result_${threshold}.txt"
+
+        # Track best
+        if (( $(echo "$mean > $best_mean" | bc -l) )); then
+            best_mean=$mean
+            best_threshold=$threshold
+        fi
+
+        echo -e "${BOLD}Threshold $threshold: F1 = ${GREEN}${mean}% ± ${std}%${NC}"
+        echo ""
+    done
+
+    # Summary
+    echo -e "${BOLD}${BLUE}━━━ Sweep Results ━━━${NC}"
+    echo ""
+    printf "%-12s %-20s\n" "Threshold" "F1 (mean ± std)"
+    echo "────────────────────────────────"
+
+    for threshold in "${VALUE_ARRAY[@]}"; do
+        local result_line=$(cat "$sweep_dir/result_${threshold}.txt" 2>/dev/null || echo "? ?")
+        local m=$(echo "$result_line" | awk '{print $1}')
+        local s=$(echo "$result_line" | awk '{print $2}')
+        printf "%-12s %s%% ± %s%%\n" "$threshold" "$m" "$s"
+    done
+
+    echo "────────────────────────────────"
+    echo -e "${BOLD}Best: ${GREEN}$best_threshold${NC} (F1 = ${GREEN}${best_mean}%${NC})"
+    echo ""
+
+    # Save summary
+    cat > "$sweep_dir/summary.json" << EOF
+{
+  "parameter": "${param}_threshold",
+  "best_threshold": $best_threshold,
+  "best_f1_mean": $best_mean,
+  "results": {}
+}
+EOF
+
+    echo -e "${GREEN}Results saved to:${NC} $sweep_dir"
+
+    # Restore default workers
+    echo -e "${DIM}Restoring workers with default settings...${NC}"
+    pkill -f "tsx.*background-workers" 2>/dev/null || true
+    cd "$project_root"
+    npm run dev:background-workers > /tmp/kp-workers.log 2>&1 &
+    sleep 3
+    echo -e "${GREEN}Done!${NC}"
+}
+
 run_all() {
     echo -e "${BOLD}${BLUE}━━━ Running All Benchmarks ━━━${NC}"
     echo ""
@@ -343,6 +704,51 @@ run_all() {
     run_hotpot
     echo ""
     run_msmarco
+}
+
+compare_runs() {
+    echo -e "${BOLD}${BLUE}━━━ Experiment Comparison ━━━${NC}"
+    echo ""
+
+    if [ ! -d "runs" ] || [ -z "$(ls -A runs 2>/dev/null)" ]; then
+        echo "No runs archived yet. Run: ./bench longmemeval"
+        return
+    fi
+
+    # Find LongMemEval runs only (most relevant for comparison)
+    local longmem_runs=$(ls -d runs/*longmemeval* 2>/dev/null | tail -10)
+    if [ -z "$longmem_runs" ]; then
+        echo "No LongMemEval runs found. Run: ./bench longmemeval"
+        return
+    fi
+
+    echo -e "${BOLD}Experiment Configuration vs Accuracy${NC}"
+    echo ""
+    printf "%-22s %-8s %-10s %-8s %-8s %-10s %s\n" "RUN" "ACC%" "RERANKER" "SKIP_CC" "WINDOW" "MULTI-HOP" "NOTES"
+    echo "────────────────────────────────────────────────────────────────────────────────────────────"
+
+    for dir in $longmem_runs; do
+        [ -d "$dir" ] || continue
+        local name=$(basename "$dir" | sed 's/longmemeval_//' | cut -c1-20)
+        local acc="—" reranker="?" skip_cc="?" window="?" multihop="—"
+
+        if [ -f "$dir/longmemeval_summary.json" ]; then
+            acc=$(python3 -c "import json; print(f\"{json.load(open('$dir/longmemeval_summary.json')).get('metrics',{}).get('accuracy',0)*100:.1f}\")" 2>/dev/null || echo "?")
+            multihop=$(python3 -c "import json; print(f\"{json.load(open('$dir/longmemeval_summary.json')).get('metrics',{}).get('by_question_type',{}).get('multi-session',0)*100:.0f}\")" 2>/dev/null || echo "?")
+        fi
+
+        if [ -f "$dir/metadata.json" ]; then
+            reranker=$(python3 -c "import json; m=json.load(open('$dir/metadata.json')); print(m.get('experiment_config',{}).get('reranker',{}).get('status','?'))" 2>/dev/null || echo "?")
+            skip_cc=$(python3 -c "import json; m=json.load(open('$dir/metadata.json')); print('yes' if m.get('experiment_config',{}).get('consolidation',{}).get('skip_consolidation',False) else 'no')" 2>/dev/null || echo "?")
+            window=$(python3 -c "import json; m=json.load(open('$dir/metadata.json')); print(m.get('experiment_config',{}).get('consolidation',{}).get('sliding_window_size','?'))" 2>/dev/null || echo "?")
+        fi
+
+        printf "%-22s %-8s %-10s %-8s %-8s %-10s\n" "$name" "$acc" "$reranker" "$skip_cc" "$window" "$multihop%"
+    done
+
+    echo ""
+    echo -e "${DIM}Legend: ACC%=Overall accuracy, RERANKER=Cross-encoder status, SKIP_CC=Skip card consolidation${NC}"
+    echo -e "${DIM}        WINDOW=Sliding window size, MULTI-HOP=Multi-session question accuracy${NC}"
 }
 
 list_runs() {
@@ -367,7 +773,9 @@ list_runs() {
             n=$(python3 -c "import json; print(json.load(open('$dir/metadata.json')).get('n_questions', '?'))" 2>/dev/null || echo "?")
         fi
 
-        if [ -f "$dir/hotpotqa_summary.json" ]; then
+        if [ -f "$dir/longmemeval_summary.json" ]; then
+            metric=$(python3 -c "import json; print(f\"{json.load(open('$dir/longmemeval_summary.json')).get('metrics',{}).get('accuracy',0)*100:.1f}%\")" 2>/dev/null || echo "?")
+        elif [ -f "$dir/hotpotqa_summary.json" ]; then
             metric=$(python3 -c "import json; print(f\"{json.load(open('$dir/hotpotqa_summary.json')).get('kp',{}).get('avg_sf_f1',0)*100:.1f}%\")" 2>/dev/null || echo "?")
         elif [ -f "$dir/msmarco_summary.json" ]; then
             metric=$(python3 -c "import json; print(f\"{json.load(open('$dir/msmarco_summary.json')).get('kp',{}).get('mrr',0):.3f}\")" 2>/dev/null || echo "?")
@@ -383,8 +791,11 @@ clean_db() {
     echo -e "${BOLD}${BLUE}━━━ Cleaning Benchmark Data ━━━${NC}"
     echo ""
 
+    # Clean up orphan Docker containers from previous runs
+    docker compose down --remove-orphans 2>/dev/null || true
+
     # Remove benchmark facts
-    for ns in hotpotqa freshness msmarco relationrecall; do
+    for ns in hotpotqa freshness msmarco relationrecall longmemeval; do
         result=$(curl -s "http://localhost:8529/_db/knowledgeplane/_api/cursor" \
             -u root:root -H "Content-Type: application/json" \
             -d "{\"query\": \"FOR f IN facts FILTER STARTS_WITH(f.metadata.namespace, \\\"$ns\\\") REMOVE f IN facts RETURN 1\"}" \
@@ -419,6 +830,23 @@ clean_db() {
         -d '{"query": "FOR t IN worker_triggers REMOVE t IN worker_triggers"}' > /dev/null 2>&1
     echo "  Cleared worker_triggers"
 
+    # Restart background workers to clear in-memory state
+    if pgrep -f "background-workers" > /dev/null 2>&1; then
+        echo -e "  ${YELLOW}Restarting background workers...${NC}"
+        pkill -f "tsx.*background-workers" 2>/dev/null || true
+        sleep 2
+        # Re-launch workers if npm run dev is running
+        if pgrep -f "npm run dev" > /dev/null 2>&1; then
+            # Workers will auto-restart via npm run dev
+            sleep 3
+            if pgrep -f "background-workers" > /dev/null 2>&1; then
+                echo "  Restarted background workers"
+            else
+                echo -e "  ${YELLOW}Workers not auto-restarted (start manually: npm run dev:background-workers)${NC}"
+            fi
+        fi
+    fi
+
     echo -e "${GREEN}Done!${NC}"
 }
 
@@ -426,8 +854,12 @@ clean_db() {
 COMMAND=""
 while [[ $# -gt 0 ]]; do
     case $1 in
-        hotpot|freshness|msmarco|relationrecall|all|preflight|runs|clean|help|-h|--help)
+        longmemeval|hotpot|freshness|msmarco|relationrecall|sweep|all|preflight|runs|compare|clean|help|-h|--help)
             COMMAND=$1; shift ;;
+        --param)
+            SWEEP_PARAM=$2; shift 2 ;;
+        --values)
+            SWEEP_VALUES=$2; shift 2 ;;
         -n|--n)
             N_QUESTIONS=$2; shift 2 ;;
         --quick)
@@ -448,6 +880,20 @@ while [[ $# -gt 0 ]]; do
             NUM_RUNS=$2; shift 2 ;;
         --clean)
             AUTO_CLEAN=true; shift ;;
+        --no-clean)
+            AUTO_CLEAN=false; shift ;;
+        --setting)
+            LONGMEMEVAL_SETTING=$2; shift 2 ;;
+        --ability)
+            LONGMEMEVAL_ABILITY=$2; shift 2 ;;
+        --full-pipeline)
+            LONGMEMEVAL_FULL_PIPELINE=true; shift ;;
+        --graph-expansion)
+            LONGMEMEVAL_GRAPH_EXPANSION=true; shift ;;
+        --sync-consolidation)
+            LONGMEMEVAL_SYNC_CONSOLIDATION=true; shift ;;
+        -v|--verbose)
+            VERBOSE=true; shift ;;
         --)
             shift; EXTRA_ARGS="$*"; break ;;
         *)
@@ -464,12 +910,21 @@ case $COMMAND in
         run_preflight ;;
     runs)
         list_runs ;;
+    compare)
+        compare_runs ;;
     clean)
         clean_db ;;
+    longmemeval)
+        [ "$SKIP_PREFLIGHT" = false ] && run_preflight
+        [ "$AUTO_CLEAN" = true ] && clean_db
+        run_longmemeval ;;
     relationrecall)
         [ "$SKIP_PREFLIGHT" = false ] && run_preflight true  # Check workers for relationrecall
         [ "$AUTO_CLEAN" = true ] && clean_db
         run_relationrecall ;;
+    sweep)
+        [ "$SKIP_PREFLIGHT" = false ] && run_preflight true
+        run_sweep ;;
     hotpot|freshness|msmarco|all)
         [ "$SKIP_PREFLIGHT" = false ] && run_preflight
         [ "$AUTO_CLEAN" = true ] && clean_db

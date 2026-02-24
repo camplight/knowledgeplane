@@ -1,16 +1,14 @@
-# KnowledgePlane Benchmarks - Simplified Docker Compose
-# Single service with env-based configuration
+# KnowledgePlane Benchmarks - Docker Container
 #
-# Usage:
-#   docker compose run --rm benchmark                    # Default: hotpot n=20
-#   docker compose run --rm benchmark hotpot -n 100      # Custom
-#   docker compose run --rm benchmark freshness          # Freshness benchmark
-#   docker compose run --rm benchmark msmarco            # MS MARCO benchmark
-#   docker compose run --rm benchmark relationrecall     # RelationRecall benchmark
+# IMPORTANT: Use the bench CLI, not docker compose directly!
 #
-# RelationRecall options:
-#   docker compose run --rm benchmark python3 src/relationrecall.py --n 10 --consolidation-timeout 600
-#   docker compose run --rm benchmark python3 src/relationrecall.py --dataset redocred --use-nli
+#   ./bench longmemeval              # Primary benchmark (LongMemEval)
+#   ./bench hotpot -n 100            # HotpotQA
+#   ./bench freshness                # Freshness benchmark
+#   ./bench relationrecall -n 10     # RelationRecall
+#   ./bench --help                   # All options
+#
+# This file is used internally by the bench CLI.
 
 services:
   benchmark:
@@ -22,6 +20,8 @@ services:
     volumes:
       - ./output:/app/output
       - ./runs:/app/runs
+      - ./data:/app/data
+      - ./src:/app/src:ro
     env_file: ../../.env
     environment:
       - PYTHONUNBUFFERED=1

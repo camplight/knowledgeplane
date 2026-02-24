@@ -1,12 +1,28 @@
 # KnowledgePlane Benchmark Roadmap
 
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-20
 **Status:** Active
 **Related:** [ADR-BENCH-001](../../../docs/ADR-BENCH-001-benchmark-strategy.md)
 
 ## Executive Summary
 
 KnowledgePlane is **knowledge infrastructure for AI** — not a memory layer for chatbots. Our benchmarks must prove this positioning against Mem0, Zep, and pure vector stores.
+
+### Strategic Decision (2026-02-20)
+
+> **LongMemEval is our PRIMARY external benchmark.**
+>
+> - ✅ **Neutral third party** (UCLA/Tencent, not a competitor)
+> - ✅ **ICLR 2025** (top-tier venue, academic credibility)
+> - ✅ **No competitor politics** (unlike LoCoMo - see credibility concerns below)
+> - ✅ **Tests 5 memory abilities** (not just recall)
+
+**Benchmark tiers:**
+| Tier | Benchmark | Purpose |
+|------|-----------|---------|
+| **External credibility** | LongMemEval | Publishable results |
+| **Competitor comparison** | LoCoMo | Internal only (contested methodology) |
+| **Development iteration** | RelationRecall | Fast internal feedback |
 
 ### The Core Insight
 
@@ -18,7 +34,7 @@ KnowledgePlane is **knowledge infrastructure for AI** — not a memory layer for
 ### The AI Librarian (Primary UVP)
 
 KnowledgePlane's **CardConsolidator** ("AI Librarian") runs every 5 minutes and:
-1. **Auto-discovers relations** between facts using gpt-5.1 (configurable via `getChatModel()`)
+1. **Auto-discovers relations** between facts using gpt-5.2 (configurable via `getChatModel()`)
 2. **Creates graph edges** (FactRelations) with typed relationships
 3. **Consolidates clusters** into KnowledgeCards with title/summary/content
 
@@ -48,20 +64,36 @@ KnowledgePlane's **CardConsolidator** ("AI Librarian") runs every 5 minutes and:
 Phase 1: Retrieval (DONE) ──────────────────────────────────────────────────────┐
   └─ Freshness ✅, MS MARCO ✅, HotPotQA SF-F1 ✅                                │
                                                                                  │
-Phase 2: Organization (IN PROGRESS) ────────────────────────────────────────────┤
-  └─ RelationRecall 🔄, ConsoliMem ⏳                                            │
-  └─ UNIQUE: No competitor does auto-relation discovery                         │
+Phase 2A: External Credibility (IMMEDIATE PRIORITY) ────────────────────────────┤
+  └─ LongMemEval 🎯 (ICLR 2025, neutral, 5 memory abilities)                    │
+  └─ TARGET: Beat GPT-4o + RAG baselines, publish results                       │
+                                                                                 │
+Phase 2B: Internal Development (ONGOING) ───────────────────────────────────────┤
+  └─ RelationRecall 🔄 (internal iteration, not publishable)                    │
+  └─ ConsoliMem ⏳ (KnowledgeCard quality)                                       │
                                                                                  │
 Phase 3: Extended Retrieval (PLANNED) ──────────────────────────────────────────┤
   └─ GraphHop-N (multi-hop traversal)                                           │
                                                                                  │
-Phase 4: Competitive (REQUIRES ANSWER SYNTHESIS) ───────────────────────────────┤
-  └─ LoCoMo (vs Mem0 68.4%)                                                     │
-  └─ LongMemEval (vs Zep 94.8% DMR)                                             │
+Phase 4: Competitor Comparison (INTERNAL ONLY) ─────────────────────────────────┤
+  └─ LoCoMo ⚠️ (vs Mem0 - contested methodology, internal only)                 │
   └─ HotPotQA EM (vs Cognee 66.7%)                                              │
 ```
 
 **Answer Synthesis Note:** Dashboard chat already synthesizes answers. Need to expose via REST API for benchmarking.
+
+### LoCoMo Credibility Concerns
+
+> **⚠️ LoCoMo is politically charged - use for internal comparison only.**
+>
+> From [GitHub issue #5](https://github.com/getzep/zep-papers/issues/5):
+> - **Mem0 created LoCoMo** → results favor their methodology
+> - **Zep disputes methodology** → claims calculation errors (58% vs 84% gap)
+> - **Adversarial questions excluded** → cherry-picking accusations
+> - **Single-run results** → vs Mem0's 10-run average requirement
+>
+> **Risk:** If KP scores well, Zep questions methodology. If KP scores poorly, Mem0 claims victory.
+> **Decision:** Run LoCoMo internally to know where we stand, but don't publish results.
 
 ---
 
@@ -260,30 +292,95 @@ Measure:
 - [ ] Implement `bench_locomo.py`
 - [ ] Run n=100 subset benchmark
 
-### 4.2 LongMemEval (Zep/Graphiti's Benchmark)
-**What it measures:** Temporal reasoning across memory — can the system answer questions like "What did the user say about X *last week* vs *yesterday*?"
+## Phase 2A: LongMemEval (IMMEDIATE PRIORITY) 🎯
 
-**"Temporal boundaries"** means:
-- Questions that reference time periods (last week, yesterday, before the trip)
-- Tests if the system indexes and queries temporal metadata
-- Example: "What was my opinion about React before I tried Vue?"
+**Paper:** "LongMemEval: Benchmarking Chat Assistants on Long-Term Interactive Memory" (ICLR 2025)
+**Authors:** UCLA/Tencent (neutral third party)
+**GitHub:** [xiaowu0162/LongMemEval](https://github.com/xiaowu0162/LongMemEval)
+**Dataset:** [HuggingFace](https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned)
 
-**Zep Results:** +18.5% improvement over baselines, 94.8% DMR
+### Why LongMemEval First
 
-**KP Requirements:**
-1. ✅ Fact retrieval with timestamps
-2. ❌ Temporal indexing (facts have `created_at`, but not query-able by time range)
-3. ❌ Answer synthesis endpoint
-4. ❌ Temporal reasoning in prompts
+| Factor | LongMemEval | LoCoMo | RelationRecall |
+|--------|-------------|--------|----------------|
+| **Credibility** | ICLR 2025, neutral | Contested (Mem0 vs Zep) | Internal only |
+| **Politics** | None | High | None |
+| **Publishable** | Yes | Risky | No |
+| **Implementation** | 3-4 days | Similar | Done |
 
-**Scope:** Temporal reasoning + knowledge update consistency
+### The 5 Memory Abilities Tested
 
-**Target:** Match or beat Zep's 94.8% DMR
+| Ability | Code | Description | KP Advantage |
+|---------|------|-------------|--------------|
+| **Information Extraction** | IE | Recall specific details from history | Graph traversal |
+| **Multi-Session Reasoning** | MR | Synthesize across sessions | FactRelations |
+| **Temporal Reasoning** | TR | Process timestamps and time mentions | `created_at` indexing |
+| **Knowledge Updates** | KU | Track changes over time | Fact versioning |
+| **Abstention** | ABS | Decline unanswerable questions | Confidence scoring |
 
-**Action items:**
-- [ ] Add temporal filters to fact search API
-- [ ] Implement `bench_longmemeval.py`
-- [ ] Run n=100 subset benchmark
+### Dataset Details
+
+| Setting | Tokens | Sessions | Questions |
+|---------|--------|----------|-----------|
+| **LongMemEvalS** | ~115K | ~40 | 500 |
+| **LongMemEvalM** | ~1.5M | ~500 | 500 |
+| **Oracle** | Variable | Evidence only | 500 |
+
+### Evaluation Metrics
+
+- **QA Accuracy**: GPT-4o as automated judge (>97% human agreement)
+- **Recall@k**: Fraction of relevant sessions in top-k
+- **NDCG@k**: Normalized Discounted Cumulative Gain
+- **Abstention**: Correctly refusing unanswerable questions
+
+### KP Requirements
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Fact retrieval with timestamps | ✅ Ready | `created_at` field |
+| Multi-session retrieval | ✅ Ready | Embedding search + graph |
+| Temporal filtering | ⚙️ Need | Add date range to search API |
+| Answer synthesis endpoint | ⚙️ Need | Expose chat.ts via REST |
+| Abstention threshold | ⚙️ Need | Confidence-based "I don't know" |
+
+### Implementation Plan (3-4 days)
+
+| Day | Task | Deliverable |
+|-----|------|-------------|
+| 1 | Download dataset, create adapter | `src/longmemeval.py` skeleton |
+| 1 | Map sessions → KP facts with metadata | `session_id`, `turn_idx` in metadata |
+| 2 | Add temporal filtering to search API | `created_after`, `created_before` params |
+| 2 | Implement GPT-4o evaluation judge | `lib/longmemeval_judge.py` |
+| 3 | Add answer synthesis endpoint | `POST /api/qa/answer` |
+| 3 | Implement abstention logic | Confidence threshold for "I don't know" |
+| 4 | Run LongMemEvalS (n=500) | Full benchmark results |
+
+### Target Results
+
+| Metric | GPT-4o Baseline | KP Target | Why KP Can Win |
+|--------|-----------------|-----------|----------------|
+| Oracle Accuracy | 92% | 90%+ | Graph traversal for multi-hop |
+| Full Accuracy | 58% | 65%+ | Relations help retrieval |
+| Temporal | 45% | 60%+ | Indexed timestamps |
+| Abstention | Low | High | Confidence scoring |
+
+### Action Items
+
+- [x] Research LongMemEval requirements
+- [ ] Download dataset from HuggingFace
+- [ ] Create `src/longmemeval.py` benchmark
+- [ ] Add `/api/qa/answer` endpoint
+- [ ] Add temporal filtering to fact search
+- [ ] Implement GPT-4o judge
+- [ ] Run LongMemEvalS benchmark
+- [ ] Compare vs published baselines
+
+---
+
+### 4.2 LoCoMo (Internal Comparison Only) ⚠️
+**What it measures:** Long-context conversation memory
+
+**⚠️ INTERNAL USE ONLY** - See credibility concerns above
 
 ### 4.3 Competitor Benchmark Comparison Matrix
 
@@ -373,17 +470,22 @@ cd tests/benchmarks
 ./bench freshness                             # Freshness
 ./bench msmarco                               # MS MARCO
 
-# Phase 2: AI Librarian (TODO)
-./bench -- src/librarian.py --n 100           # RelationRecall
-./bench -- src/consolidation.py --n 50        # ConsoliMem
+# Phase 2A: External Credibility (IMMEDIATE) 🎯
+./bench longmemeval                           # LongMemEval (ICLR 2025)
+./bench longmemeval --setting oracle          # Oracle setting (evidence only)
+./bench longmemeval --setting s               # Standard (115K tokens)
+./bench longmemeval --setting m               # Extended (1.5M tokens)
+
+# Phase 2B: Internal Development (ONGOING)
+./bench relationrecall                        # RelationRecall (internal)
+./bench -- src/consolidation.py --n 50        # ConsoliMem (TODO)
 
 # Phase 3: Retrieval Quality (DONE)
 ./bench hotpot                                # HotpotQA SF-F1
 ./bench -- src/graphhop.py --n 200            # Multi-hop traversal (TODO)
 
-# Phase 4: Competitive (TODO)
-./bench -- src/locomo.py --n 100              # vs Mem0
-./bench -- src/longmemeval.py --n 100         # vs Zep
+# Phase 4: Competitor Comparison (INTERNAL ONLY)
+./bench -- src/locomo.py --n 100              # vs Mem0 (internal only!)
 ```
 
 ---
@@ -426,6 +528,11 @@ cd tests/benchmarks
 
 | Date | Change |
 |------|--------|
+| 2026-02-20 | **STRATEGIC SHIFT: LongMemEval as primary external benchmark** |
+| 2026-02-20 | Added LoCoMo credibility concerns (Mem0 vs Zep dispute) |
+| 2026-02-20 | Moved LongMemEval to Phase 2A (immediate priority) |
+| 2026-02-20 | Added detailed LongMemEval implementation plan (3-4 days) |
+| 2026-02-20 | RelationRecall demoted to internal development benchmark |
 | 2026-02-17 | Added phased benchmark strategy visualization |
 | 2026-02-17 | Expanded Phase 4: LoCoMo, LongMemEval with requirements |
 | 2026-02-17 | Added temporal boundaries explanation for LongMemEval |

@@ -1777,60 +1777,6 @@ def compute_supporting_facts_metrics(
     }
 
 
-def compute_retrieval_metrics(
-    retrieved_docs: List[str],
-    supporting_facts: List[Tuple[str, int]],
-    doc_titles: Dict[str, str]
-) -> Tuple[float, float, int, int]:
-    """
-    DEPRECATED: Use compute_supporting_facts_metrics instead.
-
-    Compute document-level retrieval metrics for HotPotQA.
-    This only checks if we retrieved documents with the right titles,
-    not the specific sentences - use compute_supporting_facts_metrics for that.
-
-    Args:
-        retrieved_docs: List of retrieved document contents
-        supporting_facts: List of [title, sent_idx] from HotPotQA
-        doc_titles: Mapping of doc content to title
-
-    Returns:
-        Tuple of (recall@k, mrr, support_found, support_total)
-    """
-    if not supporting_facts:
-        return 0.0, 0.0, 0, 0
-
-    # Extract unique supporting fact titles
-    support_titles = set(title for title, _ in supporting_facts)
-    support_total = len(support_titles)
-
-    if support_total == 0:
-        return 0.0, 0.0, 0, 0
-
-    # Check which supporting titles are in retrieved docs
-    found_titles = set()
-    first_rank = None
-
-    for rank, doc_content in enumerate(retrieved_docs, 1):
-        # Get title for this doc
-        doc_title = doc_titles.get(doc_content, "")
-
-        if doc_title in support_titles and doc_title not in found_titles:
-            found_titles.add(doc_title)
-            if first_rank is None:
-                first_rank = rank
-
-    support_found = len(found_titles)
-
-    # Recall@k: fraction of supporting facts found
-    recall_at_k = support_found / support_total
-
-    # MRR: 1/rank of first relevant document found
-    mrr = 1.0 / first_rank if first_rank else 0.0
-
-    return recall_at_k, mrr, support_found, support_total
-
-
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(

@@ -62,7 +62,7 @@ This report consolidates findings from swarm agent audits and SOTA web research 
 
 **Problem:** GPT-4o deprecated on Feb 17, 2026. API calls will fail.
 
-**Status:** ✅ **FIXED** - Migrated to `gpt-5.1` with single source of truth in `@knowledgeplane/aimodel/constants.ts`
+**Status:** ✅ **FIXED** - Migrated to `gpt-5.2` with single source of truth in `@knowledgeplane/aimodel/constants.ts`
 
 ---
 
@@ -91,7 +91,11 @@ This report consolidates findings from swarm agent audits and SOTA web research 
 
 **SOTA Solution:** [EDC Framework](https://arxiv.org/html/2510.20345v1): Extract → Define → Canonicalize (3 stages)
 
-**Status:** ❌ **TESTED BUT REVERTED** - Validation pass decreased F1 from 57.6% to 30.5%. The validator rejected correct relations while keeping false positives. May need different prompt engineering or model.
+**Status:** ✅ **RE-ENABLED WITH TUNING** - LLM verification now enabled by default with:
+- Confidence threshold lowered from 0.75 to 0.5 for better recall
+- Only verifies strong claims (causes, contradicts, depends_on)
+- Weak relations (related_to, references) pass through without verification
+- Configurable via `LLM_VERIFY_ENABLED` and `VERIFICATION_CONFIDENCE_THRESHOLD` env vars
 
 ---
 
@@ -111,7 +115,7 @@ This report consolidates findings from swarm agent audits and SOTA web research 
 
 **Problem:** Benchmark triggers consolidation by writing directly to ArangoDB with hardcoded credentials (`root:root`).
 
-**Recommendation:** Add REST API endpoint for triggering consolidation.
+**Status:** ✅ **FIXED** - Benchmarks now use `trigger-consolidation?wait=true` API endpoint which invokes the actual CardConsolidator. Deleted 260 lines of duplicated `consolidate-sync` code from server.ts.
 
 ---
 
@@ -165,8 +169,11 @@ This report consolidates findings from swarm agent audits and SOTA web research 
 1. ✅ **Gap #1 - Index-Based Matching**: Changed from content matching to `from_index`/`to_index`
 2. ✅ **Gap #2 - Sliding Window**: 50% overlap batching catches cross-batch relations
 3. ✅ **Gap #3 - Hybrid Retrieval**: Embedding pre-filtering with AI hints
-4. ✅ **Gap #4 - Model Migration**: `gpt-4o` → `gpt-5.1`
+4. ✅ **Gap #4 - Model Migration**: `gpt-4o` → `gpt-5.2`
 5. ✅ **Gap #10 - Relation Types Sync**: Added `contradicts` to benchmark
+6. ✅ **Gap #8 - Unified Consolidation**: Deleted 260 lines of duplicated server.ts code, benchmarks now use actual CardConsolidator via `trigger-consolidation?wait=true`
+7. ✅ **Gap #6 - LLM Verification Re-enabled**: Confidence threshold 0.5, verifies strong claims only (causes/contradicts/depends_on)
+8. ✅ **Shared Preflight Module**: Created `/tests/benchmarks/src/lib/preflight.py` consolidating ~200 lines of duplicated preflight checks
 
 **Results Improvement:**
 - Baseline (n=5): F1=30.8%, P=25%, R=40%

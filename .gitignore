@@ -7,3 +7,22 @@ apps/mcp-server/dist
 coverage
 .next
 dist
+# Claude-Flow runtime state
+.swarm/
+**/.swarm/
+.claude-flow/daemon-state.json
+.claude-flow/daemon.pid
+**/.claude-flow/
+
+# Benchmark run outputs (local only)
+tests/benchmarks/runs/
+tests/benchmarks/data/
+
+# Local benchmark config
+.env.benchmark
+
+# Debug scripts
+packages/db/test-vector-index.ts
+test-vector-simple.mjs
+setup_workspace.aql
+scripts/seed-benchmark-db.ts

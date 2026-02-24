@@ -1,0 +1,323 @@
+================================================================================
+                    LONGMEMEVAL FULL PIPELINE ARCHITECTURE
+                         KnowledgePlane Benchmark Suite
+================================================================================
+
+LEGEND:
+  [Service]     Docker/Host service
+  (Process)     In-memory process step
+  {Data}        Data structure
+  -->           Sync call
+  ..>           Async/background
+  ==>           Data flow
+
+================================================================================
+                              COMPONENT DIAGRAM
+================================================================================
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                         DOCKER CONTAINER                                 │
+  │  ┌───────────────────────────────────────────────────────────────────┐  │
+  │  │                    bench_longmemeval.py                           │  │
+  │  │                                                                   │  │
+  │  │   ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐   │  │
+  │  │   │   Ingestion  │ -> │   Retrieval      │ -> │   Scoring    │   │  │
+  │  │   │   Pipeline   │    │   Pipeline       │    │   Pipeline   │   │  │
+  │  │   └──────────────┘    └──────────────────┘    └──────────────┘   │  │
+  │  │          │                    │                      │           │  │
+  │  └──────────│────────────────────│──────────────────────│───────────┘  │
+  │             │                    │                      │              │
+  │  ┌──────────▼────────────────────▼──────────────────────▼───────────┐  │
+  │  │                  HTTPKnowledgePlaneAdapter                       │  │
+  │  │                                                                   │  │
+  │  │  Methods:                                                         │  │
+  │  │  - ingest_documents()           POST /api/facts                   │  │
+  │  │  - trigger_consolidation_sync() POST /api/facts/consolidate-sync  │  │
+  │  │  - query()                      POST /api/facts/search            │  │
+  │  │  - query_with_graph_expansion() (NEW - combines below)            │  │
+  │  │  - get_related_facts()          GET /api/facts/{id}/relations     │  │
+  │  │  - _rerank_for_query()          POST reranker:8082/rerank         │  │
+  │  │                                                                   │  │
+  │  └───────────────────────────────────────────────────────────────────┘  │
+  │                              │ │ │                                      │
+  └──────────────────────────────│─│─│──────────────────────────────────────┘
+                                 │ │ │
+                                 │ │ │  HTTP (via host.docker.internal)
+                                 │ │ │
+  ┌──────────────────────────────▼─▼─▼──────────────────────────────────────┐
+  │                           HOST MACHINE                                   │
+  │                                                                          │
+  │  ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐ │
+  │  │   REST API         │  │   Background       │  │   Reranker         │ │
+  │  │   :8081            │  │   Workers          │  │   :8082            │ │
+  │  │                    │  │                    │  │                    │ │
+  │  │  /api/facts        │  │  CardConsolidator  │  │  POST /rerank      │ │
+  │  │  /api/facts/search │  │  EmbeddingWorker   │  │  GET /health       │ │
+  │  │  /api/facts/{id}/  │  │                    │  │                    │ │
+  │  │    relations       │  │  (5 min interval)  │  │  BGE-reranker-v2   │ │
+  │  │  /api/facts/       │  │                    │  │                    │ │
+  │  │    consolidate-sync│  │                    │  │                    │ │
+  │  └─────────┬──────────┘  └─────────┬──────────┘  └────────────────────┘ │
+  │            │                       │                                     │
+  │            │         ┌─────────────┘                                     │
+  │            │         │                                                   │
+  │            ▼         ▼                                                   │
+  │  ┌────────────────────────────────────────────────────────────────────┐ │
+  │  │                         ArangoDB :8529                             │ │
+  │  │                                                                    │ │
+  │  │  ┌──────────────┐   ┌──────────────┐   ┌──────────────────────┐   │ │
+  │  │  │    facts     │   │  relations   │   │   knowledge_cards    │   │ │
+  │  │  │  (documents) │<->│   (edges)    │   │    (summaries)       │   │ │
+  │  │  └──────────────┘   └──────────────┘   └──────────────────────┘   │ │
+  │  │         │                  │                                       │ │
+  │  │         └─────────┬────────┘                                       │ │
+  │  │                   │                                                │ │
+  │  │  ┌────────────────▼─────────────────────────────────────────────┐ │ │
+  │  │  │                   knowledge_graph (named graph)              │ │ │
+  │  │  │                                                              │ │ │
+  │  │  │  Vertex: facts                                               │ │ │
+  │  │  │  Edge:   relations                                           │ │ │
+  │  │  │                                                              │ │ │
+  │  │  │  Traversal: FOR v, e IN 1..1 OUTBOUND startVertex GRAPH ... │ │ │
+  │  │  │                                                              │ │ │
+  │  │  └──────────────────────────────────────────────────────────────┘ │ │
+  │  │                                                                    │ │
+  │  └────────────────────────────────────────────────────────────────────┘ │
+  │                                                                          │
+  │  ┌────────────────────────────────────────────────────────────────────┐ │
+  │  │                        OpenAI API                                  │ │
+  │  │                                                                    │ │
+  │  │  - text-embedding-3-small (embedding generation)                  │ │
+  │  │  - gpt-4o-mini (relation extraction, answer generation)           │ │
+  │  │  - gpt-4o (answer evaluation judge)                               │ │
+  │  │                                                                    │ │
+  │  └────────────────────────────────────────────────────────────────────┘ │
+  │                                                                          │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+                           SEQUENCE DIAGRAM: FULL PIPELINE
+================================================================================
+
+  bench_longmemeval.py          REST API :8081          ArangoDB          Reranker :8082
+         │                           │                      │                    │
+         │                           │                      │                    │
+  ═══════╪═══════════════════════════╪══════════════════════╪════════════════════╪═══════
+         │     PHASE 1: INGESTION                           │                    │
+  ═══════╪═══════════════════════════╪══════════════════════╪════════════════════╪═══════
+         │                           │                      │                    │
+         │  For each session:        │                      │                    │
+         │                           │                      │                    │
+         │  POST /api/facts          │                      │                    │
+         │  {content, metadata,      │                      │                    │
+         │   sync_embedding: true}   │                      │                    │
+         │ ─────────────────────────>│                      │                    │
+         │                           │                      │                    │
+         │                           │  INSERT fact         │                    │
+         │                           │ ────────────────────>│                    │
+         │                           │                      │                    │
+         │                           │  Generate embedding  │                    │
+         │                           │  (OpenAI API)        │                    │
+         │                           │  ···················>│ (stored)           │
+         │                           │                      │                    │
+         │                           │  {fact_id, ...}      │                    │
+         │ <─────────────────────────│                      │                    │
+         │                           │                      │                    │
+  ═══════╪═══════════════════════════╪══════════════════════╪════════════════════╪═══════
+         │     PHASE 2: SYNCHRONOUS CONSOLIDATION           │                    │
+  ═══════╪═══════════════════════════╪══════════════════════╪════════════════════╪═══════
+         │                           │                      │                    │
+         │  POST /api/facts/         │                      │                    │
+         │  consolidate-sync         │                      │                    │
+         │  {fact_ids: [...]}        │                      │                    │
+         │ ─────────────────────────>│                      │                    │
+         │                           │                      │                    │
+         │                           │  ┌──────────────────────────────────────┐ │
+         │                           │  │  CardConsolidator.consolidateSync()  │ │
+         │                           │  │                                      │ │
+         │                           │  │  1. Fetch facts with embeddings      │ │
+         │                           │  │     ────────────────────────────────>│ │
+         │                           │  │                                      │ │
+         │                           │  │  2. Compute pairwise cosine sim      │ │
+         │                           │  │     (threshold >= 0.30)              │ │
+         │                           │  │                                      │ │
+         │                           │  │  3. POST /rerank                     │ │
+         │                           │  │     {pairs: [...], threshold: 0.40}  │ │
+         │                           │  │     ─────────────────────────────────│─────>│
+         │                           │  │                                      │      │
+         │                           │  │     {results: [{score, keep}, ...]}  │      │
+         │                           │  │     <────────────────────────────────│──────│
+         │                           │  │                                      │ │
+         │                           │  │  4. LLM Relation Extraction          │ │
+         │                           │  │     (GPT-4o-mini, CoT reasoning)     │ │
+         │                           │  │     - Entity extraction              │ │
+         │                           │  │     - Confidence >= 0.70             │ │
+         │                           │  │                                      │ │
+         │                           │  │  5. CREATE relations                 │ │
+         │                           │  │     ────────────────────────────────>│ │
+         │                           │  │                                      │ │
+         │                           │  └──────────────────────────────────────┘ │
+         │                           │                      │                    │
+         │  {relations_created: N}   │                      │                    │
+         │ <─────────────────────────│                      │                    │
+         │                           │                      │                    │
+  ═══════╪═══════════════════════════╪══════════════════════╪════════════════════╪═══════
+         │     PHASE 3: RETRIEVAL WITH GRAPH EXPANSION      │                    │
+  ═══════╪═══════════════════════════╪══════════════════════╪════════════════════╪═══════
+         │                           │                      │                    │
+         │  POST /api/facts/search   │                      │                    │
+         │  {query, k: 10}           │                      │                    │
+         │ ─────────────────────────>│                      │                    │
+         │                           │                      │                    │
+         │                           │  Hybrid search       │                    │
+         │                           │  (BM25 + vector)     │                    │
+         │                           │ ────────────────────>│                    │
+         │                           │                      │                    │
+         │  {hits: [...]}            │                      │                    │
+         │ <─────────────────────────│                      │                    │
+         │                           │                      │                    │
+         │  For each top fact:       │                      │                    │
+         │                           │                      │                    │
+         │  GET /api/facts/{id}/     │                      │                    │
+         │  relations                │                      │                    │
+         │ ─────────────────────────>│                      │                    │
+         │                           │                      │                    │
+         │                           │  Graph traversal     │                    │
+         │                           │  (1-hop OUTBOUND)    │                    │
+         │                           │ ────────────────────>│                    │
+         │                           │                      │                    │
+         │  {relations: [...]}       │                      │                    │
+         │ <─────────────────────────│                      │                    │
+         │                           │                      │                    │
+         │  Collect expanded facts   │                      │                    │
+         │  Filter by namespace      │                      │                    │
+         │                           │                      │                    │
+  ═══════╪═══════════════════════════╪══════════════════════╪════════════════════╪═══════
+         │     PHASE 4: QUERY-AWARE RERANKING               │                    │
+  ═══════╪═══════════════════════════╪══════════════════════╪════════════════════╪═══════
+         │                           │                      │                    │
+         │  POST /rerank             │                      │                    │
+         │  {pairs: [(question,      │                      │                    │
+         │           fact.content)   │                      │                    │
+         │           for each],      │                      │                    │
+         │   threshold: 0.30}        │                      │                    │
+         │ ──────────────────────────│──────────────────────│───────────────────>│
+         │                           │                      │                    │
+         │  {results: [{index,       │                      │                    │
+         │             score, keep}  │                      │                    │
+         │             ...]}         │                      │                    │
+         │ <─────────────────────────│──────────────────────│────────────────────│
+         │                           │                      │                    │
+         │  Sort by score            │                      │                    │
+         │  Take top-K               │                      │                    │
+         │                           │                      │                    │
+  ═══════╪═══════════════════════════╪══════════════════════╪════════════════════╪═══════
+         │     PHASE 5: ANSWER GENERATION & EVALUATION      │                    │
+  ═══════╪═══════════════════════════╪══════════════════════╪════════════════════╪═══════
+         │                           │                      │                    │
+         │  Build context from       │                      │                    │
+         │  reranked facts           │                      │                    │
+         │                           │                      │                    │
+         │  ┌───────────────────────────────────────────────────────────────────┐
+         │  │  GPT-4o-mini: Generate Answer (CoT)                               │
+         │  │                                                                   │
+         │  │  System: You are a helpful assistant...                           │
+         │  │  User: Conversation history: {context}                            │
+         │  │        Question: {question}                                       │
+         │  │                                                                   │
+         │  │  Response: Let me analyze... The answer is: {predicted}           │
+         │  └───────────────────────────────────────────────────────────────────┘
+         │                           │                      │                    │
+         │  ┌───────────────────────────────────────────────────────────────────┐
+         │  │  GPT-4o: Evaluate Answer (Judge)                                  │
+         │  │                                                                   │
+         │  │  Compare: ground_truth vs predicted                               │
+         │  │  Return: CORRECT 0.95 or INCORRECT 0.80                           │
+         │  └───────────────────────────────────────────────────────────────────┘
+         │                           │                      │                    │
+         │  Record metrics:          │                      │                    │
+         │  - is_correct             │                      │                    │
+         │  - recall@k               │                      │                    │
+         │  - ndcg@k                 │                      │                    │
+         │  - latency_ms             │                      │                    │
+         │                           │                      │                    │
+
+
+================================================================================
+                         DATA FLOW: RELATIONS CREATED
+================================================================================
+
+  Session Content:              FactRelation Edges:           Graph Structure:
+  ─────────────────             ──────────────────           ─────────────────
+
+  Session 1:                                                       ┌─────┐
+  "I love Python"               fact_1 ─[supports]─> fact_2       │  1  │
+                                                                   └──┬──┘
+  Session 2:                                                          │ supports
+  "Python is great              fact_2 ─[references]─> fact_3     ┌──▼──┐
+   for scripting"                                                 │  2  │
+                                fact_3 ─[related_to]─> fact_4     └──┬──┘
+  Session 3:                                                          │ references
+  "I use it for                                                   ┌──▼──┐
+   data analysis"                                                 │  3  │
+                                                                  └──┬──┘
+  Session 4:                                                          │ related_to
+  "Pandas library                                                 ┌──▼──┐
+   is essential"                                                  │  4  │
+                                                                  └─────┘
+
+
+  Query: "What programming language does the user like?"
+
+  Vector Search (k=10):    Graph Expansion:           Final Reranked (k=5):
+  ─────────────────────    ────────────────           ────────────────────
+
+  1. fact_1 (0.85)         fact_1 -> fact_2           1. fact_1 (0.92)  <-- answer
+  2. fact_3 (0.72)         fact_2 -> fact_3           2. fact_2 (0.88)  <-- context
+  3. fact_4 (0.68)         fact_3 -> fact_4           3. fact_3 (0.75)  <-- context
+  4. fact_X (0.61)         (fact_2 already in)        4. fact_4 (0.65)  <-- context
+  ...                                                 5. fact_Y (0.55)
+
+                           Unique expanded:
+                           {fact_1, fact_2,
+                            fact_3, fact_4}
+
+
+================================================================================
+                              CONFIGURATION
+================================================================================
+
+  Environment Variables:
+  ─────────────────────
+
+  # REST API
+  KP_API_URL=http://host.docker.internal:8081
+
+  # Reranker
+  RERANKER_URL=http://host.docker.internal:8082
+  RERANKER_THRESHOLD=0.40
+
+  # Consolidation
+  EMBEDDING_SIMILARITY_THRESHOLD=0.30
+  USE_RELATION_CAP=true
+
+  # OpenAI (for embeddings, relation extraction, answer generation)
+  OPENAI_API_KEY=sk-...
+
+
+  Docker Compose (benchmarks):
+  ───────────────────────────
+
+  services:
+    benchmark:
+      image: kp-benchmarks:latest
+      environment:
+        - KP_API_URL=http://host.docker.internal:8081
+        - RERANKER_URL=http://host.docker.internal:8082
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+      command: python longmemeval.py --full-pipeline
+
+
+================================================================================

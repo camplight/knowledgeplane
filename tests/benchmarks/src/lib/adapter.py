@@ -14,6 +14,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import os
 from typing import Any, Dict, List, Optional, Tuple, Set
 from urllib.parse import urljoin
 import requests
@@ -436,7 +437,7 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
         relation_type: Optional[str] = None
     ) -> RelationsQueryResult:
         """
-        Get related facts via fact_relations_get_related tool.
+        Get related facts via REST API GET /api/facts/:id/relations.
 
         Args:
             fact_id: Source fact ID
@@ -446,26 +447,63 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
             Relations and connected facts
         """
         try:
-            args = {'factId': fact_id}
+            # Extract fact key from full ID (e.g., "facts/123" -> "123")
+            fact_key = fact_id.split('/')[-1] if '/' in fact_id else fact_id
+
+            url = f"{self.api_url}/api/facts/{fact_key}/relations?workspace_id={self.workspace_id}&username={self.username}&email={self.email}"
             if relation_type:
-                args['relationType'] = relation_type
+                url += f"&type={relation_type}"
 
-            response = self._call_tool('fact_relations_get_related', args)
+            response = self.session.get(url, timeout=self.timeout)
+            response.raise_for_status()
 
+            result = response.json()
             relations = []
-            for item in response.get('relations', []):
-                relation = item.get('relation', {})
+
+            # REST API returns outgoing/incoming arrays, not 'relations'
+            # outgoing: relations where this fact is the source
+            # incoming: relations where this fact is the target
+            outgoing_items = result.get('outgoing', [])
+            incoming_items = result.get('incoming', [])
+
+            for item in outgoing_items:
+                # Each item has 'relation' and 'fact' nested objects
+                rel = item.get('relation', {})
                 fact_data = item.get('fact', {})
 
+                relation_id = rel.get('id', rel.get('_id', ''))
+                rel_type = rel.get('type', rel.get('relation_type', ''))
+                to_fact_id = fact_data.get('id', fact_data.get('_id', ''))
+                fact_content = fact_data.get('content', '')
+
                 relations.append(RelationResult(
-                    relation_id=relation.get('id', ''),
-                    relation_type=relation.get('type', ''),
+                    relation_id=relation_id,
+                    relation_type=rel_type,
                     fact=FactResult(
-                        id=fact_data.get('id', ''),
-                        content=fact_data.get('content', ''),
+                        id=to_fact_id,
+                        content=fact_content,
                         score=1.0,
                         metadata=fact_data.get('metadata', {}),
-                        created_at=fact_data.get('created_at'),
+                    )
+                ))
+
+            for item in incoming_items:
+                rel = item.get('relation', {})
+                fact_data = item.get('fact', {})
+
+                relation_id = rel.get('id', rel.get('_id', ''))
+                rel_type = rel.get('type', rel.get('relation_type', ''))
+                from_fact_id = fact_data.get('id', fact_data.get('_id', ''))
+                fact_content = fact_data.get('content', '')
+
+                relations.append(RelationResult(
+                    relation_id=relation_id,
+                    relation_type=rel_type,
+                    fact=FactResult(
+                        id=from_fact_id,
+                        content=fact_content,
+                        score=1.0,
+                        metadata=fact_data.get('metadata', {}),
                     )
                 ))
 
@@ -474,8 +512,301 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
             return RelationsQueryResult(relations=relations)
 
         except Exception as e:
-            logger.error(f"Failed to get relations for {fact_id}: {e}")
+            logger.warning(f"Failed to get relations for {fact_id}: {e}")
             return RelationsQueryResult()
+
+    def consolidate_sync(
+        self,
+        fact_ids: Optional[List[str]] = None,
+        embedding_threshold: float = 0.30,
+        reranker_threshold: float = 0.40,
+        max_facts: int = 100,
+        timeout_seconds: int = 120,
+    ) -> Dict[str, Any]:
+        """
+        Run synchronous consolidation to create FactRelations.
+
+        This delegates to the actual CardConsolidator background worker
+        via trigger-consolidation with wait=True, ensuring benchmarks
+        test the real implementation (with sliding window, relation caps,
+        reranker, etc.) rather than a simplified duplicate.
+
+        Args:
+            fact_ids: Optional list of specific fact IDs to consolidate
+            embedding_threshold: Cosine similarity threshold (ignored - uses worker config)
+            reranker_threshold: Cross-encoder score threshold (ignored - uses worker config)
+            max_facts: Maximum facts to process (ignored - uses worker config)
+            timeout_seconds: Max wait time for consolidation to complete (default: 120s)
+
+        Returns:
+            Dict with:
+            - success: bool
+            - status: str ('completed', 'pending', 'failed')
+            - message: str
+            - trigger_id: str
+        """
+        # Delegate to trigger_consolidation with wait=True to use actual CardConsolidator
+        # This ensures benchmarks test the real implementation, not a simplified copy
+        return self.trigger_consolidation(
+            fact_ids=fact_ids,
+            wait=True,
+            timeout_seconds=timeout_seconds,
+        )
+
+    def query_with_graph_expansion(
+        self,
+        question: str,
+        namespace: Optional[str] = None,
+        initial_k: int = 10,
+        final_k: int = 5,
+        rerank_threshold: float = 0.30,
+    ) -> QueryResult:
+        """
+        Query with graph-based fact expansion and reranking.
+
+        Phase 2 of full pipeline integration:
+        1. Initial vector search (over-fetch with initial_k)
+        2. Graph expansion via get_related_facts()
+        3. Rerank combined set against query
+        4. Return top final_k results
+
+        Args:
+            question: Search query
+            namespace: Optional namespace filter
+            initial_k: Over-fetch amount for initial search (default: 10)
+            final_k: Final number of results after reranking (default: 5)
+            rerank_threshold: Minimum reranker score to keep (default: 0.30)
+
+        Returns:
+            QueryResult with reranked facts
+        """
+        start_time = time.time()
+
+        # Step 1: Initial vector search (over-fetch)
+        initial_results = self.query(question, namespace, k=initial_k)
+
+        if not initial_results.results:
+            return initial_results
+
+        # Step 2: Graph expansion (1-hop)
+        expanded_facts: Dict[str, FactResult] = {}
+        for fact in initial_results.results:
+            expanded_facts[fact.id] = fact
+
+            # Get related facts
+            relations = self.get_related_facts(fact.id)
+            for rel in relations.relations:
+                if rel.fact.id not in expanded_facts:
+                    # Filter by namespace if specified
+                    if namespace:
+                        fact_namespace = rel.fact.metadata.get('namespace')
+                        if fact_namespace != namespace:
+                            continue
+                    expanded_facts[rel.fact.id] = rel.fact
+
+        all_facts = list(expanded_facts.values())
+        logger.info(
+            f"Graph expansion: {len(initial_results.results)} initial -> {len(all_facts)} expanded"
+        )
+
+        # Step 3: Rerank against query
+        reranked = self._rerank_for_query(question, all_facts, threshold=rerank_threshold)
+
+        # Step 4: Return top-K
+        final_results = reranked[:final_k] if len(reranked) > final_k else reranked
+        elapsed_ms = (time.time() - start_time) * 1000
+
+        logger.info(
+            f"Graph query: {len(final_results)} results after reranking in {elapsed_ms:.2f}ms"
+        )
+
+        return QueryResult(
+            results=final_results,
+            total_returned=len(final_results),
+            query_time_ms=elapsed_ms,
+        )
+
+    def _rerank_for_query(
+        self,
+        query: str,
+        facts: List[FactResult],
+        threshold: float = 0.30,
+    ) -> List[FactResult]:
+        """
+        Rerank facts against a query using the cross-encoder.
+
+        Args:
+            query: The question to rerank against
+            facts: List of facts to rerank
+            threshold: Minimum score to keep (default: 0.30)
+
+        Returns:
+            List of facts sorted by reranker score (highest first)
+        """
+        if not facts:
+            return facts
+
+        reranker_url = os.environ.get('RERANKER_URL', 'http://localhost:8082')
+
+        try:
+            pairs = [{"fact_a": query, "fact_b": f.content} for f in facts]
+
+            response = requests.post(
+                f"{reranker_url}/rerank",
+                json={"pairs": pairs, "threshold": threshold},
+                timeout=30,
+            )
+
+            if response.status_code != 200:
+                logger.warning(f"Reranker returned {response.status_code}, using original order")
+                return facts
+
+            results = response.json().get("results", [])
+
+            # Build scored facts list
+            scored_facts: List[Tuple[float, FactResult]] = []
+            for r in results:
+                if r.get("keep", False) and r.get("index", -1) < len(facts):
+                    scored_facts.append((r["score"], facts[r["index"]]))
+
+            # Sort by score descending
+            scored_facts.sort(key=lambda x: x[0], reverse=True)
+
+            reranked = [f for _, f in scored_facts]
+            logger.debug(f"Reranked {len(facts)} -> {len(reranked)} facts (threshold={threshold})")
+
+            return reranked
+
+        except Exception as e:
+            logger.warning(f"Reranker failed: {e}, using original order")
+            return facts
+
+    def trigger_consolidation(
+        self,
+        fact_ids: Optional[List[str]] = None,
+        wait: bool = False,
+        timeout_seconds: int = 60
+    ) -> Dict[str, Any]:
+        """
+        Trigger card consolidation for workspace or specific facts.
+
+        This triggers the CardConsolidator background worker which:
+        1. Finds similar fact pairs using embedding similarity
+        2. Reranks with cross-encoder
+        3. Creates FactRelation records
+        4. Optionally creates KnowledgeCards
+
+        Args:
+            fact_ids: Optional list of specific fact IDs to consolidate
+            wait: If True, wait for consolidation to complete (max 60s)
+            timeout_seconds: Max wait time if wait=True
+
+        Returns:
+            Dict with status and trigger info
+        """
+        try:
+            url = f"{self.api_url}/api/facts/trigger-consolidation?workspace_id={self.workspace_id}&username={self.username}&email={self.email}"
+            payload = {
+                'workspace_id': self.workspace_id,
+                'wait': wait,
+            }
+            if fact_ids:
+                payload['fact_ids'] = fact_ids
+                logger.debug(f"Sending {len(fact_ids)} fact_ids to trigger-consolidation")
+            else:
+                logger.debug(f"No fact_ids provided to trigger-consolidation")
+
+            response = self.session.post(
+                url,
+                json=payload,
+                timeout=timeout_seconds + 10 if wait else self.timeout
+            )
+            response.raise_for_status()
+
+            result = response.json()
+            logger.info(f"Consolidation trigger: {result.get('status', 'unknown')} - {result.get('message', '')}")
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to trigger consolidation: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def wait_for_relations(
+        self,
+        fact_ids: List[str],
+        min_relations: int = 1,
+        timeout_seconds: int = 300,
+        poll_interval: float = 5.0,
+        sample_size: int = 10,
+    ) -> Dict[str, Any]:
+        """
+        Wait for relations to actually exist in the database.
+
+        Unlike trigger_consolidation(wait=True) which waits for trigger status,
+        this method polls the actual relations endpoint to verify relations exist.
+        This ensures the background worker has fully processed the facts.
+
+        Args:
+            fact_ids: List of fact IDs to check for relations
+            min_relations: Minimum total relations required to consider done
+            timeout_seconds: Max wait time (default: 5 minutes)
+            poll_interval: Seconds between polls (default: 5s)
+            sample_size: Number of facts to sample for relation checks
+
+        Returns:
+            Dict with:
+            - success: bool
+            - total_relations: int
+            - facts_with_relations: int
+            - elapsed_seconds: float
+        """
+        import random
+
+        start_time = time.time()
+        deadline = start_time + timeout_seconds
+
+        # Sample facts to check (don't check all to avoid N queries)
+        sample_facts = fact_ids[:sample_size] if len(fact_ids) <= sample_size else random.sample(fact_ids, sample_size)
+
+        logger.info(f"Waiting for relations on {len(sample_facts)} sample facts (min={min_relations}, timeout={timeout_seconds}s)")
+
+        while time.time() < deadline:
+            total_relations = 0
+            facts_with_relations = 0
+
+            for fact_id in sample_facts:
+                try:
+                    relations = self.get_related_facts(fact_id)
+                    n_relations = len(relations.relations)
+                    total_relations += n_relations
+                    if n_relations > 0:
+                        facts_with_relations += 1
+                except Exception as e:
+                    logger.debug(f"Failed to get relations for {fact_id}: {e}")
+
+            elapsed = time.time() - start_time
+            logger.info(f"[{elapsed:.1f}s] Relations check: {total_relations} total, {facts_with_relations}/{len(sample_facts)} facts with relations")
+
+            if total_relations >= min_relations:
+                logger.info(f"✓ Found {total_relations} relations after {elapsed:.1f}s - pre-warm complete!")
+                return {
+                    'success': True,
+                    'total_relations': total_relations,
+                    'facts_with_relations': facts_with_relations,
+                    'elapsed_seconds': elapsed,
+                }
+
+            # Wait before next poll
+            time.sleep(poll_interval)
+
+        elapsed = time.time() - start_time
+        logger.warning(f"⚠ Timeout after {elapsed:.1f}s - only found {total_relations} relations")
+        return {
+            'success': False,
+            'total_relations': total_relations,
+            'facts_with_relations': facts_with_relations,
+            'elapsed_seconds': elapsed,
+        }
 
     def close(self) -> None:
         """Close HTTP session."""
