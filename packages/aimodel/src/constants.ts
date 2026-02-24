@@ -11,7 +11,7 @@
  *
  * @see https://openai.com/index/retiring-gpt-4o-and-older-models/
  */
-export const DEFAULT_OPENAI_MODEL = "gpt-5.1";
+export const DEFAULT_OPENAI_MODEL = "gpt-5.2";
 
 /**
  * Default OpenAI embedding model

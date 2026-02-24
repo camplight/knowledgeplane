@@ -19,6 +19,7 @@ import {
   combineKnowledgeCards,
 } from "@knowledgeplane/api-core";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
+import { CardConsolidator } from "knowledgeplane-background-worker/card-consolidator";
 
 
 type RequestContext = {
@@ -532,6 +533,123 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
     } catch (error: any) {
       reply.code(500);
       return { error: error.message || "Failed to trigger embeddings" };
+    }
+  });
+
+  // Trigger card consolidator for a specific workspace or set of facts
+  // POST /api/facts/trigger-consolidation
+  // Body: { workspace_id?: string, fact_ids?: string[], wait?: boolean }
+  server.post("/api/facts/trigger-consolidation", async (request, reply) => {
+    const ctx = await resolveContext(request, reply);
+    if (!ctx) return;
+    const workspaceError = requireWorkspace(ctx, reply);
+    if (workspaceError) return workspaceError;
+
+    try {
+      const body = request.body as {
+        workspace_id?: string;
+        fact_ids?: string[];
+        wait?: boolean;
+      };
+
+      const workspaceId = body.workspace_id || ctx.workspaceId;
+      const wait = body.wait ?? false;
+      const factIds = body.fact_ids || [];
+
+      // Debug logging for fact_ids
+      console.log(`[trigger-consolidation] Received request:`);
+      console.log(`  workspace_id: ${workspaceId}`);
+      console.log(`  fact_ids: ${factIds.length} items`);
+      console.log(`  wait: ${wait}`);
+      if (factIds.length > 0) {
+        console.log(`  first 3 fact_ids: ${factIds.slice(0, 3).join(', ')}`);
+      }
+
+      // Create trigger for card consolidator
+      const trigger = await collections.worker_triggers.save({
+        worker_name: "card-consolidator",
+        workspace_id: workspaceId,
+        fact_ids: factIds,
+        status: "pending",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      console.log(`[trigger-consolidation] Created trigger ${trigger._id} with ${factIds.length} fact_ids`);
+
+      // Verify the trigger was saved correctly by re-reading it
+      const triggerKey = trigger._key || trigger._id?.split('/')[1];
+      const savedTrigger = await collections.worker_triggers.document(triggerKey);
+      console.log(`[trigger-consolidation] Verified saved trigger:`);
+      console.log(`  saved fact_ids type: ${typeof savedTrigger.fact_ids}`);
+      console.log(`  saved fact_ids is array: ${Array.isArray(savedTrigger.fact_ids)}`);
+      console.log(`  saved fact_ids length: ${savedTrigger.fact_ids?.length ?? 'undefined'}`);
+
+      // If wait=true, run consolidation DIRECTLY (sync) instead of relying on background worker
+      if (wait) {
+        const triggerKey = trigger._key || trigger._id?.split('/')[1];
+
+        console.log(`[trigger-consolidation] Running SYNC consolidation for ${factIds.length} facts`);
+        const startTime = Date.now();
+
+        try {
+          // Mark trigger as processing
+          await collections.worker_triggers.update(triggerKey, {
+            status: "processing",
+            updated_at: new Date().toISOString(),
+          });
+
+          // Run consolidation directly - no background worker dependency
+          const consolidator = new CardConsolidator();
+          await consolidator.process(workspaceId, factIds);
+
+          const durationMs = Date.now() - startTime;
+          console.log(`[trigger-consolidation] SYNC consolidation completed in ${durationMs}ms`);
+
+          // Mark trigger as completed
+          await collections.worker_triggers.update(triggerKey, {
+            status: "completed",
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+
+          return {
+            success: true,
+            status: "completed",
+            message: `Card consolidation completed in ${durationMs}ms`,
+            trigger_id: trigger._id,
+            duration_ms: durationMs,
+          };
+        } catch (error: any) {
+          const durationMs = Date.now() - startTime;
+          console.error(`[trigger-consolidation] SYNC consolidation failed after ${durationMs}ms:`, error);
+
+          // Mark trigger as failed
+          await collections.worker_triggers.update(triggerKey, {
+            status: "failed",
+            error: error.message || String(error),
+            updated_at: new Date().toISOString(),
+          });
+
+          return {
+            success: false,
+            status: "failed",
+            error: error.message || "Consolidation failed",
+            trigger_id: trigger._id,
+            duration_ms: durationMs,
+          };
+        }
+      }
+
+      return {
+        success: true,
+        status: "pending",
+        message: "Triggered card consolidation. Worker will process within 30 seconds.",
+        trigger_id: trigger._id,
+      };
+    } catch (error: any) {
+      reply.code(500);
+      return { error: error.message || "Failed to trigger consolidation" };
     }
   });
 
