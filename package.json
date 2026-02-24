@@ -14,8 +14,9 @@
   },
   "scripts": {
     "bootstrap": "npm install",
-    "dev": "concurrently -n \"infra,mcp-server,webapp,background-workers\" -c \"blue,green,yellow,magenta\" \"npm run dev:infra\" \"npm run dev:mcp-server\" \"npm run dev:webapp\" \"npm run dev:background-workers\"",
+    "dev": "concurrently -n \"infra,rest-api,mcp-server,webapp,background-workers\" -c \"blue,cyan,green,yellow,magenta\" \"npm run dev:infra\" \"npm run dev:rest-api\" \"npm run dev:mcp-server\" \"npm run dev:webapp\" \"npm run dev:background-workers\"",
     "dev:infra": "docker compose -f infra/docker-compose.dev.yml up",
+    "dev:rest-api": "node scripts/wait-for-db.js && npm run dev --workspace=apps/rest-api",
     "dev:mcp-server": "node scripts/wait-for-db.js && npm run dev --workspace=apps/mcp-server",
     "dev:webapp": "npm run dev --workspace=apps/webapp",
     "dev:background-workers": "node scripts/wait-for-db.js && npm run dev --workspace=apps/background-workers",

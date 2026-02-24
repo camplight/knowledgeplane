@@ -1,8 +1,7 @@
-version: '3.9'
 services:
   db:
-    image: arangodb/arangodb:latest
-    command: --experimental-vector-index
+    image: arangodb:3.12.7
+    command: ["arangod", "--vector-index=true"]
     environment:
       ARANGO_ROOT_PASSWORD: root
     ports: ["8529:8529"]

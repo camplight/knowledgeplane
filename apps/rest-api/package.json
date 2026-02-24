@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@fastify/cors": "10.0.0",
+    "@knowledgeplane/aimodel": "*",
     "@knowledgeplane/api-core": "*",
     "@knowledgeplane/db": "*",
     "dotenv": "16.4.5",
     "fastify": "5.0.0",
+    "knowledgeplane-background-worker": "*",
     "undici": "7.21.0"
   },
   "devDependencies": {

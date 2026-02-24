@@ -526,13 +526,23 @@ export class Fact {
       // BEFORE any FILTER clauses. Pre-filters force a full collection scan.
       const candidateLimit = (limit + offset) * 3; // Get 3x candidates to account for filtering
 
-      // Use nProbe=16 to search all clusters (nLists=16) for maximum recall
+      // Dynamically determine nProbe to match nLists for full cluster coverage
+      // nLists is calculated as: min(max(16, docCount), 100) at index creation
+      // We replicate that calculation here to ensure nProbe = nLists
+      const nListsQuery = `
+        LET count = LENGTH(FOR f IN facts FILTER f.embedding != null RETURN 1)
+        RETURN MIN([MAX([16, MIN([count, 100])]), 100])
+      `;
+      const nListsCursor = await collections.facts.database.query(nListsQuery);
+      const nProbe = (await nListsCursor.next()) || 16;
+
+      // Use dynamic nProbe to search ALL clusters for maximum recall
       // This ensures freshly inserted documents are found immediately
       // Trade-off: slightly slower but much more accurate for real-time search
       const phase1Aql = `
         FOR fact IN facts
           OPTIONS { indexHint: "idx_fact_embedding_vector", forceIndexHint: true }
-          LET score = APPROX_NEAR_COSINE(fact.embedding, @queryEmbedding, { nProbe: 16 })
+          LET score = APPROX_NEAR_COSINE(fact.embedding, @queryEmbedding, { nProbe: @nProbe })
           SORT score DESC
           LIMIT @candidateLimit
           RETURN { fact: fact, score: score }
@@ -542,6 +552,7 @@ export class Fact {
       const cursor = await collections.facts.database.query(phase1Aql, {
         queryEmbedding,
         candidateLimit,
+        nProbe,
       });
       const candidates = await cursor.all();
       const queryTime = Date.now() - queryStartTime;
@@ -578,6 +589,7 @@ export class Fact {
       console.log(`[BENCHMARK] Vector search (APPROX_NEAR_COSINE, two-phase):`, {
         query: params.query.substring(0, 50) + '...',
         workspace_id: params.workspace_id,
+        nProbe: nProbe,  // Dynamic nProbe = nLists for full coverage
         candidates_from_index: candidates.length,
         after_filtering: filteredResults.length,
         results_returned: resultsWithScores.length,
