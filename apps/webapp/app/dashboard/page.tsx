@@ -2,8 +2,10 @@
 
 import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState, useEffect } from "react";
 import { AppLayout } from "../components/AppLayout";
+import { KnowledgePlanesChart } from "../components/KnowledgePlanesChart";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -12,7 +14,6 @@ export default function DashboardPage() {
   const limit = 10;
 
   const { data: userData, isLoading: userLoading } = trpc.auth.me.useQuery();
-  const { data: workspacesData } = trpc.workspaces.list.useQuery();
   const { data: factsData, isLoading: factsLoading } = trpc.facts.list.useQuery({
     limit,
     offset: factsPage * limit,
@@ -22,7 +23,7 @@ export default function DashboardPage() {
     limit,
     offset: cardsPage * limit,
   });
-  const { data: relationsData, isLoading: relationsLoading } = trpc.factRelations.list.useQuery({
+  const { data: relationsData } = trpc.factRelations.list.useQuery({
     limit: 1,
     offset: 0,
   });
@@ -35,8 +36,11 @@ export default function DashboardPage() {
 
   if (userLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl text-slate-600">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-base-200">
+        <div className="flex flex-col items-center gap-4">
+          <span className="loading loading-spinner loading-lg text-primary"></span>
+          <div className="text-xl text-base-content">Loading...</div>
+        </div>
       </div>
     );
   }
@@ -54,233 +58,247 @@ export default function DashboardPage() {
   const cardsTotalPages = Math.ceil(totalCards / limit);
   const totalRelations = relationsData?.total || 0;
 
+  const hasNoContent = totalFacts === 0 && totalCards === 0;
+
   return (
     <AppLayout>
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-4xl font-bold text-slate-900">
-              Welcome back, <span className="gradient-text-blue">{user.username}</span>!
-            </h1>
-            {userData?.currentWorkspaceId && workspacesData && (
-              <div className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-medium">
-                {workspacesData.find((w) => w.id === userData.currentWorkspaceId)?.name || "Workspace"}
-              </div>
-            )}
+      <div className="max-w-7xl mx-auto">
+        {/* Compact Header */}
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-base-content">Dashboard</h1>
+            <p className="text-xs sm:text-sm text-base-content/60 mt-1">
+              Welcome back, {user.username}
+            </p>
           </div>
-          <p className="text-lg text-slate-600">
-            Manage your knowledge base and facts
-          </p>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-600 mb-1">Total Facts</p>
-                <p className="text-3xl font-bold text-slate-900">{totalFacts}</p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-600 mb-1">Knowledge Cards</p>
-                <p className="text-3xl font-bold text-slate-900">{totalCards}</p>
-              </div>
-              <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-600 mb-1">Relations</p>
-                <p className="text-3xl font-bold text-slate-900">{totalRelations}</p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Facts List */}
-        <div className="bg-white rounded-xl shadow-lg border border-slate-200">
-          <div className="p-6 border-b border-slate-200">
-            <h2 className="text-2xl font-bold text-slate-900">Your Facts</h2>
-            <p className="text-sm text-slate-600 mt-1">
-              View and manage your knowledge base facts
-            </p>
-          </div>
-
-          {factsLoading ? (
-            <div className="p-8 text-center">
-              <div className="text-slate-600">Loading facts...</div>
-            </div>
-          ) : facts.length === 0 ? (
-            <div className="p-8 text-center">
-              <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="stats stats-vertical sm:stats-horizontal shadow w-full mb-4 sm:mb-6 bg-base-100 border border-base-300">
+          <div className="stat">
+            <div className="stat-figure text-primary">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <p className="text-lg font-medium text-slate-900 mb-2">No facts yet</p>
-              <p className="text-slate-600">
-                Start adding facts to build your knowledge base
-              </p>
             </div>
-          ) : (
-            <>
-              <div className="divide-y divide-slate-200">
-                {facts.map((fact) => (
-                  <div
-                    key={fact.id}
-                    onClick={() => router.push(`/editor?view=facts&factId=${encodeURIComponent(fact.id)}`)}
-                    className="p-6 hover:bg-slate-50 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <p className="text-slate-900 mb-2 leading-relaxed">{fact.content}</p>
-                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                          <span className="flex items-center gap-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            {new Date(fact.created_at).toLocaleString()}
-                          </span>
-                          {fact.metadata && Object.keys(fact.metadata).length > 0 && (
-                            <span className="text-xs text-slate-400">
-                              {Object.keys(fact.metadata).length} metadata field{Object.keys(fact.metadata).length !== 1 ? "s" : ""}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Pagination */}
-              {factsTotalPages > 1 && (
-                <div className="p-6 border-t border-slate-200 flex items-center justify-between">
-                  <div className="text-sm text-slate-600">
-                    Showing {factsPage * limit + 1} to {Math.min((factsPage + 1) * limit, totalFacts)} of {totalFacts} facts
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setFactsPage(Math.max(0, factsPage - 1))}
-                      disabled={factsPage === 0}
-                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={() => setFactsPage(Math.min(factsTotalPages - 1, factsPage + 1))}
-                      disabled={factsPage >= factsTotalPages - 1}
-                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Knowledge Cards List */}
-        <div className="bg-white rounded-xl shadow-lg border border-slate-200 mt-8">
-          <div className="p-6 border-b border-slate-200">
-            <h2 className="text-2xl font-bold text-slate-900">Knowledge Cards</h2>
-            <p className="text-sm text-slate-600 mt-1">
-              Consolidated knowledge cards from your facts
-            </p>
+            <div className="stat-title">Total Facts</div>
+            <div className="stat-value text-primary">{totalFacts}</div>
+            <div className="stat-desc">Knowledge base entries</div>
           </div>
 
-          {cardsLoading ? (
-            <div className="p-8 text-center">
-              <div className="text-slate-600">Loading cards...</div>
-            </div>
-          ) : cards.length === 0 ? (
-            <div className="p-8 text-center">
-              <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="stat">
+            <div className="stat-figure text-secondary">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
-              <p className="text-lg font-medium text-slate-900 mb-2">No knowledge cards yet</p>
-              <p className="text-slate-600">
-                Cards are created when facts are consolidated
-              </p>
             </div>
-          ) : (
-            <>
-              <div className="divide-y divide-slate-200">
-                {cards.map((card) => (
-                  <div
-                    key={card.id}
-                    onClick={() => router.push(`/editor?view=cards&cardId=${encodeURIComponent(card.id)}`)}
-                    className="p-6 hover:bg-slate-50 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-slate-900 mb-2">{card.title}</h3>
-                        <p className="text-slate-700 mb-3 leading-relaxed">{card.summary}</p>
-                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                          <span className="flex items-center gap-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            {new Date(card.updated_at).toLocaleDateString()}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            {card.fact_ids.length} fact{card.fact_ids.length !== 1 ? "s" : ""}
-                          </span>
+            <div className="stat-title">Knowledge Cards</div>
+            <div className="stat-value text-secondary">{totalCards}</div>
+            <div className="stat-desc">Consolidated information</div>
+          </div>
+
+          <div className="stat">
+            <div className="stat-figure text-accent">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+            </div>
+            <div className="stat-title">Relations</div>
+            <div className="stat-value text-accent">{totalRelations}</div>
+            <div className="stat-desc">Connected facts</div>
+          </div>
+        </div>
+
+        {/* Getting Started - Only show if no content */}
+        {hasNoContent && (
+          <div className="card bg-base-100 shadow-lg mb-6 border border-base-300">
+            <div className="card-body">
+              <h2 className="card-title text-xl">Get Started</h2>
+              <p className="text-sm text-base-content/70">
+                Build your knowledge base by adding facts or uploading documents
+              </p>
+              <div className="flex gap-3 mt-4">
+                <Link href="/upload" className="btn btn-primary btn-sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Upload Document
+                </Link>
+                <Link href="/editor?view=facts" className="btn btn-outline btn-sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Fact
+                </Link>
+                <Link href="/chat" className="btn btn-outline btn-sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                  Start Chat
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Knowledge Planes Growth Chart - First Class Citizen */}
+        <div className="mb-6">
+          <KnowledgePlanesChart />
+        </div>
+
+        {/* Facts List - Using DaisyUI card component */}
+        {!hasNoContent && totalFacts > 0 && (
+          <div className="card bg-base-100 shadow-lg border border-base-300 mb-6">
+            <div className="card-body">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="card-title text-xl">Recent Facts</h2>
+                  <p className="text-xs text-base-content/60 mt-1">
+                    {totalFacts} total fact{totalFacts !== 1 ? 's' : ''} in your knowledge base
+                  </p>
+                </div>
+                <Link href="/editor?view=facts" className="btn btn-primary btn-sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Fact
+                </Link>
+              </div>
+
+              {factsLoading ? (
+                <div className="py-8 text-center">
+                  <span className="loading loading-spinner loading-lg text-primary"></span>
+                  <p className="text-base-content/70 mt-4">Loading facts...</p>
+                </div>
+              ) : (
+              <>
+                <div className="divide-y divide-base-300">
+                  {facts.map((fact) => (
+                    <div
+                      key={fact.id}
+                      onClick={() => router.push(`/editor?view=facts&factId=${encodeURIComponent(fact.id)}`)}
+                      className="py-3 hover:bg-base-200 transition-colors cursor-pointer rounded-lg px-3 -mx-3"
+                    >
+                      <p className="text-sm text-base-content mb-2 leading-relaxed line-clamp-2">{fact.content}</p>
+                      <div className="flex items-center gap-2 text-xs text-base-content/50">
+                        <span>{new Date(fact.created_at).toLocaleDateString()}</span>
+                        {fact.metadata && Object.keys(fact.metadata).length > 0 && (
+                          <>
+                            <span>•</span>
+                            <span>{Object.keys(fact.metadata).length} metadata</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {factsTotalPages > 1 && (
+                  <div className="flex justify-between items-center pt-3 mt-3 border-t border-base-300">
+                    <div className="text-xs text-base-content/60">
+                      {factsPage * limit + 1}-{Math.min((factsPage + 1) * limit, totalFacts)} of {totalFacts}
+                    </div>
+                    <div className="join">
+                      <button
+                        onClick={() => setFactsPage(Math.max(0, factsPage - 1))}
+                        disabled={factsPage === 0}
+                        className="join-item btn btn-xs"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        onClick={() => setFactsPage(Math.min(factsTotalPages - 1, factsPage + 1))}
+                        disabled={factsPage >= factsTotalPages - 1}
+                        className="join-item btn btn-xs"
+                      >
+                        ›
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+            </div>
+          </div>
+        )}
+
+        {/* Knowledge Cards List - Using DaisyUI card component */}
+        {!hasNoContent && totalCards > 0 && (
+          <div className="card bg-base-100 shadow-lg border border-base-300">
+            <div className="card-body">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="card-title text-xl">Knowledge Cards</h2>
+                  <p className="text-xs text-base-content/60 mt-1">
+                    {totalCards} consolidated card{totalCards !== 1 ? 's' : ''} from your facts
+                  </p>
+                </div>
+                <Link href="/editor?view=cards" className="btn btn-secondary btn-sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  View All
+                </Link>
+              </div>
+
+              {cardsLoading ? (
+                <div className="py-8 text-center">
+                  <span className="loading loading-spinner loading-lg text-secondary"></span>
+                  <p className="text-base-content/70 mt-4">Loading cards...</p>
+                </div>
+              ) : (
+              <>
+                <div className="divide-y divide-base-300">
+                  {cards.map((card) => (
+                    <div
+                      key={card.id}
+                      onClick={() => router.push(`/editor?view=cards&cardId=${encodeURIComponent(card.id)}`)}
+                      className="py-3 hover:bg-base-200 transition-colors cursor-pointer rounded-lg px-3 -mx-3"
+                    >
+                      <h3 className="text-base font-semibold text-base-content mb-1">{card.title}</h3>
+                      <p className="text-sm text-base-content/70 mb-2 leading-relaxed line-clamp-2">{card.summary}</p>
+                      <div className="flex items-center gap-2 text-xs text-base-content/50">
+                        <span>{new Date(card.updated_at).toLocaleDateString()}</span>
+                        <span>•</span>
+                        <div className="badge badge-primary badge-xs">
+                          {card.fact_ids.length} fact{card.fact_ids.length !== 1 ? "s" : ""}
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Pagination */}
-              {cardsTotalPages > 1 && (
-                <div className="p-6 border-t border-slate-200 flex items-center justify-between">
-                  <div className="text-sm text-slate-600">
-                    Showing {cardsPage * limit + 1} to {Math.min((cardsPage + 1) * limit, totalCards)} of {totalCards} cards
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setCardsPage(Math.max(0, cardsPage - 1))}
-                      disabled={cardsPage === 0}
-                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={() => setCardsPage(Math.min(cardsTotalPages - 1, cardsPage + 1))}
-                      disabled={cardsPage >= cardsTotalPages - 1}
-                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Next
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              )}
-            </>
-          )}
-        </div>
+
+                {/* Pagination */}
+                {cardsTotalPages > 1 && (
+                  <div className="flex justify-between items-center pt-3 mt-3 border-t border-base-300">
+                    <div className="text-xs text-base-content/60">
+                      {cardsPage * limit + 1}-{Math.min((cardsPage + 1) * limit, totalCards)} of {totalCards}
+                    </div>
+                    <div className="join">
+                      <button
+                        onClick={() => setCardsPage(Math.max(0, cardsPage - 1))}
+                        disabled={cardsPage === 0}
+                        className="join-item btn btn-xs"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        onClick={() => setCardsPage(Math.min(cardsTotalPages - 1, cardsPage + 1))}
+                        disabled={cardsPage >= cardsTotalPages - 1}
+                        className="join-item btn btn-xs"
+                      >
+                        ›
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+            </div>
+          </div>
+        )}
+      </div>
     </AppLayout>
   );
 }

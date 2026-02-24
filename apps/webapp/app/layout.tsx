@@ -1,17 +1,24 @@
 import type { Metadata } from "next";
-import { Inter, Space_Grotesk } from "next/font/google";
+import { DM_Serif_Display, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { TRPCProvider } from "./providers";
 
-const inter = Inter({
+const dmSerif = DM_Serif_Display({
   subsets: ["latin"],
-  variable: "--font-inter",
+  weight: ["400"],
+  variable: "--font-serif",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
   display: "swap",
 });
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-space-grotesk",
+  variable: "--font-brand",
   display: "swap",
 });
 
@@ -29,8 +36,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} ${spaceGrotesk.variable}`}>
+    <html lang="en" data-theme="light" suppressHydrationWarning>
+      <body className={`${dmSerif.variable} ${jetbrainsMono.variable} ${spaceGrotesk.variable}`}>
         <TRPCProvider>{children}</TRPCProvider>
       </body>
     </html>
