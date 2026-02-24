@@ -475,9 +475,9 @@ export default function EditorPage() {
 
   if (userLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <AppLayout>
         <div className="text-xl text-slate-600">Loading...</div>
-      </div>
+      </AppLayout>
     );
   }
 
@@ -511,112 +511,106 @@ export default function EditorPage() {
 
   return (
     <AppLayout>
+
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Search Bar */}
-        <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-          <div className="flex gap-4">
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                placeholder="Search facts, cards, files, or browse knowledge graph..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  // Clear active search query when user types (client-side filtering takes over)
-                  if (activeSearchQuery && e.target.value.trim().length === 0) {
-                    setActiveSearchQuery("");
-                  }
-                }}
-                onKeyPress={(e) => e.key === "Enter" && handleSearch()}
-                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              {(searchQuery || activeSearchQuery) && (
-                <button
-                  onClick={handleClearSearch}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 px-2"
-                  title="Clear search"
-                >
-                  ✕
-                </button>
-              )}
+        <div className="mb-6 card bg-base-100 shadow-lg border border-base-300">
+          <div className="card-body">
+            <div className="flex gap-4">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  placeholder="Search facts, cards, files, or browse knowledge graph..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    // Clear active search query when user types (client-side filtering takes over)
+                    if (activeSearchQuery && e.target.value.trim().length === 0) {
+                      setActiveSearchQuery("");
+                    }
+                  }}
+                  onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+                  className="input input-bordered w-full"
+                />
+                {(searchQuery || activeSearchQuery) && (
+                  <button
+                    onClick={handleClearSearch}
+                    className="btn btn-ghost btn-sm absolute right-2 top-1/2 -translate-y-1/2"
+                    title="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={handleSearch}
+                className="btn btn-primary"
+              >
+                Search
+              </button>
             </div>
-            <button
-              onClick={handleSearch}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-            >
-              Search
-            </button>
+            {(activeSearchQuery || (searchQuery && searchQuery.trim().length > 0)) && (
+              <div className="mt-2 text-sm text-base-content/70">
+                {activeSearchQuery ? (
+                  <>Showing server search results for: <span className="font-medium">"{activeSearchQuery}"</span></>
+                ) : (
+                  <>Filtering {selectedView === "facts" ? facts.length : selectedView === "cards" ? filteredCards.length : filteredFiles.length} {selectedView === "facts" ? "fact" : selectedView === "cards" ? "card" : "file"}{selectedView === "facts" ? (facts.length !== 1 ? "s" : "") : selectedView === "cards" ? (filteredCards.length !== 1 ? "s" : "") : (filteredFiles.length !== 1 ? "s" : "")} matching: <span className="font-medium">"{searchQuery}"</span></>
+                )}
+              </div>
+            )}
           </div>
-              {(activeSearchQuery || (searchQuery && searchQuery.trim().length > 0)) && (
-            <div className="mt-2 text-sm text-slate-600">
-              {activeSearchQuery ? (
-                <>Showing server search results for: <span className="font-medium">"{activeSearchQuery}"</span></>
-              ) : (
-                <>Filtering {selectedView === "facts" ? facts.length : selectedView === "cards" ? filteredCards.length : filteredFiles.length} {selectedView === "facts" ? "fact" : selectedView === "cards" ? "card" : "file"}{selectedView === "facts" ? (facts.length !== 1 ? "s" : "") : selectedView === "cards" ? (filteredCards.length !== 1 ? "s" : "") : (filteredFiles.length !== 1 ? "s" : "")} matching: <span className="font-medium">"{searchQuery}"</span></>
-              )}
-            </div>
-          )}
         </div>
 
         {/* View Tabs */}
-        <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-2">
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setSelectedView("facts");
-                setSelectedCard(null);
-                setSelectedFile(null);
-              }}
-              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
-                selectedView === "facts"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-700 hover:bg-slate-100"
-              }`}
-            >
-              Facts
-            </button>
-            <button
-              onClick={() => {
-                setSelectedView("cards");
-                setSelectedFact(null);
-                setSelectedFile(null);
-              }}
-              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
-                selectedView === "cards"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-700 hover:bg-slate-100"
-              }`}
-            >
-              Cards
-            </button>
-            <button
-              onClick={() => {
-                setSelectedView("files");
-                setSelectedFact(null);
-                setSelectedCard(null);
-              }}
-              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
-                selectedView === "files"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-700 hover:bg-slate-100"
-              }`}
-            >
-              Files
-            </button>
-            <button
-              onClick={() => {
-                setSelectedView("graph");
-                setSelectedFact(null);
-                setSelectedCard(null);
-                setSelectedFile(null);
-              }}
-              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
-                selectedView === "graph"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-700 hover:bg-slate-100"
-              }`}
-            >
-              Knowledge Graph
-            </button>
+        <div className="mb-6 card bg-base-100 shadow-lg border border-base-300">
+          <div className="card-body p-2">
+            <div role="tablist" className="tabs tabs-boxed">
+              <button
+                role="tab"
+                onClick={() => {
+                  setSelectedView("facts");
+                  setSelectedCard(null);
+                  setSelectedFile(null);
+                }}
+                className={`tab tab-lg flex-1 ${selectedView === "facts" ? "tab-active" : ""}`}
+              >
+                Facts
+              </button>
+              <button
+                role="tab"
+                onClick={() => {
+                  setSelectedView("cards");
+                  setSelectedFact(null);
+                  setSelectedFile(null);
+                }}
+                className={`tab tab-lg flex-1 ${selectedView === "cards" ? "tab-active" : ""}`}
+              >
+                Cards
+              </button>
+              <button
+                role="tab"
+                onClick={() => {
+                  setSelectedView("files");
+                  setSelectedFact(null);
+                  setSelectedCard(null);
+                }}
+                className={`tab tab-lg flex-1 ${selectedView === "files" ? "tab-active" : ""}`}
+              >
+                Files
+              </button>
+              <button
+                role="tab"
+                onClick={() => {
+                  setSelectedView("graph");
+                  setSelectedFact(null);
+                  setSelectedCard(null);
+                  setSelectedFile(null);
+                }}
+                className={`tab tab-lg flex-1 ${selectedView === "graph" ? "tab-active" : ""}`}
+              >
+                Knowledge Graph
+              </button>
+            </div>
           </div>
         </div>
 
@@ -625,42 +619,44 @@ export default function EditorPage() {
           {/* Main Content */}
           <div className="lg:col-span-2">
             {selectedView === "facts" && (
-              <div className="bg-white rounded-xl shadow-lg border border-slate-200">
-                <div className="p-6 border-b border-slate-200 flex justify-between items-center">
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-900">Facts</h2>
-                    <p className="text-sm text-slate-600 mt-1">
-                      Browse and discover facts in your knowledge base
-                    </p>
+              <div className="card bg-base-100 shadow-lg border border-base-300">
+                <div className="card-body border-b border-base-300">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="card-title text-2xl">Facts</h2>
+                      <p className="text-sm text-base-content/70 mt-1">
+                        Browse and discover facts in your knowledge base
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowCreateFact(!showCreateFact)}
+                      className="btn btn-primary btn-sm"
+                    >
+                      {showCreateFact ? "Cancel" : "+ New Fact"}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setShowCreateFact(!showCreateFact)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                  >
-                    {showCreateFact ? "Cancel" : "+ New Fact"}
-                  </button>
                 </div>
                 
                 {showCreateFact && (
-                  <div className="p-6 border-b border-slate-200 bg-slate-50">
+                  <div className="card-body border-b border-base-300 bg-base-200">
                     <form onSubmit={handleCreateFact}>
-                      <div className="mb-4">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Fact Content
+                      <div className="form-control mb-4">
+                        <label className="label">
+                          <span className="label-text font-medium">Fact Content</span>
                         </label>
                         <textarea
                           value={factContent}
                           onChange={(e) => setFactContent(e.target.value)}
                           placeholder="Enter fact content..."
                           rows={4}
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="textarea textarea-bordered w-full"
                           required
                         />
                       </div>
                       <button
                         type="submit"
                         disabled={createFactMutation.isPending}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50"
+                        className="btn btn-primary btn-sm"
                       >
                         {createFactMutation.isPending ? "Creating..." : "Create Fact"}
                       </button>
@@ -669,35 +665,37 @@ export default function EditorPage() {
                 )}
 
                 {isLoadingFacts ? (
-                  <div className="p-8 text-center">
-                    <div className="text-slate-600">Loading facts...</div>
+                  <div className="card-body">
+                    <div className="text-center text-base-content/70">Loading facts...</div>
                   </div>
                 ) : facts.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <p className="text-lg font-medium text-slate-900 mb-2">No facts found</p>
-                    <p className="text-slate-600">
-                      {searchQuery && searchQuery.trim().length > 0
-                        ? "No facts match your search. Try adjusting your search query or add new facts"
-                        : activeSearchQuery && activeSearchQuery.trim().length > 0 
-                        ? "Try adjusting your search or add new facts" 
-                        : "Add new facts to get started"}
-                    </p>
+                  <div className="card-body">
+                    <div className="text-center">
+                      <p className="text-lg font-medium mb-2">No facts found</p>
+                      <p className="text-base-content/70">
+                        {searchQuery && searchQuery.trim().length > 0
+                          ? "No facts match your search. Try adjusting your search query or add new facts"
+                          : activeSearchQuery && activeSearchQuery.trim().length > 0
+                          ? "Try adjusting your search or add new facts"
+                          : "Add new facts to get started"}
+                      </p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-200">
+                  <div className="divide-y divide-base-300">
                     {facts.map((fact: any) => {
-                      const factIdDisplay = fact.id?.includes("/") 
+                      const factIdDisplay = fact.id?.includes("/")
                         ? fact.id.substring(fact.id.lastIndexOf("/") + 1)
                         : fact.id?.substring(0, 8) || "unknown";
                       return (
                         <div
                           key={fact.id}
                           onClick={() => setSelectedFact(fact.id)}
-                          className={`p-6 hover:bg-slate-50 transition-colors cursor-pointer ${
-                            selectedFact === fact.id ? "bg-blue-50 border-l-4 border-blue-600" : ""
+                          className={`p-6 hover:bg-base-200 transition-colors cursor-pointer ${
+                            selectedFact === fact.id ? "bg-primary/10 border-l-4 border-primary" : ""
                           }`}
                         >
-                          <div className="text-slate-900 mb-2 leading-relaxed">
+                          <div className="text-base-content mb-2 leading-relaxed">
                             <TruncatedContent
                               content={
                                 typeof fact.content === "string"
@@ -709,13 +707,13 @@ export default function EditorPage() {
                               maxLength={300}
                             />
                           </div>
-                          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                            <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">
+                          <div className="flex flex-wrap items-center gap-3 text-sm text-base-content/70">
+                            <span className="badge badge-ghost font-mono text-xs">
                               ID: {factIdDisplay}
                             </span>
                             <span>{new Date(fact.created_at).toLocaleString()}</span>
                             {fact.metadata && Object.keys(fact.metadata).length > 0 && (
-                              <span className="text-xs text-slate-400">
+                              <span className="text-xs text-base-content/50">
                                 {Object.keys(fact.metadata).length} metadata field{Object.keys(fact.metadata).length !== 1 ? "s" : ""}
                               </span>
                             )}
@@ -729,44 +727,48 @@ export default function EditorPage() {
             )}
 
             {selectedView === "cards" && (
-              <div className="bg-white rounded-xl shadow-lg border border-slate-200">
-                <div className="p-6 border-b border-slate-200">
-                  <h2 className="text-2xl font-bold text-slate-900">Knowledge Cards</h2>
-                  <p className="text-sm text-slate-600 mt-1">
+              <div className="card bg-base-100 shadow-lg border border-base-300">
+                <div className="card-body border-b border-base-300">
+                  <h2 className="card-title text-2xl">Knowledge Cards</h2>
+                  <p className="text-sm text-base-content/70 mt-1">
                     Consolidated knowledge summaries from your facts
                   </p>
                 </div>
 
                 {cardsLoading ? (
-                  <div className="p-8 text-center">
-                    <div className="text-slate-600">Loading cards...</div>
+                  <div className="card-body">
+                    <div className="text-center text-base-content/70">Loading cards...</div>
                   </div>
                 ) : !cardsData?.cards || cardsData.cards.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                    </svg>
-                    <p className="text-lg font-medium text-slate-900 mb-2">No cards found</p>
-                    <p className="text-slate-600">Cards are created when facts are consolidated</p>
+                  <div className="card-body">
+                    <div className="text-center">
+                      <svg className="w-16 h-16 text-base-content/20 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                      <p className="text-lg font-medium mb-2">No cards found</p>
+                      <p className="text-base-content/70">Cards are created when facts are consolidated</p>
+                    </div>
                   </div>
                 ) : filteredCards.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <p className="text-lg font-medium text-slate-900 mb-2">No cards match your search</p>
-                    <p className="text-slate-600">Try adjusting your search query</p>
+                  <div className="card-body">
+                    <div className="text-center">
+                      <p className="text-lg font-medium mb-2">No cards match your search</p>
+                      <p className="text-base-content/70">Try adjusting your search query</p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-200">
+                  <div className="divide-y divide-base-300">
                     {filteredCards.map((card: any) => (
                       <div
                         key={card.id}
                         onClick={() => setSelectedCard(card.id)}
-                        className={`p-6 hover:bg-slate-50 transition-colors cursor-pointer ${
-                          selectedCard === card.id ? "bg-indigo-50 border-l-4 border-indigo-600" : ""
+                        className={`p-6 hover:bg-base-200 transition-colors cursor-pointer ${
+                          selectedCard === card.id ? "bg-secondary/10 border-l-4 border-secondary" : ""
                         }`}
                       >
-                        <h3 className="text-lg font-semibold text-slate-900 mb-2">{card.title}</h3>
-                        <p className="text-slate-700 mb-3 leading-relaxed">{card.summary}</p>
-                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                        <h3 className="text-lg font-semibold mb-2">{card.title}</h3>
+                        <p className="text-base-content/80 mb-3 leading-relaxed">{card.summary}</p>
+                        <div className="flex flex-wrap items-center gap-3 text-sm text-base-content/70">
                           <span className="flex items-center gap-1">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -780,7 +782,7 @@ export default function EditorPage() {
                             {card.fact_ids.length} fact{card.fact_ids.length !== 1 ? "s" : ""}
                           </span>
                           {card.metadata && Object.keys(card.metadata).length > 0 && (
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-base-content/50">
                               {Object.keys(card.metadata).length} metadata field{Object.keys(card.metadata).length !== 1 ? "s" : ""}
                             </span>
                           )}
@@ -793,48 +795,52 @@ export default function EditorPage() {
             )}
 
             {selectedView === "files" && (
-              <div className="bg-white rounded-xl shadow-lg border border-slate-200">
-                <div className="p-6 border-b border-slate-200">
-                  <h2 className="text-2xl font-bold text-slate-900">Files</h2>
-                  <p className="text-sm text-slate-600 mt-1">
+              <div className="card bg-base-100 shadow-lg border border-base-300">
+                <div className="card-body border-b border-base-300">
+                  <h2 className="card-title text-2xl">Files</h2>
+                  <p className="text-sm text-base-content/70 mt-1">
                     Browse uploaded files and their extracted facts
                   </p>
                 </div>
 
                 {filesLoading ? (
-                  <div className="p-8 text-center">
-                    <div className="text-slate-600">Loading files...</div>
+                  <div className="card-body">
+                    <div className="text-center text-base-content/70">Loading files...</div>
                   </div>
                 ) : !filesData?.files || filesData.files.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                    </svg>
-                    <p className="text-lg font-medium text-slate-900 mb-2">No files found</p>
-                    <p className="text-slate-600">Upload files to extract facts from them</p>
+                  <div className="card-body">
+                    <div className="text-center">
+                      <svg className="w-16 h-16 text-base-content/20 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                      <p className="text-lg font-medium mb-2">No files found</p>
+                      <p className="text-base-content/70">Upload files to extract facts from them</p>
+                    </div>
                   </div>
                 ) : filteredFiles.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <p className="text-lg font-medium text-slate-900 mb-2">No files match your search</p>
-                    <p className="text-slate-600">Try adjusting your search query</p>
+                  <div className="card-body">
+                    <div className="text-center">
+                      <p className="text-lg font-medium mb-2">No files match your search</p>
+                      <p className="text-base-content/70">Try adjusting your search query</p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-200">
+                  <div className="divide-y divide-base-300">
                     {filteredFiles.map((file: any) => (
                       <div
                         key={file.id}
                         onClick={() => setSelectedFile(file.id)}
-                        className={`p-6 hover:bg-slate-50 transition-colors cursor-pointer ${
-                          selectedFile === file.id ? "bg-green-50 border-l-4 border-green-600" : ""
+                        className={`p-6 hover:bg-base-200 transition-colors cursor-pointer ${
+                          selectedFile === file.id ? "bg-accent/10 border-l-4 border-accent" : ""
                         }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-slate-900 mb-1">{file.original_filename || file.filename}</h3>
-                            <p className="text-sm text-slate-600 mb-3">
+                            <h3 className="text-lg font-semibold mb-1">{file.original_filename || file.filename}</h3>
+                            <p className="text-sm text-base-content/70 mb-3">
                               {file.mime_type} • {(file.size / 1024).toFixed(2)} KB
                             </p>
-                            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                            <div className="flex flex-wrap items-center gap-3 text-sm text-base-content/70">
                               <span className="flex items-center gap-1">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -858,15 +864,17 @@ export default function EditorPage() {
             )}
 
             {selectedView === "graph" && (
-              <div className="bg-white rounded-xl shadow-lg border border-slate-200">
-                <div className="p-6 border-b border-slate-200">
-                  <h2 className="text-2xl font-bold text-slate-900">Knowledge Graph</h2>
-                  <p className="text-sm text-slate-600 mt-1">
+              <div className="card bg-base-100 shadow-lg border border-base-300">
+                <div className="card-body border-b border-base-300">
+                  <h2 className="card-title text-2xl">Knowledge Graph</h2>
+                  <p className="text-sm text-base-content/70 mt-1">
                     Visualize relationships between facts
                   </p>
                 </div>
-                <div className="p-8 text-center">
-                  <p className="text-slate-600">Graph visualization coming soon</p>
+                <div className="card-body">
+                  <div className="text-center">
+                    <p className="text-base-content/70">Graph visualization coming soon</p>
+                  </div>
                 </div>
               </div>
             )}
@@ -875,134 +883,145 @@ export default function EditorPage() {
           {/* Sidebar */}
           <div className="lg:col-span-1">
             {selectedFact && (
-              <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 sticky top-24 space-y-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-slate-900">Fact Details</h3>
-                      {editingFactId !== selectedFact && (
-                    <button
-                      onClick={() => handleEditFact(selectedFact)}
-                      className="text-xs px-2 py-1 bg-slate-600 text-white rounded hover:bg-slate-700 transition-colors"
-                    >
-                      Edit
-                    </button>
-                  )}
-                </div>
-                <div className="space-y-4">
-                  {editingFactId === selectedFact ? (
-                    <FactEditForm
-                      factId={selectedFact}
-                      content={facts.find((f: any) => f.id === selectedFact)?.content || ""}
-                      isPending={updateFactMutation.isPending}
-                      onSave={(content) => handleUpdateFact(selectedFact, content)}
-                      onCancel={handleCancelEditFact}
-                    />
-                  ) : (
-                    <>
-                      <div>
-                        <p className="text-sm font-medium text-slate-600 mb-1">Content</p>
-                        <div className="text-slate-900">
-                          <TruncatedContent
-                            content={selectedFactData?.content || ""}
-                            maxLength={500}
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-slate-600 mb-1">Created</p>
-                        <p className="text-slate-900">
-                          {new Date(selectedFactData?.created_at || "").toLocaleString()}
-                        </p>
-                      </div>
-                      {selectedFactData?.metadata && Object.keys(selectedFactData.metadata).length > 0 && (
+              <div className="card bg-base-100 shadow-lg border border-base-300 sticky top-24">
+                <div className="card-body space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="card-title">Fact Details</h3>
+                    {editingFactId !== selectedFact && (
+                      <button
+                        onClick={() => handleEditFact(selectedFact)}
+                        className="btn btn-neutral btn-xs"
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-4">
+                    {editingFactId === selectedFact ? (
+                      <FactEditForm
+                        factId={selectedFact}
+                        content={facts.find((f: any) => f.id === selectedFact)?.content || ""}
+                        isPending={updateFactMutation.isPending}
+                        onSave={(content) => handleUpdateFact(selectedFact, content)}
+                        onCancel={handleCancelEditFact}
+                      />
+                    ) : (
+                      <>
                         <div>
-                          <p className="text-sm font-medium text-slate-600 mb-1">Metadata</p>
-                          <div className="bg-slate-50 rounded-lg p-3">
-                            <pre className="text-xs text-slate-700 whitespace-pre-wrap">
-                              {JSON.stringify(selectedFactData.metadata, null, 2)}
-                            </pre>
+                          <p className="text-sm font-medium text-base-content/70 mb-1">Content</p>
+                          <div className="text-base-content">
+                            <TruncatedContent
+                              content={selectedFactData?.content || ""}
+                              maxLength={500}
+                            />
                           </div>
                         </div>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* Relations Section */}
-                <div className="border-t border-slate-200 pt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-semibold text-slate-900">Relations</h4>
-                    <button
-                      onClick={() => setShowCreateRelation(!showCreateRelation)}
-                      className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                    >
-                      {showCreateRelation ? "Cancel" : "+ Add"}
-                    </button>
+                        <div>
+                          <p className="text-sm font-medium text-base-content/70 mb-1">Created</p>
+                          <p className="text-base-content">
+                            {new Date(selectedFactData?.created_at || "").toLocaleString()}
+                          </p>
+                        </div>
+                        {selectedFactData?.metadata && Object.keys(selectedFactData.metadata).length > 0 && (
+                          <div>
+                            <p className="text-sm font-medium text-base-content/70 mb-1">Metadata</p>
+                            <div className="bg-base-200 rounded-lg p-3">
+                              <pre className="text-xs text-base-content whitespace-pre-wrap">
+                                {JSON.stringify(selectedFactData.metadata, null, 2)}
+                              </pre>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
 
-                  {showCreateRelation && (
-                    <form onSubmit={handleCreateRelation} className="mb-4 p-3 bg-slate-50 rounded-lg space-y-3">
-                      <div>
-                        <label className="block text-xs font-medium text-slate-700 mb-1">From Fact</label>
-                        <select
-                          value={relationFromFact || selectedFact || ""}
-                          onChange={(e) => setRelationFromFact(e.target.value)}
-                          className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-white"
-                          required
-                        >
-                          <option value="">Select fact...</option>
-                          {facts.map((f: any) => (
-                            <option key={f.id} value={f.id}>
-                              {f.content ? `${f.content.substring(0, 50)}...` : 'No content'}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="text-xs text-slate-500 mt-1">Default: Currently selected fact</p>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-slate-700 mb-1">To Fact</label>
-                        <select
-                          value={relationToFact}
-                          onChange={(e) => setRelationToFact(e.target.value)}
-                          className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 bg-white"
-                          required
-                        >
-                          <option value="">Select fact...</option>
-                          {facts.filter((f: any) => f.id !== relationFromFact).map((f: any) => (
-                            <option key={f.id} value={f.id}>{f.content ? `${f.content.substring(0, 50)}...` : 'No content'}</option>
-                          ))}
-                        </select>
-                        <p className="text-xs text-slate-500 mt-1">Select the fact this relates to</p>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
-                        <select
-                          value={relationType}
-                          onChange={(e) => setRelationType(e.target.value)}
-                          className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-                          required
-                        >
-                          <option value="related_to">Related To</option>
-                          <option value="references">References</option>
-                          <option value="depends_on">Depends On</option>
-                          <option value="part_of">Part Of</option>
-                        </select>
-                      </div>
+                  {/* Relations Section */}
+                  <div className="border-t border-base-300 pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-semibold">Relations</h4>
                       <button
-                        type="submit"
-                        disabled={createFactRelationMutation.isPending}
-                        className="w-full px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                        onClick={() => setShowCreateRelation(!showCreateRelation)}
+                        className="btn btn-primary btn-xs"
                       >
-                        {createFactRelationMutation.isPending ? "Creating..." : "Create Relation"}
+                        {showCreateRelation ? "Cancel" : "+ Add"}
                       </button>
-                    </form>
-                  )}
+                    </div>
 
-                  {/* Display Relations */}
-                  {factRelationsData && (
-                    <div className="space-y-3">
-                      {factRelationsData.outgoing && factRelationsData.outgoing.length > 0 && (
-                        <div>
-                          <p className="text-xs font-medium text-slate-600 mb-2">Outgoing Relations</p>
+                    {showCreateRelation && (
+                      <form onSubmit={handleCreateRelation} className="mb-4 p-3 bg-base-200 rounded-lg space-y-3">
+                        <div className="form-control">
+                          <label className="label">
+                            <span className="label-text text-xs font-medium">From Fact</span>
+                          </label>
+                          <select
+                            value={relationFromFact || selectedFact || ""}
+                            onChange={(e) => setRelationFromFact(e.target.value)}
+                            className="select select-bordered select-sm w-full"
+                            required
+                          >
+                            <option value="">Select fact...</option>
+                            {facts.map((f: any) => (
+                              <option key={f.id} value={f.id}>
+                                {f.content ? `${f.content.substring(0, 50)}...` : 'No content'}
+                              </option>
+                            ))}
+                          </select>
+                          <label className="label">
+                            <span className="label-text-alt">Default: Currently selected fact</span>
+                          </label>
+                        </div>
+                        <div className="form-control">
+                          <label className="label">
+                            <span className="label-text text-xs font-medium">To Fact</span>
+                          </label>
+                          <select
+                            value={relationToFact}
+                            onChange={(e) => setRelationToFact(e.target.value)}
+                            className="select select-bordered select-sm w-full"
+                            required
+                          >
+                            <option value="">Select fact...</option>
+                            {facts.filter((f: any) => f.id !== relationFromFact).map((f: any) => (
+                              <option key={f.id} value={f.id}>{f.content ? `${f.content.substring(0, 50)}...` : 'No content'}</option>
+                            ))}
+                          </select>
+                          <label className="label">
+                            <span className="label-text-alt">Select the fact this relates to</span>
+                          </label>
+                        </div>
+                        <div className="form-control">
+                          <label className="label">
+                            <span className="label-text text-xs font-medium">Type</span>
+                          </label>
+                          <select
+                            value={relationType}
+                            onChange={(e) => setRelationType(e.target.value)}
+                            className="select select-bordered select-sm w-full"
+                            required
+                          >
+                            <option value="related_to">Related To</option>
+                            <option value="references">References</option>
+                            <option value="depends_on">Depends On</option>
+                            <option value="part_of">Part Of</option>
+                          </select>
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={createFactRelationMutation.isPending}
+                          className="btn btn-primary btn-sm w-full"
+                        >
+                          {createFactRelationMutation.isPending ? "Creating..." : "Create Relation"}
+                        </button>
+                      </form>
+                    )}
+
+                    {/* Display Relations */}
+                    {factRelationsData && (
+                      <div className="space-y-3">
+                        {factRelationsData.outgoing && factRelationsData.outgoing.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-base-content/70 mb-2">Outgoing Relations</p>
                           <div className="space-y-2">
                             {factRelationsData.outgoing
                               .filter((rel: any) => {
@@ -1099,9 +1118,9 @@ export default function EditorPage() {
                           </div>
                         </div>
                       )}
-                      {factRelationsData.incoming && factRelationsData.incoming.length > 0 && (
-                        <div>
-                          <p className="text-xs font-medium text-slate-600 mb-2">Incoming Relations</p>
+                        {factRelationsData.incoming && factRelationsData.incoming.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-base-content/70 mb-2">Incoming Relations</p>
                           <div className="space-y-2">
                             {factRelationsData.incoming
                               .filter((rel: any) => {
@@ -1189,199 +1208,197 @@ export default function EditorPage() {
                           </div>
                         </div>
                       )}
-                      {(!factRelationsData.outgoing || factRelationsData.outgoing.length === 0) &&
-                        (!factRelationsData.incoming || factRelationsData.incoming.length === 0) && (
-                          <p className="text-xs text-slate-500">No relations yet</p>
-                        )}
-                    </div>
-                  )}
-                </div>
+                        {(!factRelationsData.outgoing || factRelationsData.outgoing.length === 0) &&
+                          (!factRelationsData.incoming || factRelationsData.incoming.length === 0) && (
+                            <p className="text-xs text-base-content/50">No relations yet</p>
+                          )}
+                      </div>
+                    )}
+                  </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSelectedFact(null)}
-                    className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-                  >
-                    Close
-                  </button>
-                  {editingFactId !== selectedFact && (
+                  <div className="flex gap-2">
                     <button
-                      onClick={() => handleDeleteFact(selectedFact)}
-                      disabled={deleteFactMutation.isPending}
-                      className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => setSelectedFact(null)}
+                      className="btn btn-ghost flex-1"
                     >
-                      {deleteFactMutation.isPending ? "Deleting..." : "Delete"}
+                      Close
                     </button>
-                  )}
+                    {editingFactId !== selectedFact && (
+                      <button
+                        onClick={() => handleDeleteFact(selectedFact)}
+                        disabled={deleteFactMutation.isPending}
+                        className="btn btn-error"
+                      >
+                        {deleteFactMutation.isPending ? "Deleting..." : "Delete"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
 
             {selectedCard && selectedCardData?.card && (
-              <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 sticky top-24 space-y-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-slate-900">Card Details</h3>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Title</p>
-                    <p className="text-slate-900 font-semibold">{selectedCardData.card.title}</p>
+              <div className="card bg-base-100 shadow-lg border border-base-300 sticky top-24">
+                <div className="card-body space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="card-title">Card Details</h3>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Summary</p>
-                    <p className="text-slate-900">{selectedCardData.card.summary}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Content</p>
-                    <p className="text-slate-900 whitespace-pre-wrap leading-relaxed">{selectedCardData.card.content}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Fact Count</p>
-                    <p className="text-slate-900">{selectedCardData.card.fact_ids.length} fact{selectedCardData.card.fact_ids.length !== 1 ? "s" : ""}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Created</p>
-                    <p className="text-slate-900">
-                      {new Date(selectedCardData.card.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Last Updated</p>
-                    <p className="text-slate-900">
-                      {new Date(selectedCardData.card.updated_at).toLocaleString()}
-                    </p>
-                  </div>
-                  {selectedCardData.card.metadata && Object.keys(selectedCardData.card.metadata).length > 0 && (
+                  <div className="space-y-4">
                     <div>
-                      <p className="text-sm font-medium text-slate-600 mb-1">Metadata</p>
-                      <div className="bg-slate-50 rounded-lg p-3">
-                        <pre className="text-xs text-slate-700 whitespace-pre-wrap">
-                          {JSON.stringify(selectedCardData.card.metadata, null, 2)}
-                        </pre>
-                      </div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Title</p>
+                      <p className="font-semibold">{selectedCardData.card.title}</p>
                     </div>
-                  )}
-                </div>
+                    <div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Summary</p>
+                      <p>{selectedCardData.card.summary}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Content</p>
+                      <p className="whitespace-pre-wrap leading-relaxed">{selectedCardData.card.content}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Fact Count</p>
+                      <div className="badge badge-primary">{selectedCardData.card.fact_ids.length} fact{selectedCardData.card.fact_ids.length !== 1 ? "s" : ""}</div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Created</p>
+                      <p>{new Date(selectedCardData.card.created_at).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Last Updated</p>
+                      <p>{new Date(selectedCardData.card.updated_at).toLocaleString()}</p>
+                    </div>
+                    {selectedCardData.card.metadata && Object.keys(selectedCardData.card.metadata).length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-base-content/70 mb-1">Metadata</p>
+                        <div className="bg-base-200 rounded-lg p-3">
+                          <pre className="text-xs text-base-content whitespace-pre-wrap">
+                            {JSON.stringify(selectedCardData.card.metadata, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSelectedCard(null)}
-                    className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-                  >
-                    Close
-                  </button>
-                  <button
-                    onClick={() => handleDeleteCard(selectedCard)}
-                    disabled={deleteCardMutation.isPending}
-                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {deleteCardMutation.isPending ? "Deleting..." : "Delete"}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSelectedCard(null)}
+                      className="btn btn-ghost flex-1"
+                    >
+                      Close
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCard(selectedCard)}
+                      disabled={deleteCardMutation.isPending}
+                      className="btn btn-error"
+                    >
+                      {deleteCardMutation.isPending ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
 
             {selectedFile && selectedFileData?.file && (
-              <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6 sticky top-24 space-y-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-slate-900">File Details</h3>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Filename</p>
-                    <p className="text-slate-900 font-semibold">{selectedFileData.file.original_filename || selectedFileData.file.filename}</p>
+              <div className="card bg-base-100 shadow-lg border border-base-300 sticky top-24">
+                <div className="card-body space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="card-title">File Details</h3>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Storage Filename</p>
-                    <p className="text-slate-900 text-sm font-mono">{selectedFileData.file.filename}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">MIME Type</p>
-                    <p className="text-slate-900">{selectedFileData.file.mime_type}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Size</p>
-                    <p className="text-slate-900">{(selectedFileData.file.size / 1024).toFixed(2)} KB</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Storage Path</p>
-                    <p className="text-slate-900 text-sm font-mono break-all">{selectedFileData.file.storage_path}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Fact Count</p>
-                    <p className="text-slate-900">{selectedFileData.file.fact_ids.length} fact{selectedFileData.file.fact_ids.length !== 1 ? "s" : ""}</p>
-                  </div>
-                  {fileFactsData?.facts && fileFactsData.facts.length > 0 && (
+                  <div className="space-y-4">
                     <div>
-                      <p className="text-sm font-medium text-slate-600 mb-2">Extracted Facts</p>
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {fileFactsData.facts.map((fact: any) => (
-                          <div
-                            key={fact.id}
-                            onClick={() => {
-                              setSelectedFact(fact.id);
-                              setSelectedView("facts");
-                            }}
-                            className="p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors"
-                          >
-                            <p className="text-sm text-slate-900 line-clamp-2">
-                              {typeof fact.content === "string"
-                                ? fact.content
-                                : typeof fact.content === "object" && fact.content !== null && "content" in fact.content
-                                ? String((fact.content as any).content)
-                                : JSON.stringify(fact.content)}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-1 font-mono">
-                              {fact.id?.includes("/") ? fact.id.substring(fact.id.lastIndexOf("/") + 1) : fact.id?.substring(0, 8)}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Filename</p>
+                      <p className="font-semibold">{selectedFileData.file.original_filename || selectedFileData.file.filename}</p>
                     </div>
-                  )}
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Created</p>
-                    <p className="text-slate-900">
-                      {new Date(selectedFileData.file.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600 mb-1">Last Updated</p>
-                    <p className="text-slate-900">
-                      {new Date(selectedFileData.file.updated_at).toLocaleString()}
-                    </p>
-                  </div>
-                  {selectedFileData.file.metadata && Object.keys(selectedFileData.file.metadata).length > 0 && (
                     <div>
-                      <p className="text-sm font-medium text-slate-600 mb-1">Metadata</p>
-                      <div className="bg-slate-50 rounded-lg p-3">
-                        <pre className="text-xs text-slate-700 whitespace-pre-wrap">
-                          {JSON.stringify(selectedFileData.file.metadata, null, 2)}
-                        </pre>
-                      </div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Storage Filename</p>
+                      <p className="text-sm font-mono">{selectedFileData.file.filename}</p>
                     </div>
-                  )}
-                </div>
+                    <div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">MIME Type</p>
+                      <div className="badge badge-outline">{selectedFileData.file.mime_type}</div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Size</p>
+                      <div className="badge badge-neutral">{(selectedFileData.file.size / 1024).toFixed(2)} KB</div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Storage Path</p>
+                      <p className="text-sm font-mono break-all">{selectedFileData.file.storage_path}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Fact Count</p>
+                      <div className="badge badge-primary">{selectedFileData.file.fact_ids.length} fact{selectedFileData.file.fact_ids.length !== 1 ? "s" : ""}</div>
+                    </div>
+                    {fileFactsData?.facts && fileFactsData.facts.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-base-content/70 mb-2">Extracted Facts</p>
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {fileFactsData.facts.map((fact: any) => (
+                            <div
+                              key={fact.id}
+                              onClick={() => {
+                                setSelectedFact(fact.id);
+                                setSelectedView("facts");
+                              }}
+                              className="p-3 bg-base-200 rounded-lg hover:bg-base-300 cursor-pointer transition-colors"
+                            >
+                              <p className="text-sm line-clamp-2">
+                                {typeof fact.content === "string"
+                                  ? fact.content
+                                  : typeof fact.content === "object" && fact.content !== null && "content" in fact.content
+                                  ? String((fact.content as any).content)
+                                  : JSON.stringify(fact.content)}
+                              </p>
+                              <p className="text-xs text-base-content/50 mt-1 font-mono">
+                                {fact.id?.includes("/") ? fact.id.substring(fact.id.lastIndexOf("/") + 1) : fact.id?.substring(0, 8)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Created</p>
+                      <p>{new Date(selectedFileData.file.created_at).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-base-content/70 mb-1">Last Updated</p>
+                      <p>{new Date(selectedFileData.file.updated_at).toLocaleString()}</p>
+                    </div>
+                    {selectedFileData.file.metadata && Object.keys(selectedFileData.file.metadata).length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-base-content/70 mb-1">Metadata</p>
+                        <div className="bg-base-200 rounded-lg p-3">
+                          <pre className="text-xs text-base-content whitespace-pre-wrap">
+                            {JSON.stringify(selectedFileData.file.metadata, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSelectedFile(null)}
-                    className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-                  >
-                    Close
-                  </button>
-                  <button
-                    onClick={() => handleDeleteFile(selectedFile)}
-                    disabled={deleteFileMutation.isPending}
-                    className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {deleteFileMutation.isPending ? "Deleting..." : "Delete"}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSelectedFile(null)}
+                      className="btn btn-ghost flex-1"
+                    >
+                      Close
+                    </button>
+                    <button
+                      onClick={() => handleDeleteFile(selectedFile)}
+                      disabled={deleteFileMutation.isPending}
+                      className="btn btn-error flex-1"
+                    >
+                      {deleteFileMutation.isPending ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
           </div>
         </div>
+      </div>
     </AppLayout>
   );
 }

@@ -148,9 +148,9 @@ export default function WorkspacesPage() {
 
   if (userLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <AppLayout>
         <div className="text-xl text-slate-600">Loading...</div>
-      </div>
+      </AppLayout>
     );
   }
 
@@ -168,8 +168,8 @@ export default function WorkspacesPage() {
     <AppLayout>
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-5">
-          <div className="bg-slate-900 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[300px]">
+        <div className="toast toast-top toast-end">
+          <div className="alert alert-success">
             <svg
               className="w-5 h-5 flex-shrink-0"
               fill="none"
@@ -183,10 +183,10 @@ export default function WorkspacesPage() {
                 d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <span className="flex-1">{toastMessage}</span>
+            <span>{toastMessage}</span>
             <button
               onClick={() => setToastMessage(null)}
-              className="text-slate-400 hover:text-white"
+              className="btn btn-ghost btn-sm"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -197,51 +197,52 @@ export default function WorkspacesPage() {
       )}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-slate-900">Workspace Management</h1>
-          <p className="text-slate-600 mt-2">Create and manage your workspaces</p>
+          <h1 className="text-3xl font-bold">Workspace Management</h1>
+          <p className="text-base-content/70 mt-2">Create and manage your workspaces</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Workspaces List */}
           <div className="lg:col-span-1">
-            <div className="bg-white border border-slate-200 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-slate-900">Workspaces</h2>
-                <button
-                  onClick={() => {
-                    setIsCreatingWorkspace(true);
-                    setSelectedWorkspaceId(null);
-                    setWorkspaceName("");
-                    setWorkspaceDescription("");
-                  }}
-                  className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  + New
-                </button>
-              </div>
+            <div className="card bg-base-100 shadow-xl">
+              <div className="card-body">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="card-title">Workspaces</h2>
+                  <button
+                    onClick={() => {
+                      setIsCreatingWorkspace(true);
+                      setSelectedWorkspaceId(null);
+                      setWorkspaceName("");
+                      setWorkspaceDescription("");
+                    }}
+                    className="btn btn-primary btn-sm"
+                  >
+                    + New
+                  </button>
+                </div>
 
               {isCreatingWorkspace ? (
-                <form onSubmit={handleCreateWorkspace} className="mb-4 p-3 bg-slate-50 rounded-lg">
+                <form onSubmit={handleCreateWorkspace} className="mb-4 p-3 bg-base-200 rounded-lg">
                   <input
                     type="text"
                     value={workspaceName}
                     onChange={(e) => setWorkspaceName(e.target.value)}
                     placeholder="Workspace name"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg mb-2"
+                    className="input input-bordered w-full mb-2"
                     required
                   />
                   <textarea
                     value={workspaceDescription}
                     onChange={(e) => setWorkspaceDescription(e.target.value)}
                     placeholder="Description (optional)"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg mb-2 text-sm"
+                    className="textarea textarea-bordered w-full mb-2"
                     rows={2}
                   />
                   <div className="flex gap-2">
                     <button
                       type="submit"
                       disabled={createWorkspaceMutation.isPending}
-                      className="flex-1 px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                      className="btn btn-primary btn-sm flex-1"
                     >
                       Create
                     </button>
@@ -252,7 +253,7 @@ export default function WorkspacesPage() {
                         setWorkspaceName("");
                         setWorkspaceDescription("");
                       }}
-                      className="px-3 py-1 text-sm bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300"
+                      className="btn btn-ghost btn-sm"
                     >
                       Cancel
                     </button>
@@ -268,18 +269,21 @@ export default function WorkspacesPage() {
                       setSelectedWorkspaceId(workspace.id);
                       setIsCreatingWorkspace(false);
                     }}
-                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                    className={`btn btn-block justify-start ${
                       selectedWorkspaceId === workspace.id
-                        ? "bg-indigo-100 text-indigo-900 font-medium"
-                        : "hover:bg-slate-50"
+                        ? "btn-primary"
+                        : "btn-ghost"
                     }`}
                   >
-                    <div className="font-medium">{workspace.name}</div>
-                    {workspace.description && (
-                      <div className="text-xs text-slate-500 mt-1">{workspace.description}</div>
-                    )}
+                    <div className="text-left w-full">
+                      <div className="font-medium">{workspace.name}</div>
+                      {workspace.description && (
+                        <div className="text-xs opacity-70 mt-1">{workspace.description}</div>
+                      )}
+                    </div>
                   </button>
                 ))}
+              </div>
               </div>
             </div>
           </div>
@@ -287,91 +291,78 @@ export default function WorkspacesPage() {
           {/* Workspace Details */}
           <div className="lg:col-span-2">
             {selectedWorkspace ? (
-              <div className="bg-white border border-slate-200 rounded-lg p-6">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-900">{selectedWorkspace.name}</h2>
-                    {selectedWorkspace.description && (
-                      <p className="text-slate-600 mt-1">{selectedWorkspace.description}</p>
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body">
+                  <div className="flex justify-between items-start mb-6">
+                    <div>
+                      <h2 className="card-title text-2xl">{selectedWorkspace.name}</h2>
+                      {selectedWorkspace.description && (
+                        <p className="text-base-content/70 mt-1">{selectedWorkspace.description}</p>
+                      )}
+                    </div>
+                    {currentMember?.role === "owner" && (
+                      <button
+                        onClick={handleDeleteWorkspace}
+                        disabled={deleteWorkspaceMutation.isPending}
+                        className="btn btn-error btn-sm"
+                      >
+                        Delete Workspace
+                      </button>
                     )}
                   </div>
-                  {currentMember?.role === "owner" && (
-                    <button
-                      onClick={handleDeleteWorkspace}
-                      disabled={deleteWorkspaceMutation.isPending}
-                      className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-                    >
-                      Delete Workspace
-                    </button>
-                  )}
-                </div>
 
                 {/* Tabs */}
-                <div className="border-b border-slate-200 mb-6">
-                  <div className="flex gap-4">
-                    <button
-                      onClick={() => setActiveTab("workspaces")}
-                      className={`pb-3 px-1 font-medium transition-colors ${
-                        activeTab === "workspaces"
-                          ? "text-indigo-600 border-b-2 border-indigo-600"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      Settings
-                    </button>
-                    <button
-                      onClick={() => setActiveTab("members")}
-                      className={`pb-3 px-1 font-medium transition-colors ${
-                        activeTab === "members"
-                          ? "text-indigo-600 border-b-2 border-indigo-600"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      Members ({membersData?.total || 0})
-                    </button>
-                    <button
-                      onClick={() => setActiveTab("invitations")}
-                      className={`pb-3 px-1 font-medium transition-colors ${
-                        activeTab === "invitations"
-                          ? "text-indigo-600 border-b-2 border-indigo-600"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                    >
-                      Invitations ({invitationsData?.total || 0})
-                    </button>
-                  </div>
+                <div className="tabs tabs-bordered mb-6">
+                  <button
+                    onClick={() => setActiveTab("workspaces")}
+                    className={`tab ${activeTab === "workspaces" ? "tab-active" : ""}`}
+                  >
+                    Settings
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("members")}
+                    className={`tab ${activeTab === "members" ? "tab-active" : ""}`}
+                  >
+                    Members <span className="badge badge-sm ml-2">{membersData?.total || 0}</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("invitations")}
+                    className={`tab ${activeTab === "invitations" ? "tab-active" : ""}`}
+                  >
+                    Invitations <span className="badge badge-sm ml-2">{invitationsData?.total || 0}</span>
+                  </button>
                 </div>
 
                 {/* Settings Tab */}
                 {activeTab === "workspaces" && canManage && (
                   <form onSubmit={handleUpdateWorkspace} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Workspace Name
+                    <div className="form-control">
+                      <label className="label">
+                        <span className="label-text">Workspace Name</span>
                       </label>
                       <input
                         type="text"
                         value={workspaceName || selectedWorkspace.name}
                         onChange={(e) => setWorkspaceName(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                        className="input input-bordered w-full"
                         required
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Description
+                    <div className="form-control">
+                      <label className="label">
+                        <span className="label-text">Description</span>
                       </label>
                       <textarea
                         value={workspaceDescription || selectedWorkspace.description || ""}
                         onChange={(e) => setWorkspaceDescription(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                        className="textarea textarea-bordered w-full"
                         rows={3}
                       />
                     </div>
                     <button
                       type="submit"
                       disabled={updateWorkspaceMutation.isPending}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                      className="btn btn-primary"
                     >
                       {updateWorkspaceMutation.isPending ? "Saving..." : "Save Changes"}
                     </button>
@@ -385,51 +376,55 @@ export default function WorkspacesPage() {
                       {membersData?.members.map((member) => (
                         <div
                           key={member.id}
-                          className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
+                          className="card bg-base-200"
                         >
-                          <div>
-                            <div className="font-medium">{member.user?.username || "Unknown"}</div>
-                            <div className="text-sm text-slate-500">{member.user?.email}</div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded">
-                              {member.role}
-                            </span>
-                            {canManage && member.user_id !== userData.user.userId && (
-                              <select
-                                value={member.role}
-                                onChange={(e) => {
-                                  updateMemberMutation.mutate({
-                                    workspace_id: selectedWorkspaceId!,
-                                    member_id: member.id,
-                                    role: e.target.value as "owner" | "admin" | "member",
-                                  });
-                                }}
-                                className="text-sm border border-slate-300 rounded px-2 py-1"
-                                disabled={updateMemberMutation.isPending}
-                              >
-                                <option value="member">Member</option>
-                                <option value="admin">Admin</option>
-                                {currentMember?.role === "owner" && (
-                                  <option value="owner">Owner</option>
+                          <div className="card-body p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="font-medium">{member.user?.username || "Unknown"}</div>
+                                <div className="text-sm opacity-70">{member.user?.email}</div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="badge badge-primary">
+                                  {member.role}
+                                </span>
+                                {canManage && member.user_id !== userData.user.userId && (
+                                  <select
+                                    value={member.role}
+                                    onChange={(e) => {
+                                      updateMemberMutation.mutate({
+                                        workspace_id: selectedWorkspaceId!,
+                                        member_id: member.id,
+                                        role: e.target.value as "owner" | "admin" | "member",
+                                      });
+                                    }}
+                                    className="select select-bordered select-sm"
+                                    disabled={updateMemberMutation.isPending}
+                                  >
+                                    <option value="member">Member</option>
+                                    <option value="admin">Admin</option>
+                                    {currentMember?.role === "owner" && (
+                                      <option value="owner">Owner</option>
+                                    )}
+                                  </select>
                                 )}
-                              </select>
-                            )}
-                            {canManage && member.user_id !== userData.user.userId && (
-                              <button
-                                onClick={() => {
-                                  if (confirm("Remove this member from the workspace?")) {
-                                    removeMemberMutation.mutate({
-                                      workspace_id: selectedWorkspaceId!,
-                                      member_id: member.id,
-                                    });
-                                  }
-                                }}
-                                className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded"
-                              >
-                                Remove
-                              </button>
-                            )}
+                                {canManage && member.user_id !== userData.user.userId && (
+                                  <button
+                                    onClick={() => {
+                                      if (confirm("Remove this member from the workspace?")) {
+                                        removeMemberMutation.mutate({
+                                          workspace_id: selectedWorkspaceId!,
+                                          member_id: member.id,
+                                        });
+                                      }
+                                    }}
+                                    className="btn btn-error btn-sm"
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -441,34 +436,36 @@ export default function WorkspacesPage() {
                 {activeTab === "invitations" && (
                   <div className="space-y-4">
                     {canManage && (
-                      <form onSubmit={handleCreateInvitation} className="p-4 bg-slate-50 rounded-lg">
-                        <div className="mb-3">
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Expiration Days
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="365"
-                            value={isNaN(expiresInDays) ? "" : expiresInDays}
-                            onChange={(e) => {
-                              const value = parseInt(e.target.value, 10);
-                              setExpiresInDays(isNaN(value) ? 7 : value);
-                            }}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                            placeholder="7"
-                          />
-                          <p className="mt-1 text-xs text-slate-500">
-                            Number of days until the invitation expires (default: 7 days)
-                          </p>
+                      <form onSubmit={handleCreateInvitation} className="card bg-base-200">
+                        <div className="card-body">
+                          <div className="form-control">
+                            <label className="label">
+                              <span className="label-text">Expiration Days</span>
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="365"
+                              value={isNaN(expiresInDays) ? "" : expiresInDays}
+                              onChange={(e) => {
+                                const value = parseInt(e.target.value, 10);
+                                setExpiresInDays(isNaN(value) ? 7 : value);
+                              }}
+                              className="input input-bordered w-full"
+                              placeholder="7"
+                            />
+                            <label className="label">
+                              <span className="label-text-alt">Number of days until the invitation expires (default: 7 days)</span>
+                            </label>
+                          </div>
+                          <button
+                            type="submit"
+                            disabled={createInvitationMutation.isPending}
+                            className="btn btn-primary w-full"
+                          >
+                            Create Invitation
+                          </button>
                         </div>
-                        <button
-                          type="submit"
-                          disabled={createInvitationMutation.isPending}
-                          className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                        >
-                          Create Invitation
-                        </button>
                       </form>
                     )}
 
@@ -476,65 +473,73 @@ export default function WorkspacesPage() {
                       {invitationsData?.invitations.map((inv) => (
                         <div
                           key={inv.id}
-                          className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
+                          className="card bg-base-200"
                         >
-                          <div className="flex-1">
-                            <div className="font-medium">
-                              Invitation Link
-                            </div>
-                            <div className="text-sm text-slate-500 font-mono">
-                              /invite/{inv.token}
-                            </div>
-                            <div className="text-xs text-slate-400 mt-1">
-                              Status: {inv.status} • Expires: {new Date(inv.expires_at).toLocaleDateString()}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => copyInvitationLink(inv.token)}
-                              className="px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                            >
-                              Copy Link
-                            </button>
-                            {canManage && (
-                              <button
-                                onClick={() => {
-                                  if (confirm("Are you sure you want to delete this invitation?")) {
-                                    deleteInvitationMutation.mutate({
-                                      workspace_id: selectedWorkspaceId!,
-                                      invitation_id: inv.id,
-                                    });
-                                  }
-                                }}
-                                disabled={deleteInvitationMutation.isPending}
-                                className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
-                                title="Delete invitation"
-                              >
-                                <svg
-                                  className="w-5 h-5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
+                          <div className="card-body p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="font-medium">
+                                  Invitation Link
+                                </div>
+                                <div className="text-sm font-mono opacity-70">
+                                  /invite/{inv.token}
+                                </div>
+                                <div className="text-xs opacity-50 mt-1">
+                                  <span className="badge badge-sm badge-outline mr-2">{inv.status}</span>
+                                  Expires: {new Date(inv.expires_at).toLocaleDateString()}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => copyInvitationLink(inv.token)}
+                                  className="btn btn-primary btn-sm"
                                 >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                  />
-                                </svg>
-                              </button>
-                            )}
+                                  Copy Link
+                                </button>
+                                {canManage && (
+                                  <button
+                                    onClick={() => {
+                                      if (confirm("Are you sure you want to delete this invitation?")) {
+                                        deleteInvitationMutation.mutate({
+                                          workspace_id: selectedWorkspaceId!,
+                                          invitation_id: inv.id,
+                                        });
+                                      }
+                                    }}
+                                    disabled={deleteInvitationMutation.isPending}
+                                    className="btn btn-error btn-sm btn-square"
+                                    title="Delete invitation"
+                                  >
+                                    <svg
+                                      className="w-5 h-5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                      />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
+                </div>
               </div>
             ) : (
-              <div className="bg-white border border-slate-200 rounded-lg p-12 text-center">
-                <p className="text-slate-500">Select a workspace to view details</p>
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body items-center text-center">
+                  <p className="opacity-70">Select a workspace to view details</p>
+                </div>
               </div>
             )}
           </div>

@@ -1,8 +1,10 @@
 @import "tailwindcss";
+@plugin "daisyui";
 
 @theme {
-  --font-family-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
-  --font-family-display: var(--font-space-grotesk), system-ui, -apple-system, sans-serif;
+  --font-family-sans: var(--font-mono), 'Courier New', monospace;
+  --font-family-mono: var(--font-mono), 'Courier New', monospace;
+  --font-family-brand: var(--font-brand), system-ui, sans-serif;
 }
 
 @layer base {
@@ -10,10 +12,29 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  
+
   body {
-    background: linear-gradient(to bottom right, #f8fafc, #eff6ff 30%, #eef2ff 50%);
+    @apply bg-base-200 text-base-content;
     min-height: 100vh;
+    background-image:
+      radial-gradient(circle at 20% 80%, rgba(251, 191, 36, 0.05) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(79, 70, 229, 0.05) 0%, transparent 50%);
+    background-attachment: fixed;
+    font-family: var(--font-mono);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  code, pre, .font-mono {
+    font-family: var(--font-mono);
+  }
+
+  .font-brand {
+    font-family: var(--font-brand);
   }
 }
 
@@ -23,7 +44,7 @@
     backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.2);
   }
-  
+
   .gradient-text-blue {
     background: linear-gradient(to right, #2563eb, #4f46e5);
     -webkit-background-clip: text;
@@ -31,7 +52,7 @@
     -webkit-text-fill-color: transparent;
     color: transparent;
   }
-  
+
   .gradient-text-purple {
     background: linear-gradient(to right, #7c3aed, #a855f7);
     -webkit-background-clip: text;
