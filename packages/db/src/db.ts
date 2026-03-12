@@ -28,7 +28,7 @@ async function normalizeBody(body: BodyInit | null): Promise<BodyInit | null> {
     return body;
   }
   if (body instanceof Buffer) {
-    return body;
+    return new Uint8Array(body);
   }
 
   // If it's a ReadableStream, read it fully and convert to Buffer
@@ -57,15 +57,15 @@ async function normalizeBody(body: BodyInit | null): Promise<BodyInit | null> {
       offset += chunk.length;
     }
 
-    return Buffer.from(result);
+    return result;
   }
 
-  // If it's an ArrayBuffer or ArrayBufferView, convert to Buffer
+  // If it's an ArrayBuffer or ArrayBufferView, convert to Uint8Array
   if (body instanceof ArrayBuffer) {
-    return Buffer.from(body);
+    return new Uint8Array(body);
   }
   if (ArrayBuffer.isView(body)) {
-    return Buffer.from(body.buffer, body.byteOffset, body.byteLength);
+    return new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
   }
 
   // For other types (FormData, Blob, etc.), pass through and let undici handle it
@@ -518,21 +518,25 @@ export async function init() {
       const factCountCursor = await collections.facts.database.query(factCountQuery);
       const factVectorCount = (await factCountCursor.next()) || 0;
 
-      // nLists must be between 16 and 100, and <= vector count
-      // Default to 16 for small collections, scale up for larger ones
-      const nLists = Math.min(Math.max(16, Math.min(factVectorCount, 100)), 100);
+      // nLists must be <= vector count (FAISS requirement: training points >= clusters)
+      // Skip vector index entirely if fewer than 16 vectors — JS cosine fallback handles small collections
+      if (factVectorCount < 16) {
+        console.log(`Skipping vector index for facts (only ${factVectorCount} vectors, need at least 16 for index)`);
+      } else {
+        const nLists = Math.min(factVectorCount, 100);
 
-      await collections.facts.ensureIndex({
-        type: "vector",
-        fields: ["embedding"],
-        name: "idx_fact_embedding_vector",
-        params: {
-          metric: "cosine",
-          dimension: 1536,
-          nLists: nLists,
-        },
-      });
-      console.log(`Vector index for facts created/verified with nLists=${nLists} (${factVectorCount} documents)`);
+        await collections.facts.ensureIndex({
+          type: "vector",
+          fields: ["embedding"],
+          name: "idx_fact_embedding_vector",
+          params: {
+            metric: "cosine",
+            dimension: 1536,
+            nLists: nLists,
+          },
+        });
+        console.log(`Vector index for facts created/verified with nLists=${nLists} (${factVectorCount} documents)`);
+      }
     } catch (error: any) {
       if (error.errorNum !== 1710) {
         // 1710 = index already exists
@@ -636,10 +640,10 @@ export async function init() {
       const relationCountCursor = await collections.relations.database.query(relationCountQuery);
       const relationVectorCount = (await relationCountCursor.next()) || 0;
 
-      if (relationVectorCount === 0) {
-        console.log("Skipping vector index for relations (no embeddings yet - will be created when first embedding is added)");
+      if (relationVectorCount < 16) {
+        console.log(`Skipping vector index for relations (${relationVectorCount} vectors, need at least 16)`);
       } else {
-        const nLists = Math.min(Math.max(16, relationVectorCount), 100);
+        const nLists = Math.min(relationVectorCount, 100);
         await collections.relations.ensureIndex({
           type: "vector",
           fields: ["embedding"],
@@ -751,31 +755,25 @@ export async function init() {
         await collections.knowledge_cards.database.query(countQuery);
       const vectorCount = (await countCursor.next()) || 0;
 
-      // Skip index creation if no vectors yet (nLists cannot exceed vector count)
-      if (vectorCount === 0) {
-        console.log("Skipping vector index for knowledge_cards (no embeddings yet - will be created when first embedding is added)");
-        return; // Exit early, don't try to create index
+      if (vectorCount < 16) {
+        console.log(`Skipping vector index for knowledge_cards (${vectorCount} vectors, need at least 16)`);
+      } else {
+        const nLists = Math.min(vectorCount, 100);
+
+        await collections.knowledge_cards.ensureIndex({
+          type: "vector",
+          fields: ["embedding"],
+          name: "idx_knowledge_card_embedding_vector",
+          params: {
+            metric: "cosine",
+            dimension: 1536,
+            nLists: nLists,
+          },
+        });
+        console.log(
+          `Vector index for knowledge_cards created with nLists=${nLists} (${vectorCount} vectors with embeddings)`,
+        );
       }
-
-      // nLists must be <= vectorCount (ArangoDB requirement)
-      // Use reasonable defaults:
-      // - Minimum: 16 (for small datasets)
-      // - Maximum: 100 (for large datasets)
-      const nLists = Math.min(Math.max(16, vectorCount), 100);
-
-      await collections.knowledge_cards.ensureIndex({
-        type: "vector",
-        fields: ["embedding"],
-        name: "idx_knowledge_card_embedding_vector",
-        params: {
-          metric: "cosine",
-          dimension: 1536,
-          nLists: nLists,
-        },
-      });
-      console.log(
-        `Vector index for knowledge_cards created with nLists=${nLists} (${vectorCount} vectors with embeddings)`,
-      );
     } catch (error: any) {
       if (error.errorNum !== 1710) {
         console.warn(
@@ -898,14 +896,14 @@ export async function ensureVectorIndex(
     const countCursor = await collection.database.query(countQuery);
     const vectorCount = (await countCursor.next()) || 0;
 
-    if (vectorCount === 0) {
-      console.log(`No embeddings in ${collectionName} yet, skipping vector index`);
+    if (vectorCount < 16) {
+      console.log(`Not enough embeddings in ${collectionName} (${vectorCount}, need at least 16), skipping vector index`);
       return false;
     }
 
     // Create vector index
     // In arangojs 10.x, params MUST be nested, and fields is a tuple [string]
-    const nLists = Math.min(Math.max(16, vectorCount), 100);
+    const nLists = Math.min(vectorCount, 100);
     await collection.ensureIndex({
       type: "vector",
       fields: ["embedding"],  // Tuple with single field

@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { Fact } from "@knowledgeplane/db";
+import { Fact, collections } from "@knowledgeplane/db";
 import { stripEmbeddingsArray } from "./strip-embeddings.js";
 
 export const factsBulkWriteTool: Tool = {
@@ -72,6 +72,25 @@ export async function handleFactsBulkWrite(args: {
   }));
 
   const facts = await Fact.bulkWrite(factInputs);
+
+  try {
+    const triggers = facts.map((fact) => ({
+      worker_name: "embeddings-generator",
+      status: "pending",
+      created_at: new Date().toISOString(),
+      metadata: {
+        type: "fact",
+        id: fact.id,
+        workspace_id: fact.workspace_id,
+      },
+    }));
+    if (triggers.length > 0) {
+      await collections.worker_triggers.saveAll(triggers);
+    }
+  } catch (triggerError: any) {
+    console.error("Failed to queue embedding triggers:", triggerError.message);
+  }
+
   const sanitizedFacts = stripEmbeddingsArray(facts);
 
   return {

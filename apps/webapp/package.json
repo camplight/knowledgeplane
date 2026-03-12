@@ -11,6 +11,7 @@
     "@knowledgeplane/aimodel": "*",
     "@knowledgeplane/db": "*",
     "@knowledgeplane/file-processor": "*",
+    "@next/env": "^16.0.4",
     "@tailwindcss/postcss": "^4.1.16",
     "@tanstack/react-query": "^5.62.11",
     "@trpc/client": "^11.9.0",
