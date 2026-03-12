@@ -9,8 +9,8 @@
   ],
   "dependencies": {
     "@knowledgeplane/file-processor": "*",
-    "p-queue": "9.1.0",
-    "arangojs": "10.2.2"
+    "arangojs": "10.2.2",
+    "p-queue": "9.1.0"
   },
   "scripts": {
     "bootstrap": "npm install",
@@ -34,6 +34,7 @@
     "bench:all": "cd tests/benchmarks && ./bench all"
   },
   "devDependencies": {
-    "concurrently": "9.1.0"
+    "concurrently": "9.1.0",
+    "dotenv-cli": "^11.0.0"
   }
 }

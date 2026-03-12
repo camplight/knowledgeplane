@@ -1,5 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { Fact } from "@knowledgeplane/db";
+import { Fact, collections } from "@knowledgeplane/db";
 import { stripEmbeddings } from "./strip-embeddings.js";
 
 export const factsWriteTool: Tool = {
@@ -43,6 +43,22 @@ export async function handleFactsWrite(args: {
     created_by: args.created_by,
     last_updated_by: args.last_updated_by,
   });
+
+  try {
+    await collections.worker_triggers.save({
+      worker_name: "embeddings-generator",
+      status: "pending",
+      created_at: new Date().toISOString(),
+      metadata: {
+        type: "fact",
+        id: fact.id,
+        workspace_id: args.workspace_id,
+      },
+    });
+  } catch (triggerError: any) {
+    console.error("Failed to queue embedding trigger:", triggerError.message);
+  }
+
   const sanitizedFact = stripEmbeddings(fact);
 
   return {
