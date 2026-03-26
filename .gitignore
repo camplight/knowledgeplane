@@ -3,6 +3,7 @@ node_modules
 .env
 .env.local
 .env.dev
+.env.production
 packages/db/dist
 apps/mcp-server/dist
 coverage
