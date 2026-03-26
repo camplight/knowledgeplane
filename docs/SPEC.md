@@ -837,6 +837,17 @@ For complete environment variable documentation and setup instructions, see:
 **Localhost Development with ngrok:**
 For localhost development, you'll need to set up ngrok to expose port 8080 for OAuth callbacks. See [DEVELOPMENT.md](../DEVELOPMENT.md) for detailed instructions.
 
+**Repository ngrok Config:**
+- Template config: `ngrok.config.example`
+- Local config (gitignored): `ngrok.config.yml`
+- Reserved domain for MCP server: `boa-driving-distinctly.ngrok-free.app`
+
+```bash
+cp ngrok.config.example ngrok.config.yml
+# set your ngrok authtoken in ngrok.config.yml
+ngrok start --config ./ngrok.config.yml mcp-server
+```
+
 **Example: Using OAuth Token**
 ```bash
 # Get auth info (shows available providers)
@@ -952,6 +963,12 @@ npm run migrate
 
 # Seed the database
 npm run seed
+
+# Reset database collections/graphs
+# - If ArangoDB is not running on localhost, this command starts local db automatically
+# - If this command started db, it also stops it automatically after reset
+# - If ArangoDB is already running, it reuses it and leaves it running
+npm run db:reset
 
 # Stop development servers
 npm run dev:stop

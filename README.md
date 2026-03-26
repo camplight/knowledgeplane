@@ -30,8 +30,10 @@ npm run bootstrap
 # 3) Start infrastructure + dev server (auto-reloads on code changes)
 npm run dev
 
-# 4) In a separate terminal, start ngrok for OAuth callbacks
-./scripts/start-ngrok.sh 8080
+# 4) Configure and start ngrok for MCP/OAuth callbacks
+cp ngrok.config.example ngrok.config.yml
+# Edit ngrok.config.yml and set your ngrok authtoken
+ngrok start --config ./ngrok.config.yml mcp-server
 
 # The command will:
 # - Start ArangoDB in Docker (port 8529)
@@ -42,6 +44,20 @@ npm run dev
 ```
 
 **For detailed development setup including ngrok and OAuth configuration, see [DEVELOPMENT.md](./DEVELOPMENT.md)**
+
+### ngrok Config (Reserved Domain)
+
+Use the provided ngrok config files to expose the local MCP server at:
+`https://boa-driving-distinctly.ngrok-free.app`
+
+- `ngrok.config.example` is committed as the template
+- `ngrok.config.yml` is for local use and is gitignored
+
+```bash
+cp ngrok.config.example ngrok.config.yml
+# Set your authtoken in ngrok.config.yml
+ngrok start --config ./ngrok.config.yml mcp-server
+```
 
 **Production Mode:**
 

@@ -1,0 +1,7 @@
+version: "2"
+authtoken: YOUR_NGROK_AUTHTOKEN
+tunnels:
+  mcp-server:
+    addr: 8080
+    proto: http
+    domain: boa-driving-distinctly.ngrok-free.app
