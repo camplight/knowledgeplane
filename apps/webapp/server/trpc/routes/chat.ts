@@ -200,7 +200,11 @@ Example response:
               usedFactIds.map(async (factId) => {
                 try {
                   const fact = await Fact.findById(factId);
-                  if (fact && !fact.trashed) {
+                  if (
+                    fact &&
+                    !fact.trashed &&
+                    fact.workspace_id === ctx.workspaceId
+                  ) {
                     return {
                       id: fact.id,
                       content: fact.content,

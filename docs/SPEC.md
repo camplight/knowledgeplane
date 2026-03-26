@@ -1911,9 +1911,10 @@ KnowledgePlane includes an AI chat interface that combines OpenAI's language mod
 7. AI generates a response using both its training and the knowledge base facts accessed via MCP tools
 8. AI returns JSON response with `content` (the response text) and `usedFacts` (array of fact IDs actually used)
 9. System parses the JSON response and fetches the actual fact objects by IDs
-10. Assistant response content is stored in the thread
-11. Response is displayed with information about which facts were actually used to construct the response
-12. When the user switches workspaces, the chat automatically uses the new workspace's context for subsequent MCP operations
+10. System enforces a workspace boundary check (`fact.workspace_id === current workspace`) before returning cited facts
+11. Assistant response content is stored in the thread
+12. Response is displayed with information about which facts were actually used to construct the response
+13. When the user switches workspaces, the chat automatically uses the new workspace's context for subsequent MCP operations
 
 **Thread Management:**
 - Each user automatically gets a thread per workspace that persists across sessions
@@ -1950,6 +1951,7 @@ The chat interface automatically:
 - Uses MCP tools to give the AI model direct access to the knowledge base
 - Tracks which facts were actually used by the AI model (not just searched)
 - Returns only the facts that were actually used to construct the response
+- Enforces server-side workspace scoping for cited facts, even if the model returns arbitrary fact IDs
 
 **MCP Integration:**
 - The chat interface uses OpenAI's MCP (Model Context Protocol) tools feature
