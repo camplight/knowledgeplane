@@ -332,16 +332,6 @@ export default function EditorPage() {
     const normalizedCurrentFactId = normalizeFactId(currentFactId);
     const normalizedNewFactId = normalizeFactId(newFactId);
     
-    console.log("handleUpdateRelation called:", { 
-      relationId, 
-      type, 
-      newFactId, 
-      normalizedNewFactId,
-      currentFactId,
-      normalizedCurrentFactId,
-      variant 
-    });
-    
     // Validate relation ID - should not be a fact ID
     if (!relationId || relationId.trim() === "") {
       console.error("Missing relation ID");
@@ -361,7 +351,6 @@ export default function EditorPage() {
     const factIdChanged = normalizedNewFactId !== normalizedCurrentFactId && newFactId !== currentFactId;
     
     if (factIdChanged) {
-      console.log("Fact ID changed, deleting and recreating relation");
       // Delete old relation and create new one
       deleteRelationMutation.mutate(
         { id: relationId },
@@ -392,7 +381,6 @@ export default function EditorPage() {
       );
     } else {
       // Just update the type
-      console.log("Updating relation type only", { relationId, type });
       if (!type || type.trim() === "") {
         console.error("Cannot update relation: type is empty");
         alert("Relation type cannot be empty");

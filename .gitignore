@@ -10,3 +10,19 @@ coverage
 dist
 .claude-flow
 ngrok.config.yml
+
+# Benchmark run data
+tests/benchmarks/runs/
+
+# Environment files
+.env.*.local
+.env.production
+.env.benchmark
+
+# Keys and certificates
+*.pem
+*.key
+
+# Swarm data
+.swarm/
+tests/benchmarks/src/.swarm/
