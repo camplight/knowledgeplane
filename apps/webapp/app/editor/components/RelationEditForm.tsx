@@ -49,15 +49,6 @@ export function RelationEditForm({
     const newType = selectedType;
     const newFactId = selectedFactId;
     
-    console.log("RelationEditForm submit:", { 
-      newType, 
-      newFactId, 
-      currentType, 
-      currentFactId,
-      relationId,
-      availableFactsCount: availableFacts.length 
-    });
-    
     if (!newType || newType.trim() === "") {
       console.error("RelationEditForm: Missing or empty type");
       alert("Please select a relation type");
