@@ -288,7 +288,7 @@ class PreflightChecker:
         # Get IDs from environment
         workspace_id = os.environ.get("KP_WORKSPACE_ID", "benchmark-test-workspace-123")
         user_id = os.environ.get("KP_USER_ID", "benchmark-user")
-        api_key = os.environ.get("KP_API_KEY", "bench_4d4e2e4eebfa49a68ede6114")
+        api_key = os.environ.get("KP_API_KEY", "")
 
         # Normalize IDs (remove prefix if present for _key)
         workspace_key = workspace_id.replace("workspaces/", "")

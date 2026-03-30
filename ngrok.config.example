@@ -4,4 +4,4 @@ tunnels:
   mcp-server:
     addr: 8080
     proto: http
-    domain: boa-driving-distinctly.ngrok-free.app
+    domain: your-subdomain.ngrok-free.app

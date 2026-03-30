@@ -47,7 +47,7 @@ async function triggerEmbeddings(workspaceId: string) {
   console.log("Background worker will process these within 30 seconds");
 }
 
-const workspaceId = process.argv[2] || '74be80db-d802-480b-b7f6-6891095ce0eb';
+const workspaceId = process.argv[2] || process.env.KP_WORKSPACE_ID || '';
 triggerEmbeddings(workspaceId)
   .then(() => {
     console.log("Done!");

@@ -1,7 +1,0 @@
-{
-  "timestamp": "20260217_175057",
-  "benchmark": "hotpot_n20",
-  "n_questions": "default",
-  "git_commit": "fa6bd1d",
-  "git_branch": "feature/benchmarking-suite"
-}

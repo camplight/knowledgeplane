@@ -840,7 +840,7 @@ For localhost development, you'll need to set up ngrok to expose port 8080 for O
 **Repository ngrok Config:**
 - Template config: `ngrok.config.example`
 - Local config (gitignored): `ngrok.config.yml`
-- Reserved domain for MCP server: `boa-driving-distinctly.ngrok-free.app`
+- Reserved domain for MCP server: `your-subdomain.ngrok-free.app`
 
 ```bash
 cp ngrok.config.example ngrok.config.yml

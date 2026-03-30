@@ -25,9 +25,9 @@ except ImportError:
 
 # Configuration - can be overridden with environment variables
 API_URL = os.getenv("KP_API_URL", "http://localhost:8081")
-WORKSPACE_ID = os.getenv("KP_WORKSPACE_ID", "74be80db-d802-480b-b7f6-6891095ce0eb")
-USER_ID = os.getenv("KP_USER_ID", "17ac0fa1-ff1d-417a-bf92-eb7a9ef50f04")
-API_KEY = os.getenv("KP_API_KEY", "bench_4d4e2e4eebfa49a68ede6114")
+WORKSPACE_ID = os.getenv("KP_WORKSPACE_ID", "")
+USER_ID = os.getenv("KP_USER_ID", "")
+API_KEY = os.getenv("KP_API_KEY", "")
 
 # Test configuration
 FACT_ID = "facts/2592"
