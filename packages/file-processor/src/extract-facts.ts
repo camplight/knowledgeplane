@@ -2,6 +2,7 @@ import {
   createAIModelClient,
   type ChatMessage,
   type ChatCompletionOptions,
+  getOpenAIModel,
 } from "@knowledgeplane/aimodel";
 import ExcelJS from "exceljs";
 
@@ -52,7 +53,7 @@ export async function extractFactsAndRelationsFromFile(
   );
   const provider = client.getProvider();
 
-  const model = options?.openaiModel || process.env.OPENAI_MODEL || "gpt-4o";
+  const model = options?.openaiModel || getOpenAIModel();
   const temperature = options?.temperature ?? 0.3;
 
   const systemPrompt = `You are a knowledge extraction agent. Your task is to analyze file content and extract:

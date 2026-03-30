@@ -1703,13 +1703,14 @@ KnowledgePlane includes background workers that automatically maintain and organ
 - Can be manually triggered via the worker logs page or tRPC API
 
 **Embeddings Generator:**
-- Runs every 10 minutes
+- Runs every 10 minutes (periodic sweep as backup)
 - Generates vector embeddings for facts, fact relations, and knowledge cards
 - Uses OpenAI embeddings API (text-embedding-3-small by default, dimension 1536)
 - Processes items in batches for efficiency
 - Updates embeddings when model changes or embeddings are missing
 - Stores embeddings directly in ArangoDB documents
 - Embeddings and internal ArangoDB IDs (`_id`, `_key`) are internal-only fields and are stripped from MCP and REST/tRPC API responses (including AQL query results)
+- All fact creation/update endpoints (webapp tRPC, MCP server, REST API) queue a `worker_triggers` entry for immediate embedding generation by the background worker (checked every 5 seconds)
 - Can be manually triggered via the worker logs page or tRPC API
 
 **Data Source Runner:**

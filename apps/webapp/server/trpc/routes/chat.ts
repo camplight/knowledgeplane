@@ -8,6 +8,7 @@ import {
   createAIModelClient,
   type ChatMessage,
   type ChatCompletionOptions,
+  getOpenAIModel,
 } from "@knowledgeplane/aimodel";
 
 // Build MCP server URL with API key and workspace_id
@@ -127,7 +128,7 @@ Example response:
 
       try {
         const chatOptions: ChatCompletionOptions = {
-          model: process.env.OPENAI_MODEL || "gpt-4o",
+          model: getOpenAIModel(),
           temperature: 0.7,
           maxTokens: 1000,
           responseFormat: "json_object", // Request JSON response

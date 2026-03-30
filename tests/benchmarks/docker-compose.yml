@@ -1,0 +1,33 @@
+# KnowledgePlane Benchmarks - Docker Container
+#
+# IMPORTANT: Use the bench CLI, not docker compose directly!
+#
+#   ./bench longmemeval              # Primary benchmark (LongMemEval)
+#   ./bench hotpot -n 100            # HotpotQA
+#   ./bench freshness                # Freshness benchmark
+#   ./bench relationrecall -n 10     # RelationRecall
+#   ./bench --help                   # All options
+#
+# This file is used internally by the bench CLI.
+
+services:
+  benchmark:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kp-benchmarks:latest
+    container_name: kp-bench
+    volumes:
+      - ./output:/app/output
+      - ./runs:/app/runs
+      - ./data:/app/data
+      - ./src:/app/src:ro
+    env_file: ../../.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app/src
+      - KP_API_URL=http://host.docker.internal:8081
+      - ARANGO_URL=http://host.docker.internal:8529
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["python3", "src/hotpotqa.py", "--n", "20", "--run_kp", "true", "--run_vector", "true"]

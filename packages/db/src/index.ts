@@ -15,3 +15,7 @@ export * from "./models/DataSource";
 export * from "./lib/webhook-trigger";
 export * from "./lib/vector-search";
 export * from "./lib/auth";
+export * from "./lib/id-utils";
+
+// Re-export ensureVectorIndex for use in workers
+export { ensureVectorIndex } from "./db";

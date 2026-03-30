@@ -11,6 +11,7 @@ import type {
   McpTool,
 } from "../types";
 import type { AIModelProvider } from "./base";
+import { DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_EMBEDDING_MODEL } from "../constants";
 
 /**
  * OpenAI provider implementation
@@ -32,7 +33,7 @@ export class OpenAIProvider implements AIModelProvider {
     messages: ChatMessage[],
     options?: ChatCompletionOptions,
   ): Promise<ChatCompletionResult> {
-    const model = options?.model || process.env.OPENAI_MODEL || "gpt-4o";
+    const model = options?.model || process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
     const temperature = options?.temperature ?? 0.3;
     const maxTokens = options?.maxTokens;
     const responseFormat = options?.responseFormat;
@@ -349,7 +350,7 @@ export class OpenAIProvider implements AIModelProvider {
     model?: string,
   ): Promise<EmbeddingsResult> {
     const embeddingModel =
-      model || process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
+      model || process.env.OPENAI_EMBEDDING_MODEL || DEFAULT_OPENAI_EMBEDDING_MODEL;
 
     const response = await this.client.embeddings.create({
       model: embeddingModel,

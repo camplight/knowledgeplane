@@ -1,0 +1,21 @@
+{
+  "kp": {
+    "avg_mrr": 0.3263392857142857,
+    "avg_recall_at_k": 0.575,
+    "avg_ndcg_at_k": 0.38564574262080276,
+    "avg_latency_ms": 617.9242086410522,
+    "queries_evaluated": 200,
+    "queries_answered": 200,
+    "errors": 0
+  },
+  "vector": null,
+  "improvement": {},
+  "config": {
+    "n_queries": 200,
+    "k": 10,
+    "seed": 42,
+    "run_kp": true,
+    "run_vector": false,
+    "mock_kp": false
+  }
+}

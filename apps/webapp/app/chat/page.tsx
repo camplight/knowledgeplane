@@ -128,7 +128,7 @@ export default function ChatPage() {
             messages.map((message, idx) => (
               <div key={idx} className={`chat ${message.role === "user" ? "chat-end" : "chat-start"}`}>
                 <div className="chat-bubble chat-bubble-primary">
-                  <div className="whitespace-pre-wrap break-words">
+                  <div className="whitespace-pre-wrap wrap-break-word">
                     {typeof message.content === "string"
                       ? message.content
                       : JSON.stringify(message.content)}
@@ -145,7 +145,7 @@ export default function ChatPage() {
                           </summary>
                           <div className="mt-2 space-y-2">
                             {message.facts.map((fact, factIdx) => (
-                              <div key={factIdx} className="text-xs bg-base-200 p-2 rounded">
+                              <div key={factIdx} className="text-xs bg-base-200 text-gray-800 p-2 rounded">
                                 <p>
                                   {typeof fact.content === "string"
                                     ? fact.content

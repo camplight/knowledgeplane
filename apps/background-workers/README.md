@@ -21,7 +21,7 @@ This service runs background workers that:
 ### Optional
 
 - `AI_PROVIDER` - AI provider to use (default: `openai`)
-- `OPENAI_MODEL` - OpenAI model to use (default: `gpt-4o`)
+- `OPENAI_MODEL` - OpenAI model to use (default: `gpt-5.2`)
 - `NODE_ENV` - Environment mode (`development` or `production`)
 
 ## Setup
@@ -40,7 +40,7 @@ ARANGO_USER=root
 ARANGO_PASSWORD=root
 OPENAI_API_KEY=your-openai-api-key
 AI_PROVIDER=openai
-OPENAI_MODEL=gpt-4o
+OPENAI_MODEL=gpt-5.2
 ```
 
 3. **Ensure database is running**:

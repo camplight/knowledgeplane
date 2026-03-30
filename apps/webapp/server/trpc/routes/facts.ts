@@ -1,5 +1,5 @@
 import { router, protectedProcedure } from "../router";
-import { Fact, WorkspaceMember } from "@knowledgeplane/db/next";
+import { Fact, WorkspaceMember, collections } from "@knowledgeplane/db/next";
 import { z } from "zod";
 import { createAIModelClient } from "@knowledgeplane/aimodel";
 import { stripEmbeddings, stripEmbeddingsArray } from "../strip-embeddings";
@@ -102,6 +102,22 @@ export const factsRouter = router({
         created_by: ctx.user.userId,
         last_updated_by: ctx.user.userId,
       });
+
+      try {
+        await collections.worker_triggers.save({
+          worker_name: "embeddings-generator",
+          status: "pending",
+          created_at: new Date().toISOString(),
+          metadata: {
+            type: "fact",
+            id: fact.id,
+            workspace_id: ctx.workspaceId,
+          },
+        });
+      } catch (triggerError: any) {
+        console.error("Failed to queue embedding trigger:", triggerError.message);
+      }
+
       return { fact: stripEmbeddings(fact) };
     }),
   update: protectedProcedure
@@ -140,6 +156,24 @@ export const factsRouter = router({
         metadata: input.metadata,
         last_updated_by: ctx.user.userId,
       });
+
+      if (input.content) {
+        try {
+          await collections.worker_triggers.save({
+            worker_name: "embeddings-generator",
+            status: "pending",
+            created_at: new Date().toISOString(),
+            metadata: {
+              type: "fact",
+              id: fact.id,
+              workspace_id: ctx.workspaceId,
+            },
+          });
+        } catch (triggerError: any) {
+          console.error("Failed to queue embedding trigger:", triggerError.message);
+        }
+      }
+
       return { fact: stripEmbeddings(fact) };
     }),
   getById: protectedProcedure
