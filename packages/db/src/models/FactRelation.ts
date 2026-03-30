@@ -66,16 +66,6 @@ export class FactRelation {
       const normalizedFromFact = this._normalizeFactId(input.from_fact);
       const normalizedToFact = this._normalizeFactId(input.to_fact);
       
-      console.log("Fact validation:", {
-        inputFromFact: input.from_fact,
-        normalizedFromFact,
-        verifiedFromId,
-        inputToFact: input.to_fact,
-        normalizedToFact,
-        verifiedToId,
-        fromFactKey: fromFact._key,
-        toFactKey: toFact._key,
-      });
     } catch (error: any) {
       // If it's already our validation error, rethrow it
       if (error.message?.includes("not found")) {
@@ -569,11 +559,6 @@ export class FactRelation {
     const cursor = await collections.relations.database.query(aql, bindVars);
     const results = await cursor.all();
 
-    // Debug: log raw results to see what we're getting
-    if (results.length > 0) {
-      console.log("getRelatedFacts raw results:", results.length, results[0]);
-    }
-
     const validResults = results
       .filter((r: any) => {
         // Validate that we have both relation and fact
@@ -681,15 +666,6 @@ export class FactRelation {
 
     const cursor = await collections.relations.database.query(aql, bindVars);
     const results = await cursor.all();
-
-    // Debug: log raw results to see what we're getting
-    if (results.length > 0) {
-      console.log(
-        "getIncomingRelations raw results:",
-        results.length,
-        results[0],
-      );
-    }
 
     const validResults = results
       .filter((r: any) => {
