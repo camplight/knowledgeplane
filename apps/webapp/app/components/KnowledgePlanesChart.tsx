@@ -23,15 +23,15 @@ interface DataPoint {
 export function KnowledgePlanesChart() {
   const [dataPoints, setDataPoints] = useState<DataPoint[]>([]);
   const { data: factsData } = trpc.facts.list.useQuery(
-    { limit: 100, offset: 0, includeTrashed: false },
+    { limit: 1000, offset: 0, includeTrashed: false },
     { refetchInterval: 30000 } // Poll every 30s
   );
   const { data: cardsData } = trpc.cards.list.useQuery(
-    { limit: 100, offset: 0 },
+    { limit: 1000, offset: 0 },
     { refetchInterval: 30000 }
   );
   const { data: relationsData } = trpc.factRelations.list.useQuery(
-    { limit: 100, offset: 0 },
+    { limit: 1000, offset: 0 },
     { refetchInterval: 30000 }
   );
 

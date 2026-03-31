@@ -14,6 +14,9 @@
   <img src="https://img.shields.io/badge/docker-required-blue.svg" alt="Docker" />
 </p>
 
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="Knowledge Plane Dashboard" width="800" />
+</p>
 
 ## What is Knowledge Plane?
 
