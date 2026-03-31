@@ -2,6 +2,16 @@
 
 Thank you for your interest in contributing to KnowledgePlane! We welcome contributions from everyone, whether it is a bug report, feature request, documentation improvement, or code change.
 
+## Areas We Need Help
+
+We're a small team and appreciate contributions in these areas:
+
+- **MCP tools** -- New tools for the MCP server, improved search/retrieval, better tool descriptions
+- **Web dashboard** -- UI improvements, new views (graph visualization, timeline), accessibility
+- **Documentation** -- Tutorials, integration guides, architecture deep-dives
+- **Testing** -- Integration tests, edge case coverage, benchmark improvements
+- **Integrations** -- Adapters for other AI tools and platforms beyond Claude Desktop
+
 ## How to Contribute
 
 ### Development Setup
