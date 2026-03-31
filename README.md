@@ -137,6 +137,10 @@ knowledgeplane/
 | [Environment Setup](./ENV_SETUP.md) | All environment variables |
 | [API Specification](./docs/SPEC.md) | Complete API reference |
 
+## Knowledge Plane Cloud
+
+This repo is the self-hosted, DIY version. If you'd rather not manage the infrastructure yourself, [Knowledge Plane Cloud](https://knowledgeplane.io) offers a managed deployment with everything pre-configured. And if you need a full agentic memory overhaul -- integrating shared knowledge across your team's AI tools and workflows -- [Camplight](https://camplight.net) (the team behind Knowledge Plane) does that as a service.
+
 ## Contributing
 
 We're actively looking for help with:
