@@ -674,6 +674,10 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Copy-to-clipboard functionality for API keys
   - Personal MCP server URL display with API key included
   - Copy-to-clipboard functionality for MCP server URL
+- App navigation with:
+  - Collapsible left sidebar primary navigation links
+  - Bottom quick actions for `Workspaces` (`/workspaces`) and `Worker Logs` (`/worker-logs`)
+  - Profile card at the bottom that opens a menu with `Profile Settings` and `Logout`
 - Knowledge base editor page (`/editor`) with:
   - Tabbed interface for switching between Facts, Cards, Files, and Knowledge Graph views
   - Facts view with list display, fact creation, and fact relation management
