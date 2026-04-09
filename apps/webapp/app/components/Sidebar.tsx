@@ -35,6 +35,11 @@ const navItems = [
   { href: "/data-sources", label: "Data Sources", icon: dataSourcesIconPath },
 ];
 
+const bottomQuickActions = [
+  { id: "workspaces", href: "/workspaces", label: "Workspaces", iconPath: workspacesIconPath },
+  { id: "worker-logs", href: "/worker-logs", label: "Worker Logs", iconPath: workerLogsIconPath },
+];
+
 const getGravatarUrl = (email: string, size: number = 80) => {
   const hash = md5(email.toLowerCase().trim());
   return `https://www.gravatar.com/avatar/${hash}?s=${size}&d=identicon`;
@@ -58,28 +63,7 @@ export function Sidebar() {
     logoutMutation.mutate();
   };
 
-  const bottomQuickActions = [
-    {
-      id: "workspaces",
-      kind: "link" as const,
-      href: "/workspaces",
-      label: "Workspaces",
-      iconPath: workspacesIconPath,
-    },
-    {
-      id: "worker-logs",
-      kind: "link" as const,
-      href: "/worker-logs",
-      label: "Worker Logs",
-      iconPath: workerLogsIconPath,
-    },
-  ];
-
   const isActive = (path: string) => pathname === path;
-
-  if (!userData?.user) return null;
-
-  const user = userData.user;
 
   useEffect(() => {
     if (!isProfileMenuOpen) return;
@@ -102,6 +86,43 @@ export function Sidebar() {
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [isProfileMenuOpen]);
+
+  if (!userData?.user) return null;
+
+  const user = userData.user;
+
+  const profileMenuItems = (
+    <>
+      <Link
+        role="menuitem"
+        href="/profile"
+        onClick={() => setIsProfileMenuOpen(false)}
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-mono transition-colors ${
+          isActive("/profile") ? "bg-primary/10 text-primary" : "hover:bg-base-200"
+        }`}
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={profileSettingsIconPath} />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={profileSettingsUserIconPath} />
+        </svg>
+        <span>Profile Settings</span>
+      </Link>
+      <button
+        role="menuitem"
+        type="button"
+        onClick={() => {
+          setIsProfileMenuOpen(false);
+          handleLogout();
+        }}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-mono hover:bg-error/10 hover:text-error transition-colors"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={logoutIconPath} />
+        </svg>
+        <span>Logout</span>
+      </button>
+    </>
+  );
 
   return (
     <aside
@@ -291,36 +312,7 @@ export function Sidebar() {
                   role="menu"
                   className="absolute bottom-full left-0 mb-2 w-full rounded-lg border border-base-300 bg-base-100 shadow-xl p-1 z-50"
                 >
-                  <Link
-                    role="menuitem"
-                    href="/profile"
-                    onClick={() => setIsProfileMenuOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-mono transition-colors ${
-                      isActive("/profile")
-                        ? "bg-primary/10 text-primary"
-                        : "hover:bg-base-200"
-                    }`}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={profileSettingsIconPath} />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={profileSettingsUserIconPath} />
-                    </svg>
-                    <span>Profile Settings</span>
-                  </Link>
-                  <button
-                    role="menuitem"
-                    type="button"
-                    onClick={() => {
-                      setIsProfileMenuOpen(false);
-                      handleLogout();
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-mono hover:bg-error/10 hover:text-error transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={logoutIconPath} />
-                    </svg>
-                    <span>Logout</span>
-                  </button>
+                  {profileMenuItems}
                 </div>
               )}
             </div>
@@ -353,6 +345,7 @@ export function Sidebar() {
                 onClick={() => setIsProfileMenuOpen((v) => !v)}
                 className="rounded-full ring-2 ring-primary/20 hover:ring-primary/40 transition-all"
                 title={user.username}
+                aria-label={user.username}
                 aria-haspopup="menu"
                 aria-expanded={isProfileMenuOpen}
               >
@@ -368,61 +361,7 @@ export function Sidebar() {
                   role="menu"
                   className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-lg border border-base-300 bg-base-100 shadow-xl p-1 z-50"
                 >
-                  <Link
-                    role="menuitem"
-                    href="/profile"
-                    onClick={() => setIsProfileMenuOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-mono transition-colors ${
-                      isActive("/profile")
-                        ? "bg-primary/10 text-primary"
-                        : "hover:bg-base-200"
-                    }`}
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d={profileSettingsIconPath}
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d={profileSettingsUserIconPath}
-                      />
-                    </svg>
-                    <span>Profile Settings</span>
-                  </Link>
-                  <button
-                    role="menuitem"
-                    type="button"
-                    onClick={() => {
-                      setIsProfileMenuOpen(false);
-                      handleLogout();
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-mono hover:bg-error/10 hover:text-error transition-colors"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d={logoutIconPath}
-                      />
-                    </svg>
-                    <span>Logout</span>
-                  </button>
+                  {profileMenuItems}
                 </div>
               )}
             </div>
