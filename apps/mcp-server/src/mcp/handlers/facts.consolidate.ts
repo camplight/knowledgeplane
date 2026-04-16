@@ -1,10 +1,9 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { Fact, KnowledgeCard, FactRelation, WorkspaceMember } from "@knowledgeplane/db";
+import { Fact, KnowledgeCard, FactRelation, WorkspaceMember, Workspace } from "@knowledgeplane/db";
 import { stripEmbeddings } from "./strip-embeddings.js";
 import {
-  createAIModelClient,
-  getChatModel,
-  DEFAULT_WORKSPACE_AI_PROVIDER,
+  getWorkspaceAIProvider,
+  parseJsonResponse,
 } from "@knowledgeplane/aimodel";
 import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
 
@@ -100,12 +99,10 @@ export async function handleFactsConsolidate(args: {
     allFacts = Array.from(factMap.values());
   }
 
-  // Use AI to consolidate
-  const client = createAIModelClient(
-    DEFAULT_WORKSPACE_AI_PROVIDER,
-    process.env.OPENAI_API_KEY,
-  );
-  const provider = client.getProvider();
+  const { provider, config } = await getWorkspaceAIProvider({
+    workspaceId: factWorkspaceId,
+    getWorkspaceById: (id) => Workspace.findById(id),
+  });
 
   const factContents = allFacts.map((f) => `- ${f.content}`).join("\n");
 
@@ -140,7 +137,7 @@ Consider the relationships between these facts when consolidating. Provide your 
   ];
 
   const chatOptions: ChatCompletionOptions = {
-    model: getChatModel(),
+    model: config.chatModel,
     temperature: 0.7,
     responseFormat: "json_object",
   };
@@ -151,7 +148,7 @@ Consider the relationships between these facts when consolidating. Provide your 
     throw new Error("No response from AI model");
   }
 
-  const parsed = JSON.parse(response.content);
+  const parsed = parseJsonResponse(response.content);
 
   // Create the knowledge card
   const knowledgeCard = await KnowledgeCard.create({

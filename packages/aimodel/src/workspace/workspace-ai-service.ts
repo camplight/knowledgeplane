@@ -27,8 +27,6 @@ function getEnvApiKeyForProvider(provider: WorkspaceAIProvider): string | undefi
   switch (provider) {
     case "openai":
       return process.env.OPENAI_API_KEY;
-    case "anthropic":
-      return process.env.ANTHROPIC_API_KEY;
     case "google":
       // Standardize on GOOGLE_API_KEY for now (Gemini), but accept aliases.
       return getGoogleApiKey();
@@ -64,9 +62,7 @@ export async function getWorkspaceAIProvider(args: {
     throw new Error(
       cfg.provider === "google"
         ? "GOOGLE_API_KEY is required for Google provider (aliases: GEMINI_API_KEY, Google_API_KEY). If this runs in background workers, set the key in apps/background-workers/.env.dev or repo root .env — not only apps/webapp/.env.local."
-        : cfg.provider === "anthropic"
-          ? "ANTHROPIC_API_KEY is required for Anthropic provider"
-          : "OPENAI_API_KEY is required for OpenAI provider",
+        : "OPENAI_API_KEY is required for OpenAI provider",
     );
   }
 
@@ -79,10 +75,6 @@ export async function getWorkspaceAIProvider(args: {
 }
 
 export function getWorkspaceChatModelOrDefault(model?: string | null): string {
-  return (
-    model ||
-    process.env.OPENAI_MODEL ||
-    getWorkspaceDefaultChatModel(DEFAULT_WORKSPACE_AI_PROVIDER)
-  );
+  return model || getWorkspaceDefaultChatModel(DEFAULT_WORKSPACE_AI_PROVIDER);
 }
 

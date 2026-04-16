@@ -7,6 +7,7 @@ import {
   getAnthropicModel,
   getGoogleApiKey,
   DEFAULT_WORKSPACE_AI_PROVIDER,
+  getWorkspaceDefaultChatModel,
 } from "@knowledgeplane/aimodel";
 import ExcelJS from "exceljs";
 
@@ -72,7 +73,11 @@ export async function extractFactsAndRelationsFromFile(
 
   const model =
     options?.model ||
-    (providerName === "anthropic" ? getAnthropicModel() : getOpenAIModel());
+    (providerName === "anthropic"
+      ? getAnthropicModel()
+      : providerName === "google"
+        ? getWorkspaceDefaultChatModel("google")
+        : getOpenAIModel());
   const temperature = options?.temperature ?? 0.3;
 
   const systemPrompt = `You are a knowledge extraction agent. Your task is to analyze file content and extract:

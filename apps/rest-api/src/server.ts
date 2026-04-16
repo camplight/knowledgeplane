@@ -18,7 +18,7 @@ import {
   splitKnowledgeCard,
   combineKnowledgeCards,
 } from "@knowledgeplane/api-core";
-import { createAIModelClient } from "@knowledgeplane/aimodel";
+import { createAIModelClient, getGoogleApiKey } from "@knowledgeplane/aimodel";
 import { CardConsolidator } from "knowledgeplane-background-worker/card-consolidator";
 
 
@@ -47,14 +47,21 @@ async function generateEmbeddingSync(
   content: string,
   timeoutMs: number = 30000,
 ): Promise<{ embedding: number[]; model: string } | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+  // No workspace context here — pick the first available provider/key.
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const googleKey = getGoogleApiKey();
+  const providerName = openaiKey ? "openai" : googleKey ? "google" : null;
+  const apiKey = openaiKey || googleKey;
+  if (!providerName || !apiKey) {
     return null;
   }
 
-  const aiClient = createAIModelClient("openai", apiKey);
+  const aiClient = createAIModelClient(providerName, apiKey);
   const provider = aiClient.getProvider();
-  const model = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
+  const model =
+    providerName === "google"
+      ? process.env.GOOGLE_EMBEDDING_MODEL || "text-embedding-004"
+      : process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
 
   // Truncate content if needed (OpenAI has token limits)
   const maxChars = 8000 * 3; // ~8000 tokens with conservative estimate
