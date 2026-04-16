@@ -40,12 +40,11 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - AI_PROVIDER=${AI_PROVIDER:-openai}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
       - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-3-5-sonnet-20241022}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_EMBEDDING_MODEL=${GOOGLE_EMBEDDING_MODEL:-text-embedding-004}
       - UPLOADS_DIR=${UPLOADS_DIR:-./uploads}
     depends_on:
       db:
@@ -78,11 +77,10 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - AI_PROVIDER=${AI_PROVIDER:-openai}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-3-5-sonnet-20241022}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_EMBEDDING_MODEL=${GOOGLE_EMBEDDING_MODEL:-text-embedding-004}
     depends_on:
       db:
         condition: service_healthy
@@ -109,12 +107,11 @@ services:
       - ARANGO_DB_NAME=${ARANGO_DB_NAME:-knowledgeplane}
       - ARANGO_USER=${ARANGO_USER:-root}
       - ARANGO_PASSWORD=${ARANGO_PASSWORD:-root}
-      - AI_PROVIDER=${AI_PROVIDER:-openai}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
       - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-3-5-sonnet-20241022}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_EMBEDDING_MODEL=${GOOGLE_EMBEDDING_MODEL:-text-embedding-004}
     depends_on:
       db:
         condition: service_healthy

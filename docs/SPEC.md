@@ -787,24 +787,25 @@ For complete environment variable documentation and setup instructions, see:
 - `JWKS_URI` - JWKS endpoint for custom OAuth providers (optional)
 - `JWT_SECRET` - Secret for JWT verification (development only)
 - `PORT` - Server port (default: `8080`)
-- `AI_PROVIDER` - AI provider to use: `openai` or `anthropic` (default: `openai`)
-- `OPENAI_API_KEY` - OpenAI API key (required if using OpenAI provider)
-- `OPENAI_MODEL` - OpenAI model to use (default: `gpt-4o`)
-- `ANTHROPIC_API_KEY` - Anthropic API key (required if using Anthropic provider)
-- `ANTHROPIC_MODEL` - Anthropic model to use (default: `claude-3-5-sonnet-20241022`)
+- `OPENAI_API_KEY` - OpenAI API key (required if any workspace uses OpenAI)
+- `OPENAI_MODEL` - OpenAI default model (fallback; workspace can override) (default: `gpt-5.2`)
+- `ANTHROPIC_API_KEY` - Anthropic API key (required if any workspace uses Anthropic)
+- `ANTHROPIC_MODEL` - Anthropic default model (fallback; workspace can override) (default: `claude-sonnet-4-5-20250929`)
+- `GOOGLE_API_KEY` - Google (Gemini) API key (required if any workspace uses Google provider; aliases: `GEMINI_API_KEY`, `Google_API_KEY`)
 - `UPLOADS_DIR` - Directory for storing uploaded files (default: `./uploads`)
 
 **Background Worker (`apps/background-workers/.env.dev`):**
+- Loads repository root `.env` then this file (`src/load-env.ts`); **does not** read `apps/webapp/.env.local`. Set `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` (or Google aliases) here when workspaces use those providers, or card-consolidator and embeddings-generator will fail to authenticate.
 - `ARANGO_URL` - ArangoDB connection URL
 - `ARANGO_DB_NAME` - ArangoDB database name
 - `ARANGO_USER` - ArangoDB username
 - `ARANGO_PASSWORD` - ArangoDB password
-- `AI_PROVIDER` - AI provider to use: `openai` or `anthropic` (default: `openai`)
-- `OPENAI_API_KEY` - OpenAI API key (required if using OpenAI provider)
-- `OPENAI_MODEL` - OpenAI model to use (default: `gpt-4o`)
+- `OPENAI_API_KEY` - OpenAI API key (required if any workspace uses OpenAI; embeddings follow workspace provider when supported)
+- `OPENAI_MODEL` - OpenAI default model (fallback; workspace can override) (default: `gpt-5.2`)
 - `OPENAI_EMBEDDING_MODEL` - OpenAI embedding model (default: `text-embedding-3-small`)
-- `ANTHROPIC_API_KEY` - Anthropic API key (required if using Anthropic provider)
-- `ANTHROPIC_MODEL` - Anthropic model to use (default: `claude-3-5-sonnet-20241022`)
+- `ANTHROPIC_API_KEY` - Anthropic API key (required if any workspace uses Anthropic)
+- `ANTHROPIC_MODEL` - Anthropic default model (fallback; workspace can override) (default: `claude-sonnet-4-5-20250929`)
+- `GOOGLE_API_KEY` - Google (Gemini) API key (required if any workspace uses Google provider; aliases: `GEMINI_API_KEY`, `Google_API_KEY`)
 
 **Webapp (`apps/webapp/.env.local`):**
 - `ARANGO_URL` - ArangoDB connection URL
@@ -821,10 +822,12 @@ For complete environment variable documentation and setup instructions, see:
 - `MCP_SERVER_PORT` - MCP server port (default: `8080`)
 - `MCP_SERVER_PROTOCOL` - MCP server protocol (default: `http`, use `https` with ngrok)
 - `MCP_SERVER_API_KEY` - API key for internal MCP server authentication (automatically added to URL as query parameter)
-- `AI_PROVIDER` - AI provider to use: `openai` or `anthropic` (default: `openai`)
-- `OPENAI_API_KEY` - OpenAI API key (required if using OpenAI provider)
-- `OPENAI_MODEL` - OpenAI model to use (default: `gpt-4o`)
-- `ANTHROPIC_API_KEY` - Anthropic API key (required if using Anthropic provider)
+- `OPENAI_API_KEY` - OpenAI API key (required if any workspace uses OpenAI)
+- `OPENAI_MODEL` - OpenAI default model (fallback; workspace can override) (default: `gpt-5.2`)
+- `ANTHROPIC_API_KEY` - Anthropic API key (required if any workspace uses Anthropic)
+- `ANTHROPIC_MODEL` - Anthropic default model (fallback; workspace can override) (default: `claude-sonnet-4-5-20250929`)
+- `GOOGLE_API_KEY` - Google (Gemini) API key (required if any workspace uses Google provider; aliases: `GEMINI_API_KEY`, `Google_API_KEY`)
+- **Gemini API**: Popular models (e.g. `gemini-2.5-flash`) may return HTTP 503 when demand is high; the bundled Google client retries transient 503/429-style errors with exponential backoff before surfacing a failure.
 
 **REST API (`apps/rest-api/.env.dev`):**
 - `ARANGO_URL` - ArangoDB connection URL
@@ -1889,13 +1892,14 @@ X-KnowledgePlane-Signature: sha256=<signature>
 
 💬 AI Chat Interface
 
-KnowledgePlane includes an AI chat interface that combines OpenAI's language model with access to your knowledge base:
+KnowledgePlane includes an AI chat interface that combines a workspace-selected language model with access to your knowledge base:
 
 **Features:**
 - Real-time chat interface with conversation history
 - **Thread-based conversation storage** - All messages are saved in persistent threads, scoped per user and workspace
 - **Automatic thread management** - Each user has a thread per workspace that maintains conversation context
 - **Workspace-aware** - Chat automatically uses the current workspace's context when connecting to the MCP server
+- **Workspace AI configuration** - Each workspace selects an AI provider + model (keys remain env-only)
 - **Smart truncation** - When threads exceed 20 human messages, older messages are truncated
 - Automatic fact retrieval from knowledge base based on user queries
 - Context-aware responses using relevant facts from the current workspace's knowledge base
@@ -1907,7 +1911,7 @@ KnowledgePlane includes an AI chat interface that combines OpenAI's language mod
 2. System retrieves or creates a thread for the user and current workspace
 3. User message is stored in the thread
 4. System retrieves thread messages (with smart truncation if needed)
-5. System configures OpenAI with MCP tools to access the knowledge base, passing the current workspace's `workspace_id` in the MCP server URL
+5. System resolves the workspace's selected AI provider + model, and configures the provider with MCP tools to access the knowledge base, passing the current workspace's `workspace_id` in the MCP server URL
 6. AI model uses MCP tools (e.g., `facts_search`) to retrieve relevant facts from the current workspace's knowledge base as needed
 7. AI generates a response using both its training and the knowledge base facts accessed via MCP tools
 8. AI returns JSON response with `content` (the response text) and `usedFacts` (array of fact IDs actually used)
@@ -1961,25 +1965,25 @@ The chat interface automatically:
 
 📁 File Upload and AI Extraction
 
-KnowledgePlane supports file uploads with automatic fact and relation extraction using OpenAI:
+KnowledgePlane supports file uploads with automatic fact and relation extraction using the workspace-selected AI provider + model:
 
 **Features:**
 - Upload various file types (text, markdown, JSON, PDF, Word docs, etc.)
 - Automatic text extraction from files
-- AI-powered fact extraction using OpenAI GPT-4
+- AI-powered fact extraction using the workspace-selected AI model
 - Automatic relation identification between extracted facts
 - Preservation of original file with links to extracted facts
 - Knowledge context assignment for organized storage
 
 **How it works:**
 1. User uploads a file through the web interface
-2. File is processed and passed to the AI model:
+2. File is processed and passed to the workspace-selected AI model:
    - PDF files: Converted to base64 and passed via OpenAI's file input format (supports PDF natively)
    - Excel files (.xlsx): Converted to text format locally using exceljs, then passed as text content
    - Other files (Word, text, etc.): Converted to text and passed as text content
    - No local file storage - files are only stored as metadata in the database
    - Based on OpenAI's file input format: https://gist.github.com/outbounder/14c0c5df7f902b49a8219c05f3053a22
-3. OpenAI analyzes the content and extracts:
+3. The AI model analyzes the content and extracts:
    - Discrete facts with metadata
    - Relationships between facts (references, depends_on, related_to, etc.)
 4. Facts and relations are created in the knowledge base

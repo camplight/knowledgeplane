@@ -5,12 +5,14 @@ import {
   WorkerLog,
   collections,
   cosineSimilarity,
+  Workspace,
 } from "@knowledgeplane/db";
 import {
-  createAIModelClient,
+  getWorkspaceAIProvider,
+  parseJsonResponse,
   type ChatMessage,
   type ChatCompletionOptions,
-  getChatModel,
+  type AIModelProvider,
 } from "@knowledgeplane/aimodel";
 
 // Gap #3 fix: Embedding similarity threshold for pre-filtering relation candidates
@@ -30,7 +32,6 @@ const STRONG_CLAIM_TYPES = ["causes", "contradicts", "depends_on"]; // Verify th
 const VERIFICATION_CONFIDENCE_THRESHOLD = 0.75;
 
 export class CardConsolidator {
-  private aiClient: ReturnType<typeof createAIModelClient>;
   private interval: NodeJS.Timeout | null = null;
   private triggerCheckInterval: NodeJS.Timeout | null = null;
   private running = false;
@@ -39,14 +40,7 @@ export class CardConsolidator {
   private analyzedPairKeys = new Set<string>();
 
   constructor() {
-    const apiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error("AI API key environment variable is required");
-    }
-    this.aiClient = createAIModelClient(
-      (process.env.AI_PROVIDER as any) || "openai",
-      apiKey,
-    );
+    // LLM provider/model are resolved per-workspace at runtime.
   }
 
   start() {
@@ -225,15 +219,28 @@ export class CardConsolidator {
         });
         console.log(`Processing ${workspaceFacts.length} facts for workspace ${workspaceId}`);
 
+        const { provider: llmProvider, config } = await getWorkspaceAIProvider({
+          workspaceId,
+          getWorkspaceById: (id) => Workspace.findById(id),
+        });
+
         // Create fact relations before grouping
-        const workspaceRelationsCreated = await this.createFactRelations(workspaceFacts);
+        const workspaceRelationsCreated = await this.createFactRelations(
+          workspaceFacts,
+          llmProvider,
+          config.chatModel,
+        );
         relationsCreated += workspaceRelationsCreated;
 
         // Group facts by related clusters using graph traversal
         const factClusters = await this.groupRelatedFacts(workspaceFacts);
 
         for (const cluster of factClusters) {
-          const knowledgeCard = await this.consolidateCluster(cluster);
+          const knowledgeCard = await this.consolidateCluster(
+            cluster,
+            llmProvider,
+            config.chatModel,
+          );
           if (knowledgeCard) {
             cardsCreated++;
           }
@@ -371,7 +378,11 @@ export class CardConsolidator {
     return newPairs;
   }
 
-  private async createFactRelations(facts: any[]): Promise<number> {
+  private async createFactRelations(
+    facts: any[],
+    llmProvider: AIModelProvider,
+    chatModel: string,
+  ): Promise<number> {
     if (facts.length < 2) {
       return 0; // Need at least 2 facts to create relations
     }
@@ -410,11 +421,21 @@ export class CardConsolidator {
         // Step 2: Cross-encoder reranking to filter weak candidates
         const rerankedPairs = await this.rerankPairs(batch, newPairs);
 
-        const relations = await this.identifyRelationsWithAI(batch, rerankedPairs);
+        const relations = await this.identifyRelationsWithAI(
+          batch,
+          llmProvider,
+          chatModel,
+          rerankedPairs,
+        );
 
         // Step 3: NLI verification to filter false positives
         // Uses DeBERTa entailment model to verify semantic validity
-        const verifiedRelations = await this.verifyRelationsWithLLM(batch, relations);
+        const verifiedRelations = await this.verifyRelationsWithLLM(
+          batch,
+          llmProvider,
+          chatModel,
+          relations,
+        );
 
         // Create relations that don't already exist
         for (const relation of verifiedRelations) {
@@ -602,6 +623,8 @@ export class CardConsolidator {
    */
   private async verifyRelationsWithLLM(
     facts: any[],
+    llmProvider: AIModelProvider,
+    chatModel: string,
     relations: Array<{ from_index: number; to_index: number; type: string; reason?: string }>
   ): Promise<Array<{ from_index: number; to_index: number; type: string; reason?: string }>> {
     if (!LLM_VERIFY_ENABLED || relations.length === 0) {
@@ -723,13 +746,13 @@ Apply the Chain-of-Thought reasoning process for each claim. Return the structur
       ];
 
       const options: ChatCompletionOptions = {
-        model: getChatModel(),
+        model: chatModel,
         temperature: 0,
         maxTokens: 1500, // Increased for CoT reasoning output
         responseFormat: "json_object",
       };
 
-      const response = await this.aiClient.getProvider().chatCompletion(messages, options);
+      const response = await llmProvider.chatCompletion(messages, options);
       const content = response.content || "{}";
 
       let verdicts: boolean[] = [];
@@ -737,7 +760,7 @@ Apply the Chain-of-Thought reasoning process for each claim. Return the structur
       let reasoning: Array<{ claim_index: number; analysis: string; verdict: boolean; confidence: number }> = [];
 
       try {
-        const parsed = JSON.parse(content);
+        const parsed = parseJsonResponse(content);
         verdicts = Array.isArray(parsed.verdicts) ? parsed.verdicts : [];
         confidences = Array.isArray(parsed.confidences) ? parsed.confidences : [];
         reasoning = Array.isArray(parsed.reasoning) ? parsed.reasoning : [];
@@ -789,6 +812,8 @@ Apply the Chain-of-Thought reasoning process for each claim. Return the structur
    */
   private async identifyRelationsWithAI(
     facts: any[],
+    llmProvider: AIModelProvider,
+    chatModel: string,
     similarPairs?: Array<{ i: number; j: number; similarity: number }>
   ): Promise<
     Array<{
@@ -901,25 +926,24 @@ ${factContents}
 ${embeddingHints}
 Remember: Only include relations with confidence >= 0.7 and clear entity/semantic connections.`;
 
-    const provider = this.aiClient.getProvider();
     const messages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ];
 
     const chatOptions: ChatCompletionOptions = {
-      model: getChatModel(),
+      model: chatModel,
       temperature: 0, // Deterministic extraction for reproducible benchmarks
       responseFormat: "json_object",
     };
 
-    const response = await provider.chatCompletion(messages, chatOptions);
+    const response = await llmProvider.chatCompletion(messages, chatOptions);
 
     if (!response.content) {
       throw new Error("No response from AI model");
     }
 
-    const parsed = JSON.parse(response.content);
+    const parsed = parseJsonResponse(response.content);
 
     // Log entity analysis if provided
     if (parsed.entity_analysis) {
@@ -994,7 +1018,11 @@ Remember: Only include relations with confidence >= 0.7 and clear entity/semanti
     return clusters;
   }
 
-  private async consolidateCluster(facts: any[]): Promise<any | null> {
+  private async consolidateCluster(
+    facts: any[],
+    llmProvider: AIModelProvider,
+    chatModel: string,
+  ): Promise<any | null> {
     if (facts.length === 0) {
       return null;
     }
@@ -1022,7 +1050,11 @@ Remember: Only include relations with confidence >= 0.7 and clear entity/semanti
     const factContents = facts.map((f) => `- ${f.content}`).join("\n");
 
     // Use AI agent to consolidate
-    const consolidation = await this.consolidateWithAI(factContents);
+    const consolidation = await this.consolidateWithAI(
+      llmProvider,
+      chatModel,
+      factContents,
+    );
 
     // Create knowledge card
     const knowledgeCard = await KnowledgeCard.create({
@@ -1091,6 +1123,8 @@ Remember: Only include relations with confidence >= 0.7 and clear entity/semanti
   }
 
   private async consolidateWithAI(
+    llmProvider: AIModelProvider,
+    chatModel: string,
     factContents: string,
   ): Promise<{ title: string; summary: string; content: string }> {
     const systemPrompt = `You are a knowledge consolidation agent. Your task is to analyze a collection of related facts and their relationships (from a knowledge graph) and create a comprehensive, well-organized knowledge card.
@@ -1118,25 +1152,24 @@ Consider the relationships between these facts when consolidating. Provide your 
   "content": "Full consolidated content"
 }`;
 
-    const provider = this.aiClient.getProvider();
     const messages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ];
 
     const chatOptions: ChatCompletionOptions = {
-      model: getChatModel(),
+      model: chatModel,
       temperature: 0.7,
       responseFormat: "json_object",
     };
 
-    const response = await provider.chatCompletion(messages, chatOptions);
+    const response = await llmProvider.chatCompletion(messages, chatOptions);
 
     if (!response.content) {
       throw new Error("No response from AI model");
     }
 
-    const parsed = JSON.parse(response.content);
+    const parsed = parseJsonResponse(response.content);
     return {
       title: parsed.title || "Untitled Card",
       summary: parsed.summary || "",

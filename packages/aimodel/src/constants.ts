@@ -5,22 +5,8 @@
  * across the entire codebase.
  */
 
-/**
- * Default OpenAI chat model
- * Updated: 2026-02-17 (gpt-4o deprecated)
- *
- * @see https://openai.com/index/retiring-gpt-4o-and-older-models/
- */
 export const DEFAULT_OPENAI_MODEL = "gpt-5.2";
-
-/**
- * Default OpenAI embedding model
- */
 export const DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
-
-/**
- * Default Anthropic model
- */
 export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929";
 
 /**
@@ -52,6 +38,16 @@ export function getOpenAIModel(): string {
  */
 export function getAnthropicModel(): string {
   return process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL;
+}
+
+/**
+ * Get the configured Google (Gemini) API key.
+ *
+ * Preferred env var is `GOOGLE_API_KEY`, but we also accept legacy/alternate names
+ * to avoid breaking existing local/dev setups.
+ */
+export function getGoogleApiKey(): string | undefined {
+  return process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || process.env["Google_API_KEY"];
 }
 
 /**

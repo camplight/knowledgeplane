@@ -82,10 +82,11 @@ All configuration is done via environment variables in the `.env` file. Copy `en
    GITHUB_CLIENT_SECRET=your-github-client-secret
    ```
 
-6. **AI Provider** (OpenAI or Anthropic)
+6. **AI provider API keys** (for the providers your workspaces use)
    ```bash
-   AI_PROVIDER=openai
    OPENAI_API_KEY=your-openai-api-key
+   ANTHROPIC_API_KEY=your-anthropic-api-key
+   GOOGLE_API_KEY=your-google-api-key
    ```
 
 ### Optional Settings
@@ -94,9 +95,8 @@ All configuration is done via environment variables in the `.env` file. Copy `en
 - `ARANGO_USER` - Database user (default: `root`)
 - `MCP_SERVER_PORT` - MCP server port (default: `8080`)
 - `WEBAPP_PORT` - Webapp port (default: `3000`)
-- `AI_PROVIDER` - AI provider (`openai` or `anthropic`, default: `openai`)
-- `OPENAI_MODEL` - AI model (default: `gpt-4o`)
 - `OPENAI_EMBEDDING_MODEL` - Embedding model (default: `text-embedding-3-small`)
+- `GOOGLE_EMBEDDING_MODEL` - Google embedding model (default: `text-embedding-004`)
 - `UPLOADS_DIR` - File upload directory (default: `./uploads`)
 - `DOCKER_REGISTRY` - Docker Hub registry (default: `knowledgeplane`)
 - `IMAGE_VERSION` - Image version tag (default: `latest`)

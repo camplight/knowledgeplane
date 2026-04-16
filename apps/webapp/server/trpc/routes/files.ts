@@ -1,8 +1,9 @@
 import { router, protectedProcedure } from "../router";
-import { File, Fact, WorkspaceMember } from "@knowledgeplane/db/next";
+import { File, Fact, Workspace, WorkspaceMember } from "@knowledgeplane/db/next";
 import { processFileUpload } from "@knowledgeplane/file-processor";
 import { z } from "zod";
 import { stripEmbeddingsArray } from "../strip-embeddings";
+import { getGoogleApiKey, getWorkspaceAIProvider } from "@knowledgeplane/aimodel";
 
 export const filesRouter = router({
   upload: protectedProcedure
@@ -31,6 +32,11 @@ export const filesRouter = router({
       // Decode base64 data
       const buffer = Buffer.from(input.data, "base64");
 
+      const { config } = await getWorkspaceAIProvider({
+        workspaceId: ctx.workspaceId,
+        getWorkspaceById: (id) => Workspace.findById(id),
+      });
+
       // Process file using shared service
       const result = await processFileUpload({
         buffer,
@@ -38,8 +44,14 @@ export const filesRouter = router({
         mimeType: input.mimeType,
         workspaceId: ctx.workspaceId,
         uploadedBy: ctx.user.userId,
-        openaiApiKey: process.env.OPENAI_API_KEY,
-        openaiModel: process.env.OPENAI_MODEL,
+        aiProvider: config.provider,
+        aiApiKey:
+          config.provider === "anthropic"
+            ? process.env.ANTHROPIC_API_KEY
+            : config.provider === "google"
+              ? getGoogleApiKey()
+              : process.env.OPENAI_API_KEY,
+        aiChatModel: config.chatModel,
       });
 
       return result;

@@ -8,8 +8,17 @@ export interface ProcessFileOptions {
   mimeType: string;
   workspaceId: string;
   uploadedBy: string;
+  /**
+   * @deprecated Prefer aiProvider/aiApiKey/aiChatModel (kept for compatibility)
+   */
   openaiApiKey?: string;
+  /**
+   * @deprecated Prefer aiProvider/aiApiKey/aiChatModel (kept for compatibility)
+   */
   openaiModel?: string;
+  aiProvider?: "openai" | "anthropic" | "google" | "azure";
+  aiApiKey?: string;
+  aiChatModel?: string;
   temperature?: number;
 }
 
@@ -44,6 +53,9 @@ export async function processFileUpload(
     uploadedBy,
     openaiApiKey,
     openaiModel,
+    aiProvider,
+    aiApiKey,
+    aiChatModel,
     temperature,
   } = options;
 
@@ -71,9 +83,10 @@ export async function processFileUpload(
     filename,
     mimeType,
     {
-      openaiApiKey,
-      openaiModel,
+      apiKey: aiApiKey || openaiApiKey,
+      model: aiChatModel || openaiModel,
       temperature,
+      provider: aiProvider,
     },
   );
 

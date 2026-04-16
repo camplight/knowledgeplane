@@ -1,6 +1,12 @@
 import { router, protectedProcedure, publicProcedure } from "../router";
 import { Workspace, WorkspaceMember, User, Invitation } from "@knowledgeplane/db/next";
 import { z } from "zod";
+import {
+  WORKSPACE_AI_PROVIDERS,
+  getWorkspaceDefaultChatModel,
+  isWorkspaceChatModelAllowed,
+  type WorkspaceAIProvider,
+} from "@knowledgeplane/aimodel";
 
 export const workspacesRouter = router({
   create: protectedProcedure
@@ -8,13 +14,23 @@ export const workspacesRouter = router({
       z.object({
         name: z.string().min(1).max(100),
         description: z.string().max(500).optional(),
+        ai_provider: z.enum(WORKSPACE_AI_PROVIDERS).optional(),
+        ai_chat_model: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const provider = (input.ai_provider || "openai") as WorkspaceAIProvider;
+      const chatModel = input.ai_chat_model || getWorkspaceDefaultChatModel(provider);
+      if (!isWorkspaceChatModelAllowed(provider, chatModel)) {
+        throw new Error(`Invalid AI model for provider "${provider}"`);
+      }
+
       const workspace = await Workspace.create({
         name: input.name,
         description: input.description,
         created_by: ctx.user.userId,
+        ai_provider: provider,
+        ai_chat_model: chatModel,
       });
 
       // Add creator as owner
@@ -58,6 +74,8 @@ export const workspacesRouter = router({
         id: z.string(),
         name: z.string().min(1).max(100).optional(),
         description: z.string().max(500).optional(),
+        ai_provider: z.enum(WORKSPACE_AI_PROVIDERS).optional(),
+        ai_chat_model: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -70,6 +88,15 @@ export const workspacesRouter = router({
       }
       if (member.role !== "owner" && member.role !== "admin") {
         throw new Error("Only owners and admins can update workspace settings");
+      }
+
+      // Validate provider/model if provided
+      const provider = (updates.ai_provider || "openai") as WorkspaceAIProvider;
+      const chatModel =
+        updates.ai_chat_model ||
+        (updates.ai_provider ? getWorkspaceDefaultChatModel(provider) : undefined);
+      if (chatModel && !isWorkspaceChatModelAllowed(provider, chatModel)) {
+        throw new Error(`Invalid AI model for provider "${provider}"`);
       }
 
       return await Workspace.update(id, updates);

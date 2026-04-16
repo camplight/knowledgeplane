@@ -9,6 +9,8 @@ export interface WorkspaceRecord {
   slug: string; // URL-friendly workspace identifier
   description?: string;
   created_by: string; // User ID of the creator
+  ai_provider?: "openai" | "anthropic" | "google";
+  ai_chat_model?: string;
   rest_api_key?: string;
   rest_api_key_created_by?: string;
   rest_api_key_created_at?: string;
@@ -20,6 +22,8 @@ export interface WorkspaceInput {
   name: string;
   description?: string;
   created_by: string; // User ID of the creator
+  ai_provider?: WorkspaceRecord["ai_provider"];
+  ai_chat_model?: WorkspaceRecord["ai_chat_model"];
 }
 
 export class Workspace {
@@ -48,12 +52,16 @@ export class Workspace {
       slug,
       description: input.description || null,
       created_by: input.created_by,
+      ai_provider: input.ai_provider || "openai",
+      ai_chat_model: input.ai_chat_model || null,
       created_at: now,
       updated_at: now,
     };
 
     try {
-      const result = await collections.workspaces.save(doc, { returnNew: true });
+      const result = await collections.workspaces.save(doc, {
+        returnNew: true,
+      });
       return this._normalizeRecord(result.new!);
     } catch (error: any) {
       throw error;
@@ -91,7 +99,9 @@ export class Workspace {
     return this._normalizeRecord(results[0]);
   }
 
-  static async findByRestApiKey(apiKey: string): Promise<WorkspaceRecord | null> {
+  static async findByRestApiKey(
+    apiKey: string,
+  ): Promise<WorkspaceRecord | null> {
     const aql = `
       FOR workspace IN workspaces
         FILTER workspace.rest_api_key == @apiKey
@@ -160,6 +170,8 @@ export class Workspace {
         WorkspaceRecord,
         | "name"
         | "description"
+        | "ai_provider"
+        | "ai_chat_model"
         | "rest_api_key"
         | "rest_api_key_created_by"
         | "rest_api_key_created_at"
@@ -178,6 +190,12 @@ export class Workspace {
     }
     if (updates.description !== undefined) {
       updateDoc.description = updates.description;
+    }
+    if (updates.ai_provider !== undefined) {
+      updateDoc.ai_provider = updates.ai_provider;
+    }
+    if (updates.ai_chat_model !== undefined) {
+      updateDoc.ai_chat_model = updates.ai_chat_model;
     }
     if (updates.rest_api_key !== undefined) {
       updateDoc.rest_api_key = updates.rest_api_key;
@@ -265,6 +283,8 @@ export class Workspace {
       slug: doc.slug,
       description: doc.description,
       created_by: doc.created_by,
+      ai_provider: doc.ai_provider,
+      ai_chat_model: doc.ai_chat_model,
       rest_api_key: doc.rest_api_key,
       rest_api_key_created_by: doc.rest_api_key_created_by,
       rest_api_key_created_at: doc.rest_api_key_created_at,
@@ -273,4 +293,3 @@ export class Workspace {
     };
   }
 }
-

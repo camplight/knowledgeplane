@@ -58,7 +58,6 @@ This server provides:
 
 - `EMBEDDINGS_PROVIDER` - Embeddings provider (e.g., `openai`)
 - `OPENAI_API_KEY` - OpenAI API key for embeddings and AI operations
-- `OPENAI_MODEL` - OpenAI model to use (default: `gpt-4o`)
 
 ## Setup
 
@@ -98,7 +97,6 @@ OAUTH_SUCCESS_REDIRECT_URL=http://localhost:3000
 # AI/Embeddings (optional)
 EMBEDDINGS_PROVIDER=openai
 OPENAI_API_KEY=your-openai-api-key
-OPENAI_MODEL=gpt-4o
 ```
 
 3. **Ensure database is running**:

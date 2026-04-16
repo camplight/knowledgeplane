@@ -2,6 +2,8 @@ import type { Provider } from "./types";
 import type { AIModelProvider } from "./providers/base";
 import { OpenAIProvider } from "./providers/openai";
 import { AnthropicProvider } from "./providers/anthropic";
+import { GoogleProvider } from "./providers/google";
+import { DEFAULT_WORKSPACE_AI_PROVIDER } from "./model-catalog";
 
 /**
  * AI Model Client - Facade for interacting with different AI providers
@@ -10,7 +12,7 @@ export class AIModelClient {
   private provider: AIModelProvider;
 
   constructor(provider?: Provider, apiKey?: string) {
-    const providerName = provider || (process.env.AI_PROVIDER as Provider) || "openai";
+    const providerName = provider || DEFAULT_WORKSPACE_AI_PROVIDER;
 
     switch (providerName) {
       case "openai":
@@ -20,8 +22,8 @@ export class AIModelClient {
         this.provider = new AnthropicProvider(apiKey);
         break;
       case "google":
-        // TODO: Implement Google provider
-        throw new Error("Google provider not yet implemented");
+        this.provider = new GoogleProvider(apiKey);
+        break;
       case "azure":
         // TODO: Implement Azure provider
         throw new Error("Azure provider not yet implemented");

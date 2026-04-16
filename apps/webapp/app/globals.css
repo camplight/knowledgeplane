@@ -13,6 +13,18 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  .card-body,
+  .card-body > * {
+    min-width: 0;
+  }
+
+  .card-body .label,
+  .card-body .label-text,
+  .card-body .label-text-alt {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   body {
     @apply bg-base-200 text-base-content;
     min-height: 100vh;

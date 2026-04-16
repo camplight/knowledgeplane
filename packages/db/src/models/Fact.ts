@@ -41,6 +41,7 @@ export interface FactSearchParams {
   include_trashed?: boolean;
   use_vector_search?: boolean; // If true, use vector search; if false, use full-text; if undefined, use hybrid
   embeddingProvider?: AIModelProvider; // Optional provider for generating query embeddings
+  embeddingModel?: string; // Optional embedding model name (provider-specific)
 }
 
 export interface FactUpdateInput {
@@ -497,6 +498,7 @@ export class Fact {
       const queryEmbedding = await generateQueryEmbedding(
         params.query,
         provider,
+        params.embeddingModel,
       );
       const embeddingTime = Date.now() - searchStartTime;
 

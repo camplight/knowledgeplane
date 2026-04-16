@@ -11,7 +11,10 @@ import type {
   McpTool,
 } from "../types";
 import type { AIModelProvider } from "./base";
-import { DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_EMBEDDING_MODEL } from "../constants";
+import {
+  getOpenAIModel,
+  DEFAULT_OPENAI_EMBEDDING_MODEL,
+} from "../constants";
 
 /**
  * OpenAI provider implementation
@@ -33,7 +36,7 @@ export class OpenAIProvider implements AIModelProvider {
     messages: ChatMessage[],
     options?: ChatCompletionOptions,
   ): Promise<ChatCompletionResult> {
-    const model = options?.model || process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
+    const model = options?.model || getOpenAIModel();
     const temperature = options?.temperature ?? 0.3;
     const maxTokens = options?.maxTokens;
     const responseFormat = options?.responseFormat;
@@ -255,14 +258,16 @@ export class OpenAIProvider implements AIModelProvider {
     });
 
     const message = response.choices[0]?.message;
-    const toolCalls = message?.tool_calls?.map((tc) => ({
-      id: tc.id,
-      type: "function" as const,
-      function: {
-        name: tc.function.name,
-        arguments: tc.function.arguments,
-      },
-    }));
+    const toolCalls = message?.tool_calls
+      ?.filter((tc) => tc.type === "function")
+      .map((tc) => ({
+        id: tc.id,
+        type: "function" as const,
+        function: {
+          name: tc.function.name,
+          arguments: tc.function.arguments,
+        },
+      }));
 
     return {
       content: message?.content || "",
@@ -342,7 +347,7 @@ export class OpenAIProvider implements AIModelProvider {
   }
 
   async deleteFile(fileId: string): Promise<void> {
-    await this.client.files.del(fileId);
+    await this.client.files.delete(fileId);
   }
 
   async embeddings(
@@ -350,7 +355,9 @@ export class OpenAIProvider implements AIModelProvider {
     model?: string,
   ): Promise<EmbeddingsResult> {
     const embeddingModel =
-      model || process.env.OPENAI_EMBEDDING_MODEL || DEFAULT_OPENAI_EMBEDDING_MODEL;
+      model ||
+      process.env.OPENAI_EMBEDDING_MODEL ||
+      DEFAULT_OPENAI_EMBEDDING_MODEL;
 
     const response = await this.client.embeddings.create({
       model: embeddingModel,

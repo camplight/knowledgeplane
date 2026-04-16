@@ -1,8 +1,9 @@
 import { router, protectedProcedure } from "../router";
 import { Fact, WorkspaceMember, collections } from "@knowledgeplane/db/next";
 import { z } from "zod";
-import { createAIModelClient } from "@knowledgeplane/aimodel";
+import { createAIModelClient, getGoogleApiKey, getWorkspaceAIProvider } from "@knowledgeplane/aimodel";
 import { stripEmbeddings, stripEmbeddingsArray } from "../strip-embeddings";
+import { Workspace } from "@knowledgeplane/db/next";
 
 export const factsRouter = router({
   list: protectedProcedure
@@ -54,13 +55,29 @@ export const factsRouter = router({
 
       // Create AI client for embeddings if vector search is requested
       let embeddingProvider;
+      let embeddingModel: string | undefined;
       if (input.use_vector_search !== false) {
         try {
-          const client = createAIModelClient(
-            (process.env.AI_PROVIDER as any) || "openai",
-            process.env.OPENAI_API_KEY,
-          );
-          embeddingProvider = client.getProvider();
+          const { config } = await getWorkspaceAIProvider({
+            workspaceId: ctx.workspaceId,
+            getWorkspaceById: (id) => Workspace.findById(id),
+          });
+
+          if (config.provider === "openai" && process.env.OPENAI_API_KEY) {
+            const client = createAIModelClient("openai", process.env.OPENAI_API_KEY);
+            embeddingProvider = client.getProvider();
+            embeddingModel = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
+          } else if (config.provider === "google") {
+            const key = getGoogleApiKey();
+            if (key) {
+              const client = createAIModelClient("google", key);
+              embeddingProvider = client.getProvider();
+              embeddingModel = process.env.GOOGLE_EMBEDDING_MODEL || "text-embedding-004";
+            }
+          } else {
+            // Anthropic doesn't support embeddings in this codebase yet.
+            embeddingProvider = undefined;
+          }
         } catch (error) {
           console.warn("Failed to create AI client for embeddings, using full-text search only");
         }
@@ -74,6 +91,7 @@ export const factsRouter = router({
         include_trashed: input.include_trashed,
         use_vector_search: input.use_vector_search,
         embeddingProvider,
+        embeddingModel,
       });
       return { results: stripEmbeddingsArray(results) };
     }),

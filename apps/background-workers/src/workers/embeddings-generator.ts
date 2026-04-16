@@ -1,13 +1,16 @@
 import { Fact, FactRelation, KnowledgeCard, WorkerLog, Workspace, collections, ensureVectorIndex } from "@knowledgeplane/db";
-import { createAIModelClient } from "@knowledgeplane/aimodel";
+import {
+  createAIModelClient,
+  getGoogleApiKey,
+  DEFAULT_WORKSPACE_AI_PROVIDER,
+  type WorkspaceAIProvider,
+} from "@knowledgeplane/aimodel";
 import PQueue from "p-queue";
 
 export class EmbeddingsGenerator {
-  private aiClient: ReturnType<typeof createAIModelClient>;
   private interval: NodeJS.Timeout | null = null;
   private triggerCheckInterval: NodeJS.Timeout | null = null;
   private running = false;
-  private embeddingModel: string;
   // OpenAI embeddings API limit: 300,000 tokens per request
   private readonly MAX_TOKENS_PER_BATCH = 300000;
   // Conservative token estimation: ~3 characters per token (slightly overestimate to be safe)
@@ -18,14 +21,6 @@ export class EmbeddingsGenerator {
   private processedIds = new Set<string>(); // Prevent duplicate processing
 
   constructor() {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY environment variable is required for embeddings");
-    }
-    // Use OpenAI for embeddings (Anthropic doesn't support embeddings)
-    this.aiClient = createAIModelClient("openai", apiKey);
-    this.embeddingModel = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
-
     // Initialize throttled queue
     // OpenAI rate limits: 3,000 RPM for text-embedding-3-small
     // Set to 200 requests/minute for benchmarks (= 1 request every 300ms)
@@ -37,6 +32,40 @@ export class EmbeddingsGenerator {
     });
 
     console.log("Embeddings generator initialized with throttled queue (200 req/min)");
+  }
+
+  private getApiKeyForProvider(provider: WorkspaceAIProvider): string | undefined {
+    switch (provider) {
+      case "openai":
+        return process.env.OPENAI_API_KEY;
+      case "google":
+        return getGoogleApiKey();
+    }
+  }
+
+  private getEmbeddingModelForProvider(provider: WorkspaceAIProvider): string | undefined {
+    switch (provider) {
+      case "openai":
+        return process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
+      case "google":
+        return process.env.GOOGLE_EMBEDDING_MODEL || "text-embedding-004";
+    }
+  }
+
+  private async getEmbeddingsProviderForWorkspace(workspaceId: string) {
+    const workspace = await Workspace.findById(workspaceId);
+    const provider = (
+      workspace?.ai_provider || DEFAULT_WORKSPACE_AI_PROVIDER
+    ) as WorkspaceAIProvider;
+    const apiKey = this.getApiKeyForProvider(provider);
+    const embeddingModel = this.getEmbeddingModelForProvider(provider);
+
+    if (!apiKey || !embeddingModel) {
+      return null;
+    }
+
+    const client = createAIModelClient(provider as any, apiKey);
+    return { provider: client.getProvider(), embeddingModel, providerName: provider };
   }
 
   /**
@@ -279,20 +308,25 @@ export class EmbeddingsGenerator {
       const key = factId.replace(/^facts\//, '');
       const fact = await collections.facts.document(key);
 
+      const resolved = await this.getEmbeddingsProviderForWorkspace(workspaceId);
+      if (!resolved) {
+        return;
+      }
+      const { provider, embeddingModel } = resolved;
+
       // Check if embedding needed
-      if (fact.embedding && fact.embedding_model === this.embeddingModel) {
+      if (fact.embedding && fact.embedding_model === embeddingModel) {
         return; // Already has correct embedding
       }
 
       // Generate embedding
-      const provider = this.aiClient.getProvider();
       const text = this.truncateToTokenLimit(fact.content);
-      const result = await provider.embeddings([text], this.embeddingModel);
+      const result = await provider.embeddings([text], embeddingModel);
 
       // Update fact
       await collections.facts.update(key, {
         embedding: result.embeddings[0],
-        embedding_model: this.embeddingModel,
+        embedding_model: embeddingModel,
       });
 
       console.log(`Generated embedding for fact ${factId} in real-time`);
@@ -310,18 +344,23 @@ export class EmbeddingsGenerator {
       const key = relationId.replace(/^relations\//, '');
       const relation = await collections.relations.document(key);
 
-      if (relation.embedding && relation.embedding_model === this.embeddingModel) {
+      const resolved = await this.getEmbeddingsProviderForWorkspace(workspaceId);
+      if (!resolved) {
+        return;
+      }
+      const { provider, embeddingModel } = resolved;
+
+      if (relation.embedding && relation.embedding_model === embeddingModel) {
         return;
       }
 
-      const provider = this.aiClient.getProvider();
       const metadataStr = relation.metadata ? JSON.stringify(relation.metadata) : "";
       const text = this.truncateToTokenLimit(`${relation.type}${metadataStr ? ` ${metadataStr}` : ""}`);
-      const result = await provider.embeddings([text], this.embeddingModel);
+      const result = await provider.embeddings([text], embeddingModel);
 
       await collections.relations.update(key, {
         embedding: result.embeddings[0],
-        embedding_model: this.embeddingModel,
+        embedding_model: embeddingModel,
       });
 
       console.log(`Generated embedding for relation ${relationId} in real-time`);
@@ -339,17 +378,22 @@ export class EmbeddingsGenerator {
       const key = cardId.replace(/^knowledge_cards\//, '');
       const card = await collections.knowledge_cards.document(key);
 
-      if (card.embedding && card.embedding_model === this.embeddingModel) {
+      const resolved = await this.getEmbeddingsProviderForWorkspace(workspaceId);
+      if (!resolved) {
+        return;
+      }
+      const { provider, embeddingModel } = resolved;
+
+      if (card.embedding && card.embedding_model === embeddingModel) {
         return;
       }
 
-      const provider = this.aiClient.getProvider();
       const text = this.truncateToTokenLimit(`${card.title}\n${card.summary}\n${card.content}`);
-      const result = await provider.embeddings([text], this.embeddingModel);
+      const result = await provider.embeddings([text], embeddingModel);
 
       await collections.knowledge_cards.update(key, {
         embedding: result.embeddings[0],
-        embedding_model: this.embeddingModel,
+        embedding_model: embeddingModel,
         last_updated_by: "system",
         last_updated_by_worker: "embeddings-generator",
         updated_at: new Date().toISOString(),
@@ -375,8 +419,6 @@ export class EmbeddingsGenerator {
     let error: string | undefined;
 
     try {
-      const provider = this.aiClient.getProvider();
-
       // Get all workspaces to process embeddings per workspace
       const workspaces = await Workspace.list(1000, 0);
       console.log(`Processing embeddings for ${workspaces.length} workspaces`);
@@ -391,6 +433,16 @@ export class EmbeddingsGenerator {
           // Use full workspace ID (with "workspaces/" prefix) to match how facts are stored
           const workspaceId = workspace.id;
           console.log(`DEBUG: Processing workspace ${workspaceId}`);
+
+          const resolved = await this.getEmbeddingsProviderForWorkspace(workspaceId);
+          if (!resolved) {
+            console.log(
+              `Skipping embeddings for workspace ${workspaceId}: no compatible embeddings provider/model configured`,
+            );
+            continue;
+          }
+          const { provider, embeddingModel, providerName } = resolved;
+          console.log(`Embeddings provider for workspace ${workspaceId}: ${providerName} (${embeddingModel})`);
 
           // Process facts without embeddings or with outdated embeddings for this workspace
           // Iterate through ALL facts using pagination
@@ -427,7 +479,10 @@ export class EmbeddingsGenerator {
           });
 
           const factsNeedingEmbeddings = allFacts.filter(
-            (f) => !f.embedding || (Array.isArray(f.embedding) && f.embedding.length === 0) || f.embedding_model !== this.embeddingModel,
+            (f) =>
+              !f.embedding ||
+              (Array.isArray(f.embedding) && f.embedding.length === 0) ||
+              f.embedding_model !== embeddingModel,
           );
 
           console.log(`Processing ${factsNeedingEmbeddings.length} facts for workspace ${workspace.id}`);
@@ -444,7 +499,7 @@ export class EmbeddingsGenerator {
             const texts = batch.map((f) => this.truncateToTokenLimit(f.content));
             
             try {
-              const result = await provider.embeddings(texts, this.embeddingModel);
+              const result = await provider.embeddings(texts, embeddingModel);
               
               for (let j = 0; j < batch.length; j++) {
                 const fact = batch[j];
@@ -453,7 +508,7 @@ export class EmbeddingsGenerator {
                 const key = Fact.extractKey(fact.id);
                 await collections.facts.update(key, {
                   embedding,
-                  embedding_model: this.embeddingModel,
+                  embedding_model: embeddingModel,
                 });
                 workspaceFactsUpdated++;
               }
@@ -488,7 +543,7 @@ export class EmbeddingsGenerator {
           console.log(`Fetched ${allRelations.length} total relations from workspace ${workspace.id}`);
 
           const relationsNeedingEmbeddings = allRelations.filter(
-            (r) => !r.embedding || r.embedding_model !== this.embeddingModel,
+            (r) => !r.embedding || r.embedding_model !== embeddingModel,
           );
 
           console.log(`Processing ${relationsNeedingEmbeddings.length} relations for workspace ${workspace.id}`);
@@ -512,7 +567,7 @@ export class EmbeddingsGenerator {
             });
             
             try {
-              const result = await provider.embeddings(texts, this.embeddingModel);
+              const result = await provider.embeddings(texts, embeddingModel);
               
               for (let j = 0; j < batch.length; j++) {
                 const relation = batch[j];
@@ -521,7 +576,7 @@ export class EmbeddingsGenerator {
                 const key = FactRelation.extractKey(relation.id);
                 await collections.relations.update(key, {
                   embedding,
-                  embedding_model: this.embeddingModel,
+                  embedding_model: embeddingModel,
                 });
                 workspaceRelationsUpdated++;
               }
@@ -556,7 +611,7 @@ export class EmbeddingsGenerator {
           console.log(`Fetched ${allCards.length} total cards from workspace ${workspace.id}`);
 
           const cardsNeedingEmbeddings = allCards.filter(
-            (c) => !c.embedding || c.embedding_model !== this.embeddingModel,
+            (c) => !c.embedding || c.embedding_model !== embeddingModel,
           );
 
           console.log(`Processing ${cardsNeedingEmbeddings.length} cards for workspace ${workspace.id}`);
@@ -576,7 +631,7 @@ export class EmbeddingsGenerator {
             });
             
             try {
-              const result = await provider.embeddings(texts, this.embeddingModel);
+              const result = await provider.embeddings(texts, embeddingModel);
               
               for (let j = 0; j < batch.length; j++) {
                 const card = batch[j];
@@ -585,7 +640,7 @@ export class EmbeddingsGenerator {
                 const key = KnowledgeCard.extractKey(card.id);
                 await collections.knowledge_cards.update(key, {
                   embedding,
-                  embedding_model: this.embeddingModel,
+                  embedding_model: embeddingModel,
                   last_updated_by: "system",
                   last_updated_by_worker: "embeddings-generator",
                   updated_at: new Date().toISOString(),

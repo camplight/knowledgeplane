@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./load-env.js";
 import { init } from "@knowledgeplane/db";
 import { CardConsolidator } from "./workers/card-consolidator.js";
 import { EmbeddingsGenerator } from "./workers/embeddings-generator.js";

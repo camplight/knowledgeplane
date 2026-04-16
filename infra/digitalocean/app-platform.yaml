@@ -47,15 +47,26 @@ envs:
     scope: RUN_AND_BUILD_TIME
     type: SECRET
   # AI Provider configuration (shared across all services)
-  - key: AI_PROVIDER
     value: openai
   - key: OPENAI_API_KEY
     scope: RUN_AND_BUILD_TIME
     type: SECRET
   - key: OPENAI_MODEL
-    value: gpt-4o
+    value: gpt-5.2
   - key: OPENAI_EMBEDDING_MODEL
     value: text-embedding-3-small
+  - key: ANTHROPIC_API_KEY
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: ANTHROPIC_MODEL
+    value: claude-sonnet-4-5-20250929
+  - key: GOOGLE_API_KEY
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+  - key: GOOGLE_MODEL
+    value: gemini-2.5-pro
+  - key: GOOGLE_EMBEDDING_MODEL
+    value: text-embedding-004
 
 # Optional: Custom domain/subdomain routing configuration
 # Uncomment and update these sections if you want to use custom domains:

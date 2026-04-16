@@ -254,11 +254,12 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 GITHUB_CLIENT_ID=your-github-client-id
 GITHUB_CLIENT_SECRET=your-github-client-secret
 
-# AI Provider (shared across all services)
-AI_PROVIDER=openai
+# AI provider API keys (shared across services as needed by workspace selection)
 OPENAI_API_KEY=your-openai-api-key
-OPENAI_MODEL=gpt-4o
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+ANTHROPIC_API_KEY=your-anthropic-api-key
+GOOGLE_API_KEY=your-google-api-key
+GOOGLE_EMBEDDING_MODEL=text-embedding-004
 ```
 
 #### MCP Server Specific

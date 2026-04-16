@@ -2,13 +2,13 @@ import { router, protectedProcedure } from "../router";
 // Import db module early to ensure fetch patch is applied before any database operations
 // This side-effect import ensures the db.ts module is loaded and fetch is patched
 import "@knowledgeplane/db/next";
-import { Fact, ChatThread, ensureInitialized } from "@knowledgeplane/db/next";
+import { Fact, ChatThread, Workspace, ensureInitialized } from "@knowledgeplane/db/next";
 import { z } from "zod";
 import {
-  createAIModelClient,
   type ChatMessage,
   type ChatCompletionOptions,
-  getOpenAIModel,
+  getWorkspaceAIProvider,
+  parseJsonResponse,
 } from "@knowledgeplane/aimodel";
 
 // Build MCP server URL with API key and workspace_id
@@ -75,11 +75,10 @@ export const chatRouter = router({
         content: message,
       });
 
-      // Create AI model client
-      const client = createAIModelClient(
-        (process.env.AI_PROVIDER as any) || "openai",
-        process.env.OPENAI_API_KEY,
-      );
+      const { provider, config } = await getWorkspaceAIProvider({
+        workspaceId: ctx.workspaceId,
+        getWorkspaceById: (id) => Workspace.findById(id),
+      });
 
       // Get MCP server URL with workspace_id
       const mcpServerUrl = getMcpServerUrl(ctx.workspaceId);
@@ -124,11 +123,9 @@ Example response:
         ...chatMessages,
       ];
 
-      const provider = client.getProvider();
-
       try {
         const chatOptions: ChatCompletionOptions = {
-          model: getOpenAIModel(),
+          model: config.chatModel,
           temperature: 0.7,
           maxTokens: 1000,
           responseFormat: "json_object", // Request JSON response
@@ -157,7 +154,7 @@ Example response:
         let usedFactIds: string[] = [];
 
         try {
-          const parsedResponse = JSON.parse(responseText);
+          const parsedResponse = parseJsonResponse(responseText);
           if (parsedResponse.content) {
             // Handle case where content might be an object (with nested content and metadata)
             if (typeof parsedResponse.content === "string") {

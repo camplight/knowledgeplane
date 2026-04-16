@@ -1,7 +1,11 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { Fact, KnowledgeCard, FactRelation, WorkspaceMember } from "@knowledgeplane/db";
 import { stripEmbeddings } from "./strip-embeddings.js";
-import { createAIModelClient, getChatModel } from "@knowledgeplane/aimodel";
+import {
+  createAIModelClient,
+  getChatModel,
+  DEFAULT_WORKSPACE_AI_PROVIDER,
+} from "@knowledgeplane/aimodel";
 import type { ChatMessage, ChatCompletionOptions } from "@knowledgeplane/aimodel";
 
 export const factsConsolidateTool: Tool = {
@@ -98,7 +102,7 @@ export async function handleFactsConsolidate(args: {
 
   // Use AI to consolidate
   const client = createAIModelClient(
-    (process.env.AI_PROVIDER as any) || "openai",
+    DEFAULT_WORKSPACE_AI_PROVIDER,
     process.env.OPENAI_API_KEY,
   );
   const provider = client.getProvider();

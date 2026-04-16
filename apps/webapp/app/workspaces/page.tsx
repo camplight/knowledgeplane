@@ -4,6 +4,13 @@ import { trpc } from "../../utils/trpc";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { AppLayout } from "../components/AppLayout";
+import {
+  WORKSPACE_AI_CHAT_MODELS,
+  WORKSPACE_AI_PROVIDERS,
+  WORKSPACE_AI_PROVIDER_LABELS,
+  getWorkspaceDefaultChatModel,
+  type WorkspaceAIProvider,
+} from "@knowledgeplane/aimodel";
 
 export default function WorkspacesPage() {
   const router = useRouter();
@@ -11,6 +18,14 @@ export default function WorkspacesPage() {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceDescription, setWorkspaceDescription] = useState("");
+  const [createAiProvider, setCreateAiProvider] = useState<WorkspaceAIProvider>("openai");
+  const [createAiChatModel, setCreateAiChatModel] = useState<string>(
+    getWorkspaceDefaultChatModel("openai"),
+  );
+  const [editAiProvider, setEditAiProvider] = useState<WorkspaceAIProvider>("openai");
+  const [editAiChatModel, setEditAiChatModel] = useState<string>(
+    getWorkspaceDefaultChatModel("openai"),
+  );
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [expiresInDays, setExpiresInDays] = useState(7);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -104,11 +119,20 @@ export default function WorkspacesPage() {
     }
   }, [selectedWorkspaceId, activeTab]);
 
+  useEffect(() => {
+    if (!workspaceData) return;
+    const provider = (workspaceData.ai_provider || "openai") as WorkspaceAIProvider;
+    setEditAiProvider(provider);
+    setEditAiChatModel(workspaceData.ai_chat_model || getWorkspaceDefaultChatModel(provider));
+  }, [workspaceData]);
+
   const handleCreateWorkspace = (e: React.FormEvent) => {
     e.preventDefault();
     createWorkspaceMutation.mutate({
       name: workspaceName.trim(),
       description: workspaceDescription.trim() || undefined,
+      ai_provider: createAiProvider,
+      ai_chat_model: createAiChatModel,
     });
   };
 
@@ -119,6 +143,8 @@ export default function WorkspacesPage() {
       id: selectedWorkspaceId,
       name: workspaceName.trim() || undefined,
       description: workspaceDescription.trim() || undefined,
+      ai_provider: editAiProvider,
+      ai_chat_model: editAiChatModel,
     });
   };
 
@@ -163,7 +189,6 @@ export default function WorkspacesPage() {
     ? membersData?.members.find((m) => m.user_id === userData.user.userId)
     : null;
   const canManage = currentMember?.role === "owner" || currentMember?.role === "admin";
-
   return (
     <AppLayout>
       {/* Toast Notification */}
@@ -171,7 +196,7 @@ export default function WorkspacesPage() {
         <div className="toast toast-top toast-end">
           <div className="alert alert-success">
             <svg
-              className="w-5 h-5 flex-shrink-0"
+              className="w-5 h-5 shrink-0"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -214,6 +239,8 @@ export default function WorkspacesPage() {
                       setSelectedWorkspaceId(null);
                       setWorkspaceName("");
                       setWorkspaceDescription("");
+                      setCreateAiProvider("openai");
+                      setCreateAiChatModel(getWorkspaceDefaultChatModel("openai"));
                     }}
                     className="btn btn-primary btn-sm"
                   >
@@ -238,6 +265,34 @@ export default function WorkspacesPage() {
                     className="textarea textarea-bordered w-full mb-2"
                     rows={2}
                   />
+                  <div className="grid grid-cols-1 gap-2 mb-2">
+                    <select
+                      className="select select-bordered w-full"
+                      value={createAiProvider}
+                      onChange={(e) => {
+                        const provider = e.target.value as WorkspaceAIProvider;
+                        setCreateAiProvider(provider);
+                        setCreateAiChatModel(getWorkspaceDefaultChatModel(provider));
+                      }}
+                    >
+                      {WORKSPACE_AI_PROVIDERS.map((p) => (
+                        <option key={p} value={p}>
+                          {WORKSPACE_AI_PROVIDER_LABELS[p]}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select select-bordered w-full"
+                      value={createAiChatModel}
+                      onChange={(e) => setCreateAiChatModel(e.target.value)}
+                    >
+                      {WORKSPACE_AI_CHAT_MODELS[createAiProvider].map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       type="submit"
@@ -358,6 +413,44 @@ export default function WorkspacesPage() {
                         className="textarea textarea-bordered w-full"
                         rows={3}
                       />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">AI Service</span>
+                        </label>
+                        <select
+                          className="select select-bordered w-full"
+                          value={editAiProvider}
+                          onChange={(e) => {
+                            const provider = e.target.value as WorkspaceAIProvider;
+                            setEditAiProvider(provider);
+                            setEditAiChatModel(getWorkspaceDefaultChatModel(provider));
+                          }}
+                        >
+                          {WORKSPACE_AI_PROVIDERS.map((p) => (
+                            <option key={p} value={p}>
+                              {WORKSPACE_AI_PROVIDER_LABELS[p]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">AI Model</span>
+                        </label>
+                        <select
+                          className="select select-bordered w-full"
+                          value={editAiChatModel}
+                          onChange={(e) => setEditAiChatModel(e.target.value)}
+                        >
+                          {WORKSPACE_AI_CHAT_MODELS[editAiProvider].map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                     <button
                       type="submit"

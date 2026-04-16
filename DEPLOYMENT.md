@@ -131,7 +131,8 @@ Railway automatically detects and deploys your apps with zero configuration.
    ```
    NODE_ENV=production
    OPENAI_API_KEY=<your-openai-key>
-   AI_PROVIDER=openai
+   ANTHROPIC_API_KEY=<your-anthropic-key>
+   GOOGLE_API_KEY=<your-google-key>
    ```
 
 6. **Generate Secrets**:
@@ -269,7 +270,8 @@ Deploy KnowledgePlane on DigitalOcean App Platform with ArangoDB on a Droplet.
    ```
    NODE_ENV=production
    OPENAI_API_KEY=<your-openai-key>
-   AI_PROVIDER=openai
+   ANTHROPIC_API_KEY=<your-anthropic-key>
+   GOOGLE_API_KEY=<your-google-key>
    ```
 
 5. **Configure Firewall:**
@@ -409,7 +411,9 @@ sudo certbot --nginx -d yourdomain.com
 - `OPENAI_API_KEY` (for chat features)
 
 ### Background Workers Need:
-- `OPENAI_API_KEY` - Required for embeddings and consolidation
+- `OPENAI_API_KEY` - Required when any workspace uses OpenAI; also used for OpenAI embeddings
+- `ANTHROPIC_API_KEY` - Required when any workspace uses Anthropic
+- `GOOGLE_API_KEY` - Required when any workspace uses Google/Gemini
 
 ---
 

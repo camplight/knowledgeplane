@@ -96,9 +96,10 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 GITHUB_CLIENT_ID=your-github-client-id
 GITHUB_CLIENT_SECRET=your-github-client-secret
 
-# AI Provider
+# AI provider API keys (for whichever providers your workspaces use)
 OPENAI_API_KEY=your-openai-api-key
-AI_PROVIDER=openai
+ANTHROPIC_API_KEY=your-anthropic-api-key
+GOOGLE_API_KEY=your-google-api-key
 
 # Session Security
 SESSION_SECRET=your-random-secret-at-least-32-characters-long
@@ -144,6 +145,8 @@ GITHUB_CLIENT_SECRET=your-github-client-secret
 MCP_SERVER_URL=https://YOUR_NGROK_URL/mcp
 MCP_SERVER_API_KEY=DEV_API_KEY
 OPENAI_API_KEY=your-openai-api-key
+ANTHROPIC_API_KEY=your-anthropic-api-key
+GOOGLE_API_KEY=your-google-api-key
 ```
 
 ### Background Workers (`apps/background-workers/.env.dev`)
@@ -154,7 +157,8 @@ ARANGO_DB_NAME=knowledgeplane
 ARANGO_USER=root
 ARANGO_PASSWORD=root
 OPENAI_API_KEY=your-openai-api-key
-AI_PROVIDER=openai
+ANTHROPIC_API_KEY=your-anthropic-api-key
+GOOGLE_API_KEY=your-google-api-key
 ```
 
 ## Setting Up OAuth Apps

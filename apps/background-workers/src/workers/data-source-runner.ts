@@ -11,6 +11,7 @@ import {
   type ChatCompletionOptions,
   type Tool,
   getChatModel,
+  DEFAULT_WORKSPACE_AI_PROVIDER,
 } from "@knowledgeplane/aimodel";
 import { randomUUID } from "node:crypto";
 import * as path from "node:path";
@@ -221,7 +222,7 @@ async function executeCodeInVM(args: {
 
   // Create AI model client for embeddings (needed for fact search)
   const client = createAIModelClient(
-    (process.env.AI_PROVIDER as any) || "openai",
+    DEFAULT_WORKSPACE_AI_PROVIDER,
     process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY,
   );
   const provider = client.getProvider();
@@ -358,6 +359,11 @@ async function executeCodeInVM(args: {
       offset?: number;
       include_trashed?: boolean;
     }) => {
+      const providerId = typeof (provider as any)?.getProvider === "function" ? (provider as any).getProvider() : "";
+      const embeddingModel =
+        providerId === "google"
+          ? process.env.GOOGLE_EMBEDDING_MODEL || "text-embedding-004"
+          : process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
       const hits = await Fact.search({
         query: params.query,
         workspace_id: workspaceId,
@@ -366,6 +372,7 @@ async function executeCodeInVM(args: {
         include_trashed: params.include_trashed || false,
         use_vector_search: undefined, // Use hybrid search
         embeddingProvider: provider,
+        embeddingModel,
       });
       return hits;
     },
@@ -492,7 +499,7 @@ export class DataSourceRunner {
       throw new Error("AI API key environment variable is required");
     }
     this.aiClient = createAIModelClient(
-      (process.env.AI_PROVIDER as any) || "openai",
+      DEFAULT_WORKSPACE_AI_PROVIDER,
       apiKey,
     );
   }

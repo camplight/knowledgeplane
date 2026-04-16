@@ -1,8 +1,12 @@
 import {
   createAIModelClient,
+  parseJsonResponse,
   type ChatMessage,
   type ChatCompletionOptions,
   getOpenAIModel,
+  getAnthropicModel,
+  getGoogleApiKey,
+  DEFAULT_WORKSPACE_AI_PROVIDER,
 } from "@knowledgeplane/aimodel";
 import ExcelJS from "exceljs";
 
@@ -35,25 +39,40 @@ export async function extractFactsAndRelationsFromFile(
   filename: string,
   mimeType: string,
   options?: {
-    openaiApiKey?: string;
-    openaiModel?: string;
+    apiKey?: string;
+    model?: string;
     temperature?: number;
     provider?: "openai" | "anthropic" | "google" | "azure";
   },
 ): Promise<ExtractionResult> {
-  const apiKey = options?.openaiApiKey || process.env.OPENAI_API_KEY;
+  const providerName = options?.provider || DEFAULT_WORKSPACE_AI_PROVIDER;
+  const apiKey =
+    options?.apiKey ||
+    (providerName === "anthropic"
+      ? process.env.ANTHROPIC_API_KEY
+      : providerName === "google"
+        ? getGoogleApiKey()
+        : process.env.OPENAI_API_KEY);
   if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for fact extraction");
+    throw new Error(
+      providerName === "anthropic"
+        ? "ANTHROPIC_API_KEY is required for fact extraction"
+        : providerName === "google"
+          ? "GOOGLE_API_KEY is required for fact extraction (aliases: GEMINI_API_KEY, Google_API_KEY)"
+          : "OPENAI_API_KEY is required for fact extraction",
+    );
   }
 
   // Create AI model client with specified provider
   const client = createAIModelClient(
-    options?.provider || (process.env.AI_PROVIDER as any) || "openai",
+    providerName,
     apiKey,
   );
   const provider = client.getProvider();
 
-  const model = options?.openaiModel || getOpenAIModel();
+  const model =
+    options?.model ||
+    (providerName === "anthropic" ? getAnthropicModel() : getOpenAIModel());
   const temperature = options?.temperature ?? 0.3;
 
   const systemPrompt = `You are a knowledge extraction agent. Your task is to analyze file content and extract:
@@ -240,7 +259,7 @@ ${limitedContent}`;
     throw new Error("No response from AI model");
   }
 
-  const parsed = JSON.parse(response.content);
+  const parsed = parseJsonResponse(response.content);
   return {
     facts: parsed.facts || [],
     relations: parsed.relations || [],
@@ -252,8 +271,8 @@ export async function extractFactsAndRelations(
   text: string,
   filename: string,
   options?: {
-    openaiApiKey?: string;
-    openaiModel?: string;
+    apiKey?: string;
+    model?: string;
     temperature?: number;
   },
 ): Promise<ExtractionResult> {

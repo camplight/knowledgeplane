@@ -10,18 +10,29 @@ This service runs background workers that:
 
 ## Environment Variables
 
+Workers run in a **separate Node process** from the Next.js webapp. They load, in order:
+
+1. Repository root `.env`
+2. `apps/background-workers/.env.dev`
+
+Put API keys here (or in root `.env`) even if you already set them in `apps/webapp/.env.local`. Otherwise workspace features that use Google/OpenAI/Anthropic in **card consolidation**, **embeddings**, or **data-source scripts** will fail with “API key required”.
+
 ### Required
 
 - `ARANGO_URL` - ArangoDB connection URL (default: `http://localhost:8529`)
 - `ARANGO_DB_NAME` - Database name (default: `knowledgeplane`)
 - `ARANGO_USER` - Database username (default: `root`)
 - `ARANGO_PASSWORD` - Database password (default: empty string)
-- `OPENAI_API_KEY` - OpenAI API key for AI model operations
+
+### AI keys (set the ones your workspaces use)
+
+- `OPENAI_API_KEY` - When any workspace uses OpenAI
+- `ANTHROPIC_API_KEY` - When any workspace uses Anthropic
+- `GOOGLE_API_KEY` - When any workspace uses Google/Gemini (aliases: `GEMINI_API_KEY`, `Google_API_KEY`)
 
 ### Optional
 
-- `AI_PROVIDER` - AI provider to use (default: `openai`)
-- `OPENAI_MODEL` - OpenAI model to use (default: `gpt-5.2`)
+- `OPENAI_EMBEDDING_MODEL` / `GOOGLE_EMBEDDING_MODEL` - Embedding models when using those providers
 - `NODE_ENV` - Environment mode (`development` or `production`)
 
 ## Setup
@@ -39,8 +50,7 @@ ARANGO_DB_NAME=knowledgeplane
 ARANGO_USER=root
 ARANGO_PASSWORD=root
 OPENAI_API_KEY=your-openai-api-key
-AI_PROVIDER=openai
-OPENAI_MODEL=gpt-5.2
+GOOGLE_API_KEY=your-google-api-key
 ```
 
 3. **Ensure database is running**:

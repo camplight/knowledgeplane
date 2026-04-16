@@ -11,6 +11,7 @@ Run the setup script to create environment files from examples:
 ```
 
 This will create:
+
 - `.env` (root)
 - `apps/mcp-server/.env.dev`
 - `apps/webapp/.env.local`
@@ -54,23 +55,39 @@ See the example files (`.env.example`) in each directory for complete lists of r
 ### Minimum Required for Development
 
 **Root `.env`:**
+
 - `ARANGO_URL`, `ARANGO_DB_NAME`, `ARANGO_USER`, `ARANGO_PASSWORD`
 - `SESSION_SECRET` (at least 32 characters)
 - `API_KEYS` (for development, can be `DEV_API_KEY`)
 
 **MCP Server (`apps/mcp-server/.env.dev`):**
+
 - Database variables (same as root)
 - `PORT=8080`
 - `OAUTH_REDIRECT_BASE_URL` (use ngrok URL for localhost: `https://your-ngrok-url.ngrok.io`)
 
 **Webapp (`apps/webapp/.env.local`):**
+
 - Database variables (same as root)
 - `OAUTH_REDIRECT_BASE_URL=http://localhost:3000`
 - `MCP_SERVER_URL` (use ngrok URL for localhost: `https://your-ngrok-url.ngrok.io`)
+- AI provider API keys for whichever providers your workspaces use (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`)
 
 **Background Workers (`apps/background-workers/.env.dev`):**
+
 - Database variables (same as root)
-- `OPENAI_API_KEY` (for embeddings and card consolidation)
+- **Same AI provider API keys as the webapp** — workers are a separate process and do not read `apps/webapp/.env.local`. Use this file or repository root `.env`.
+- `OPENAI_API_KEY` (used when a workspace selects OpenAI; embeddings follow the workspace provider when supported)
+- `ANTHROPIC_API_KEY` (required when a workspace selects Anthropic)
+- `GOOGLE_API_KEY` (required when a workspace selects Google; aliases: `GEMINI_API_KEY`, `Google_API_KEY`)
+
+## Workspace AI Configuration (provider + model)
+
+KnowledgePlane supports selecting an **AI provider** and **model** at the workspace level in the web dashboard.
+
+- **API keys remain env-only** (this document).
+- **Workspaces store only configuration** (`ai_provider`, `ai_chat_model`).
+- The system resolves provider/model per workspace at runtime, and fails fast if the matching env key is missing.
 
 ## ngrok Configuration
 
@@ -87,6 +104,7 @@ See [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed ngrok setup instructions.
 ## Production Variables
 
 For production, use `.env.production` files and ensure:
+
 - `NODE_ENV=production`
 - Strong, random `SESSION_SECRET` (32+ characters)
 - Strong database password
@@ -94,4 +112,3 @@ For production, use `.env.production` files and ensure:
 - HTTPS URLs for all redirects
 
 See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment instructions.
-

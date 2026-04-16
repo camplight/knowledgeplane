@@ -10,6 +10,7 @@ import type {
   Tool,
 } from "../types";
 import type { AIModelProvider } from "./base";
+import { getAnthropicModel } from "../constants";
 
 /**
  * Anthropic provider implementation
@@ -31,7 +32,7 @@ export class AnthropicProvider implements AIModelProvider {
     messages: ChatMessage[],
     options?: ChatCompletionOptions,
   ): Promise<ChatCompletionResult> {
-    const model = options?.model || process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-20241022";
+    const model = options?.model || getAnthropicModel();
     const temperature = options?.temperature ?? 0.3;
     const maxTokens = options?.maxTokens || 4096;
 

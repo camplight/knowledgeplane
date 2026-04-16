@@ -1,5 +1,7 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { processFileUpload } from "@knowledgeplane/file-processor";
+import { Workspace } from "@knowledgeplane/db/next";
+import { getGoogleApiKey, getWorkspaceAIProvider } from "@knowledgeplane/aimodel";
 
 export const filesUploadTool: Tool = {
   name: "files_upload",
@@ -52,6 +54,11 @@ export async function handleFilesUpload(args: {
   // Decode base64 data
   const buffer = Buffer.from(args.data, "base64");
 
+  const { config } = await getWorkspaceAIProvider({
+    workspaceId: args.workspace_id,
+    getWorkspaceById: (id) => Workspace.findById(id),
+  });
+
   // Process file using shared service
   const result = await processFileUpload({
     buffer,
@@ -59,8 +66,14 @@ export async function handleFilesUpload(args: {
     mimeType: args.mimeType,
     workspaceId: args.workspace_id,
     uploadedBy: args.created_by,
-    openaiApiKey: process.env.OPENAI_API_KEY,
-    openaiModel: process.env.OPENAI_MODEL,
+    aiProvider: config.provider,
+    aiApiKey:
+      config.provider === "anthropic"
+        ? process.env.ANTHROPIC_API_KEY
+        : config.provider === "google"
+          ? getGoogleApiKey()
+          : process.env.OPENAI_API_KEY,
+    aiChatModel: config.chatModel,
   });
 
   return {
