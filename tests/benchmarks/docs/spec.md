@@ -202,6 +202,7 @@ Create `tests/benchmarks/vector_baseline.py`:
 - **Step 4:** KP adapters (HTTP + Mock adapters, helpers)
 - **Step 5:** Vector baseline (563 lines + tests + demo + docs)
 - **Step 6:** Master runner script (run_all.py with combined reporting)
+- Added `scripts/summarize-benchmarks.ts` (Node.js/TypeScript) to compile high-level cross-run Markdown summaries and flag regressions for debugging/optimization.
 
 ### In Progress 🔄
 - None
