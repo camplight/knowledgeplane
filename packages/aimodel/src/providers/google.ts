@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getWorkspaceDefaultChatModel } from "../model-catalog";
 import type {
   ChatMessage,
   ChatCompletionOptions,
@@ -98,7 +99,7 @@ export class GoogleProvider implements AIModelProvider {
   ): Promise<ChatCompletionResult> {
     assertGeminiSupportsMessages(messages);
 
-    const modelName = options?.model || process.env.GOOGLE_MODEL || "gemini-2.0-flash";
+    const modelName = options?.model || process.env.GOOGLE_MODEL || getWorkspaceDefaultChatModel("google");
     const temperature = options?.temperature ?? 0.3;
     const maxOutputTokens = options?.maxTokens;
 

@@ -4,6 +4,8 @@ import { z } from "zod";
 import {
   WORKSPACE_AI_PROVIDERS,
   getWorkspaceDefaultChatModel,
+  getWorkspaceDefaultEmbeddingModel,
+  isWorkspaceEmbeddingModelAllowed,
   isWorkspaceChatModelAllowed,
   type WorkspaceAIProvider,
 } from "@knowledgeplane/aimodel";
@@ -16,13 +18,19 @@ export const workspacesRouter = router({
         description: z.string().max(500).optional(),
         ai_provider: z.enum(WORKSPACE_AI_PROVIDERS).optional(),
         ai_chat_model: z.string().optional(),
+        ai_embedding_model: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const provider = (input.ai_provider || "openai") as WorkspaceAIProvider;
       const chatModel = input.ai_chat_model || getWorkspaceDefaultChatModel(provider);
+      const embeddingModel =
+        input.ai_embedding_model || getWorkspaceDefaultEmbeddingModel(provider);
       if (!isWorkspaceChatModelAllowed(provider, chatModel)) {
         throw new Error(`Invalid AI model for provider "${provider}"`);
+      }
+      if (!isWorkspaceEmbeddingModelAllowed(provider, embeddingModel)) {
+        throw new Error(`Invalid embeddings model for provider "${provider}"`);
       }
 
       const workspace = await Workspace.create({
@@ -31,6 +39,7 @@ export const workspacesRouter = router({
         created_by: ctx.user.userId,
         ai_provider: provider,
         ai_chat_model: chatModel,
+        ai_embedding_model: embeddingModel,
       });
 
       // Add creator as owner
@@ -76,6 +85,7 @@ export const workspacesRouter = router({
         description: z.string().max(500).optional(),
         ai_provider: z.enum(WORKSPACE_AI_PROVIDERS).optional(),
         ai_chat_model: z.string().optional(),
+        ai_embedding_model: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -95,8 +105,14 @@ export const workspacesRouter = router({
       const chatModel =
         updates.ai_chat_model ||
         (updates.ai_provider ? getWorkspaceDefaultChatModel(provider) : undefined);
+      const embeddingModel =
+        updates.ai_embedding_model ||
+        (updates.ai_provider ? getWorkspaceDefaultEmbeddingModel(provider) : undefined);
       if (chatModel && !isWorkspaceChatModelAllowed(provider, chatModel)) {
         throw new Error(`Invalid AI model for provider "${provider}"`);
+      }
+      if (embeddingModel && !isWorkspaceEmbeddingModelAllowed(provider, embeddingModel)) {
+        throw new Error(`Invalid embeddings model for provider "${provider}"`);
       }
 
       return await Workspace.update(id, updates);

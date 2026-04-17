@@ -5,7 +5,8 @@ import {
 } from "../constants";
 import {
   DEFAULT_WORKSPACE_AI_PROVIDER,
-  getWorkspaceDefaultChatModel,
+  getWorkspaceAllowedChatModel,
+  getWorkspaceAllowedEmbeddingModel,
   isWorkspaceAIProvider,
   type WorkspaceAIProvider,
 } from "../model-catalog";
@@ -13,12 +14,14 @@ import {
 export type WorkspaceAIConfig = {
   provider: WorkspaceAIProvider;
   chatModel: string;
+  embeddingModel: string;
 };
 
 export type WorkspaceRecordLike = {
   id: string;
   ai_provider?: string | null;
   ai_chat_model?: string | null;
+  ai_embedding_model?: string | null;
 };
 
 export type GetWorkspaceById = (workspaceId: string) => Promise<WorkspaceRecordLike | null>;
@@ -47,9 +50,13 @@ export async function resolveWorkspaceAIConfig(args: {
     ? providerRaw
     : DEFAULT_WORKSPACE_AI_PROVIDER;
 
-  const chatModel = workspace.ai_chat_model || getWorkspaceDefaultChatModel(provider);
+  const chatModel = getWorkspaceAllowedChatModel(provider, workspace.ai_chat_model);
+  const embeddingModel = getWorkspaceAllowedEmbeddingModel(
+    provider,
+    workspace.ai_embedding_model,
+  );
 
-  return { provider, chatModel };
+  return { provider, chatModel, embeddingModel };
 }
 
 export async function getWorkspaceAIProvider(args: {
@@ -75,6 +82,6 @@ export async function getWorkspaceAIProvider(args: {
 }
 
 export function getWorkspaceChatModelOrDefault(model?: string | null): string {
-  return model || getWorkspaceDefaultChatModel(DEFAULT_WORKSPACE_AI_PROVIDER);
+  return getWorkspaceAllowedChatModel(DEFAULT_WORKSPACE_AI_PROVIDER, model);
 }
 

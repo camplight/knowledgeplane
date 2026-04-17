@@ -66,13 +66,13 @@ export const factsRouter = router({
           if (config.provider === "openai" && process.env.OPENAI_API_KEY) {
             const client = createAIModelClient("openai", process.env.OPENAI_API_KEY);
             embeddingProvider = client.getProvider();
-            embeddingModel = process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
+            embeddingModel = config.embeddingModel;
           } else if (config.provider === "google") {
             const key = getGoogleApiKey();
             if (key) {
               const client = createAIModelClient("google", key);
               embeddingProvider = client.getProvider();
-              embeddingModel = process.env.GOOGLE_EMBEDDING_MODEL || "text-embedding-004";
+              embeddingModel = config.embeddingModel;
             }
           } else {
             // Anthropic doesn't support embeddings in this codebase yet.

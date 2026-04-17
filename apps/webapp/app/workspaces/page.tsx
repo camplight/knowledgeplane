@@ -6,9 +6,13 @@ import { useState, useEffect } from "react";
 import { AppLayout } from "../components/AppLayout";
 import {
   WORKSPACE_AI_CHAT_MODELS,
+  WORKSPACE_AI_EMBEDDING_MODELS,
   WORKSPACE_AI_PROVIDERS,
   WORKSPACE_AI_PROVIDER_LABELS,
+  getWorkspaceAllowedChatModel,
+  getWorkspaceAllowedEmbeddingModel,
   getWorkspaceDefaultChatModel,
+  getWorkspaceDefaultEmbeddingModel,
   type WorkspaceAIProvider,
 } from "@knowledgeplane/aimodel";
 
@@ -22,9 +26,15 @@ export default function WorkspacesPage() {
   const [createAiChatModel, setCreateAiChatModel] = useState<string>(
     getWorkspaceDefaultChatModel("openai"),
   );
+  const [createAiEmbeddingModel, setCreateAiEmbeddingModel] = useState<string>(
+    getWorkspaceDefaultEmbeddingModel("openai"),
+  );
   const [editAiProvider, setEditAiProvider] = useState<WorkspaceAIProvider>("openai");
   const [editAiChatModel, setEditAiChatModel] = useState<string>(
     getWorkspaceDefaultChatModel("openai"),
+  );
+  const [editAiEmbeddingModel, setEditAiEmbeddingModel] = useState<string>(
+    getWorkspaceDefaultEmbeddingModel("openai"),
   );
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [expiresInDays, setExpiresInDays] = useState(7);
@@ -123,7 +133,10 @@ export default function WorkspacesPage() {
     if (!workspaceData) return;
     const provider = (workspaceData.ai_provider || "openai") as WorkspaceAIProvider;
     setEditAiProvider(provider);
-    setEditAiChatModel(workspaceData.ai_chat_model || getWorkspaceDefaultChatModel(provider));
+    setEditAiChatModel(getWorkspaceAllowedChatModel(provider, workspaceData.ai_chat_model));
+    setEditAiEmbeddingModel(
+      getWorkspaceAllowedEmbeddingModel(provider, workspaceData.ai_embedding_model),
+    );
   }, [workspaceData]);
 
   const handleCreateWorkspace = (e: React.FormEvent) => {
@@ -133,6 +146,7 @@ export default function WorkspacesPage() {
       description: workspaceDescription.trim() || undefined,
       ai_provider: createAiProvider,
       ai_chat_model: createAiChatModel,
+      ai_embedding_model: createAiEmbeddingModel,
     });
   };
 
@@ -145,6 +159,7 @@ export default function WorkspacesPage() {
       description: workspaceDescription.trim() || undefined,
       ai_provider: editAiProvider,
       ai_chat_model: editAiChatModel,
+      ai_embedding_model: editAiEmbeddingModel,
     });
   };
 
@@ -241,6 +256,7 @@ export default function WorkspacesPage() {
                       setWorkspaceDescription("");
                       setCreateAiProvider("openai");
                       setCreateAiChatModel(getWorkspaceDefaultChatModel("openai"));
+                      setCreateAiEmbeddingModel(getWorkspaceDefaultEmbeddingModel("openai"));
                     }}
                     className="btn btn-primary btn-sm"
                   >
@@ -265,7 +281,7 @@ export default function WorkspacesPage() {
                     className="textarea textarea-bordered w-full mb-2"
                     rows={2}
                   />
-                  <div className="grid grid-cols-1 gap-2 mb-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
                     <select
                       className="select select-bordered w-full"
                       value={createAiProvider}
@@ -273,6 +289,7 @@ export default function WorkspacesPage() {
                         const provider = e.target.value as WorkspaceAIProvider;
                         setCreateAiProvider(provider);
                         setCreateAiChatModel(getWorkspaceDefaultChatModel(provider));
+                        setCreateAiEmbeddingModel(getWorkspaceDefaultEmbeddingModel(provider));
                       }}
                     >
                       {WORKSPACE_AI_PROVIDERS.map((p) => (
@@ -287,6 +304,17 @@ export default function WorkspacesPage() {
                       onChange={(e) => setCreateAiChatModel(e.target.value)}
                     >
                       {WORKSPACE_AI_CHAT_MODELS[createAiProvider].map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select select-bordered w-full"
+                      value={createAiEmbeddingModel}
+                      onChange={(e) => setCreateAiEmbeddingModel(e.target.value)}
+                    >
+                      {WORKSPACE_AI_EMBEDDING_MODELS[createAiProvider].map((m) => (
                         <option key={m} value={m}>
                           {m}
                         </option>
@@ -307,6 +335,9 @@ export default function WorkspacesPage() {
                         setIsCreatingWorkspace(false);
                         setWorkspaceName("");
                         setWorkspaceDescription("");
+                        setCreateAiProvider("openai");
+                        setCreateAiChatModel(getWorkspaceDefaultChatModel("openai"));
+                        setCreateAiEmbeddingModel(getWorkspaceDefaultEmbeddingModel("openai"));
                       }}
                       className="btn btn-ghost btn-sm"
                     >
@@ -414,7 +445,7 @@ export default function WorkspacesPage() {
                         rows={3}
                       />
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div className="form-control">
                         <label className="label">
                           <span className="label-text">AI Service</span>
@@ -426,6 +457,7 @@ export default function WorkspacesPage() {
                             const provider = e.target.value as WorkspaceAIProvider;
                             setEditAiProvider(provider);
                             setEditAiChatModel(getWorkspaceDefaultChatModel(provider));
+                            setEditAiEmbeddingModel(getWorkspaceDefaultEmbeddingModel(provider));
                           }}
                         >
                           {WORKSPACE_AI_PROVIDERS.map((p) => (
@@ -445,6 +477,22 @@ export default function WorkspacesPage() {
                           onChange={(e) => setEditAiChatModel(e.target.value)}
                         >
                           {WORKSPACE_AI_CHAT_MODELS[editAiProvider].map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Embeddings Model</span>
+                        </label>
+                        <select
+                          className="select select-bordered w-full"
+                          value={editAiEmbeddingModel}
+                          onChange={(e) => setEditAiEmbeddingModel(e.target.value)}
+                        >
+                          {WORKSPACE_AI_EMBEDDING_MODELS[editAiProvider].map((m) => (
                             <option key={m} value={m}>
                               {m}
                             </option>

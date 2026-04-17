@@ -3,6 +3,7 @@ import {
   createAIModelClient,
   getGoogleApiKey,
   DEFAULT_WORKSPACE_AI_PROVIDER,
+  getWorkspaceDefaultEmbeddingModel,
   type WorkspaceAIProvider,
 } from "@knowledgeplane/aimodel";
 import PQueue from "p-queue";
@@ -43,22 +44,14 @@ export class EmbeddingsGenerator {
     }
   }
 
-  private getEmbeddingModelForProvider(provider: WorkspaceAIProvider): string | undefined {
-    switch (provider) {
-      case "openai":
-        return process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
-      case "google":
-        return process.env.GOOGLE_EMBEDDING_MODEL || "text-embedding-004";
-    }
-  }
-
   private async getEmbeddingsProviderForWorkspace(workspaceId: string) {
     const workspace = await Workspace.findById(workspaceId);
     const provider = (
       workspace?.ai_provider || DEFAULT_WORKSPACE_AI_PROVIDER
     ) as WorkspaceAIProvider;
     const apiKey = this.getApiKeyForProvider(provider);
-    const embeddingModel = this.getEmbeddingModelForProvider(provider);
+    const embeddingModel =
+      workspace?.ai_embedding_model || getWorkspaceDefaultEmbeddingModel(provider);
 
     if (!apiKey || !embeddingModel) {
       return null;

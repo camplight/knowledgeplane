@@ -11,6 +11,7 @@ export interface WorkspaceRecord {
   created_by: string; // User ID of the creator
   ai_provider?: "openai" | "anthropic" | "google";
   ai_chat_model?: string;
+  ai_embedding_model?: string;
   rest_api_key?: string;
   rest_api_key_created_by?: string;
   rest_api_key_created_at?: string;
@@ -24,6 +25,7 @@ export interface WorkspaceInput {
   created_by: string; // User ID of the creator
   ai_provider?: WorkspaceRecord["ai_provider"];
   ai_chat_model?: WorkspaceRecord["ai_chat_model"];
+  ai_embedding_model?: WorkspaceRecord["ai_embedding_model"];
 }
 
 export class Workspace {
@@ -54,6 +56,7 @@ export class Workspace {
       created_by: input.created_by,
       ai_provider: input.ai_provider || "openai",
       ai_chat_model: input.ai_chat_model || null,
+      ai_embedding_model: input.ai_embedding_model || null,
       created_at: now,
       updated_at: now,
     };
@@ -172,6 +175,7 @@ export class Workspace {
         | "description"
         | "ai_provider"
         | "ai_chat_model"
+        | "ai_embedding_model"
         | "rest_api_key"
         | "rest_api_key_created_by"
         | "rest_api_key_created_at"
@@ -196,6 +200,9 @@ export class Workspace {
     }
     if (updates.ai_chat_model !== undefined) {
       updateDoc.ai_chat_model = updates.ai_chat_model;
+    }
+    if (updates.ai_embedding_model !== undefined) {
+      updateDoc.ai_embedding_model = updates.ai_embedding_model;
     }
     if (updates.rest_api_key !== undefined) {
       updateDoc.rest_api_key = updates.rest_api_key;
@@ -285,6 +292,7 @@ export class Workspace {
       created_by: doc.created_by,
       ai_provider: doc.ai_provider,
       ai_chat_model: doc.ai_chat_model,
+      ai_embedding_model: doc.ai_embedding_model,
       rest_api_key: doc.rest_api_key,
       rest_api_key_created_by: doc.rest_api_key_created_by,
       rest_api_key_created_at: doc.rest_api_key_created_at,
