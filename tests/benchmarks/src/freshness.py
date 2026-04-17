@@ -77,6 +77,7 @@ except ImportError:
 from lib.adapter import (
     HTTPKnowledgePlaneAdapter,
     KnowledgePlaneAdapter,
+    KnowledgePlaneAuthError,
     QueryResult,
     cleanup_benchmark_facts_by_prefix,
 )
@@ -349,6 +350,8 @@ def poll_until_updated(
                     measured_from_creation=creation_start_time is not None
                 )
 
+        except KnowledgePlaneAuthError:
+            raise
         except Exception as e:
             logger.error(f"Poll attempt {attempt + 1} failed: {e}")
             timestamps.append({
@@ -973,6 +976,8 @@ def batch_api_mode(
                 }],
                 namespace=fact.namespace
             )
+        except KnowledgePlaneAuthError:
+            raise
         except Exception as e:
             logger.error(f"Ingestion failed: {e}")
             continue
@@ -1016,6 +1021,8 @@ def batch_api_mode(
                 else:
                     print(f"  Not found immediately")
 
+        except KnowledgePlaneAuthError:
+            raise
         except Exception as e:
             logger.error(f"Query failed: {e}")
             results.append({'fact_id': fact.id, 'time_seconds': None, 'found': False, 'error': str(e)})

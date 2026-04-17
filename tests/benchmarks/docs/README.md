@@ -54,7 +54,7 @@ cd tests/benchmarks
 ./bench freshness
 
 # Or from project root
-npm run bench hotpot
+npm run bench:quick
 ```
 
 ### Environment Setup

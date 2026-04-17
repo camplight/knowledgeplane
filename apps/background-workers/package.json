@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "dotenv -e ../../.env -e .env.dev -- tsx watch src/index.ts",
+    "bench": "dotenv -e ../../.env -e ../../.env.benchmark -- tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "lint": "eslint .",
