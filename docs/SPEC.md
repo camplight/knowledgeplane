@@ -765,6 +765,13 @@ For complete environment variable documentation and setup instructions, see:
 - [DEVELOPMENT.md](../DEVELOPMENT.md) - Local development setup with ngrok
 - [DEPLOYMENT.md](../DEPLOYMENT.md) - Production deployment configuration
 - `.env.example` files in each app directory
+- `.env.benchmark` at the repository root - local benchmark runner variables (`KP_API_URL`, `ARANGO_URL`, `KP_WORKSPACE_ID`, `KP_USER_ID`, `KP_API_KEY`, `OPENAI_API_KEY`)
+- `tests/benchmarks/scripts/setup-benchmark-env.sh` - auto-creates a benchmark workspace from the first local DB user, prompts for `OPENAI_API_KEY`, and writes both `.env.benchmark` and `.env`
+- **Running benchmarks from repo root**: `npm run bench:quick` (suite with `--quick` sample sizes) and `npm run bench:all` (default sample sizes). These run `scripts/bench-with-stack.sh`, which starts Docker project `kp-bench` (ArangoDB + reranker profile when missing), then the REST API and background workers with `.env` + `.env.benchmark`, then `tests/benchmarks/bench all [--quick]`. On exit, the script stops the Node processes and tears down `kp-bench` if it started any of its containers.
+- **Reranker (bench stack)**: By default the script starts the reranker container and waits up to ~30 minutes for `/health`. If it never becomes healthy, the script prints the last container logs and **continues without reranker** (workers already fall back to embedding-only when the reranker HTTP call fails). Set **`BENCH_STRICT_RERANKER=1`** to **exit with failure** instead of continuing. Set **`BENCH_SKIP_RERANKER=1`** (or `npm run bench:quick:norerank`) to **never** start or wait for the reranker.
+- **Freshness FAISS baseline (./bench)**: `./bench freshness` / `./bench all` used to pass `--corpus_size 1000` always, which embeds 1000 background documents on CPU and can take tens of minutes (appearing hung). The bench CLI now **picks a smaller default corpus when `-n` is small** (e.g. `--quick` uses `n=10` → corpus `48`). Override with **`BENCH_FRESHNESS_CORPUS_SIZE`**, or set **`BENCH_SKIP_FAISS_BASELINE=1`** to run KP-only freshness (no FAISS comparison).
+- Benchmark Docker runner (`tests/benchmarks/docker-compose.yml`) loads **both** repository root `.env` and `.env.benchmark` so Python benchmarks receive `KP_API_KEY` and workspace IDs (without this, the REST API returns 401 and freshness polling can appear to “hang”). The benchmark service mounts **`tests/benchmarks/.cache` → `/root/.cache`** and sets `HF_HOME` / `HF_HUB_CACHE` / `HF_DATASETS_CACHE` under that tree so **Hugging Face datasets, Hub models, and sentence-transformers weights** (e.g. FAISS baseline MiniLM) persist across `docker compose run` invocations. Previously only a narrower Hugging Face path was mounted, so **PyTorch/sentence-transformers often re-downloaded** into ephemeral `/root/.cache/torch` every run. **`./bench` still runs `docker compose build` each time**; when the image is already built that step is usually quick (layer cache) and does not re-download pip wheels unless the Dockerfile or context changed.
+- Typecheck compatibility: `packages/aimodel/src/providers/openai.ts` now guards OpenAI tool-call unions (`tc.type === "function"`) and supports both `files.delete` and `files.del` SDK variants; `packages/db/src/db.ts` uses stream-like guards instead of direct `ReadableStream` references to avoid workspace TS lib mismatches in CI.
 
 **MCP Server (`apps/mcp-server/.env.dev`):**
 - `ARANGO_URL` - ArangoDB connection URL (default: `http://localhost:8529`)
@@ -930,6 +937,9 @@ npm run bootstrap
 ```bash
 # Start infrastructure, server, and web app
 npm run dev
+
+# Reset ArangoDB collections/graphs, then start the full dev stack (fails fast if reset errors)
+npm run dev:clean
 
 # This will:
 # - Start ArangoDB in Docker (port 8529)

@@ -2,16 +2,20 @@
 
 ## Quick Start
 
+From the **repository root** (recommended):
+
 ```bash
-cd tests/benchmarks
+npm run bench:quick   # all suite benchmarks with minimal n
+npm run bench:all     # all suite benchmarks with default n
+```
 
-# Run HotpotQA benchmark
+Requires `.env` and `.env.benchmark` (see `tests/benchmarks/scripts/setup-benchmark-env.sh`).
+
+From `tests/benchmarks/` (stack must already be running):
+
+```bash
 ./bench hotpot
-
-# Run all benchmarks
 ./bench all
-
-# List past runs
 ./bench runs
 ```
 

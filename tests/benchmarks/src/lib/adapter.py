@@ -23,6 +23,29 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+class KnowledgePlaneAuthError(RuntimeError):
+    """REST API rejected credentials (HTTP 401 or 403)."""
+
+
+def _fail_fast_on_auth_error(exc: BaseException) -> None:
+    """
+    Re-raise auth failures so benchmarks stop immediately.
+
+    Without this, callers that swallow errors (e.g. returning empty QueryResult)
+    can loop for minutes while the API returns 401 on every poll.
+    """
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        code = exc.response.status_code
+        if code in (401, 403):
+            snippet = (exc.response.text or "")[:400].replace("\n", " ")
+            raise KnowledgePlaneAuthError(
+                f"KnowledgePlane API returned HTTP {code}. "
+                "Check KP_API_KEY / KP_WORKSPACE_ID for the benchmark process "
+                "(Docker must load ../../.env.benchmark — see tests/benchmarks/docker-compose.yml). "
+                f"Response: {snippet}"
+            ) from exc
+
+
 # Data Models
 @dataclass
 class IngestionResult:
@@ -318,6 +341,7 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
                 )
 
             except Exception as e:
+                _fail_fast_on_auth_error(e)
                 logger.error(f"Failed to ingest {filename}: {e}")
                 results.append(IngestionResult(
                     ingestion_time_ms=(time.time() - start_time) * 1000
@@ -426,6 +450,7 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
             )
 
         except Exception as e:
+            _fail_fast_on_auth_error(e)
             logger.error(f"Query failed: {e}")
             return QueryResult(
                 query_time_ms=(time.time() - start_time) * 1000
@@ -512,6 +537,7 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
             return RelationsQueryResult(relations=relations)
 
         except Exception as e:
+            _fail_fast_on_auth_error(e)
             logger.warning(f"Failed to get relations for {fact_id}: {e}")
             return RelationsQueryResult()
 
@@ -728,6 +754,7 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
             return result
 
         except Exception as e:
+            _fail_fast_on_auth_error(e)
             logger.error(f"Failed to trigger consolidation: {e}")
             return {'success': False, 'error': str(e)}
 

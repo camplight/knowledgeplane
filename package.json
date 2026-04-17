@@ -15,26 +15,26 @@
   "scripts": {
     "bootstrap": "npm install",
     "dev": "concurrently -n \"infra,rest-api,mcp-server,webapp,background-workers\" -c \"blue,cyan,green,yellow,magenta\" \"npm run dev:infra\" \"npm run dev:rest-api\" \"npm run dev:mcp-server\" \"npm run dev:webapp\" \"npm run dev:background-workers\"",
+    "dev:clean": "npm run db:reset && npm run dev",
     "dev:infra": "docker compose -f infra/docker-compose.dev.yml up",
     "dev:rest-api": "node scripts/wait-for-db.js && npm run dev --workspace=apps/rest-api",
     "dev:mcp-server": "node scripts/wait-for-db.js && npm run dev --workspace=apps/mcp-server",
     "dev:webapp": "npm run dev --workspace=apps/webapp",
     "dev:background-workers": "node scripts/wait-for-db.js && npm run dev --workspace=apps/background-workers",
     "dev:stop": "docker compose -f infra/docker-compose.dev.yml down",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "npm run lint --workspace=apps/webapp --if-present",
     "build": "npm run typecheck --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "rebuild": "npm run typecheck && docker compose -f infra/docker-compose.dev.yml down -v && docker compose -f infra/docker-compose.dev.yml up -d && node scripts/wait-for-db.js",
     "db:reset": "node scripts/reset-db.js",
-    "bench": "cd tests/benchmarks && ./bench",
-    "bench:hotpot": "cd tests/benchmarks && ./bench hotpot",
-    "bench:freshness": "cd tests/benchmarks && ./bench freshness",
-    "bench:msmarco": "cd tests/benchmarks && ./bench msmarco",
-    "bench:all": "cd tests/benchmarks && ./bench all"
+    "bench:quick": "bash scripts/bench-with-stack.sh quick",
+    "bench:quick:norerank": "BENCH_SKIP_RERANKER=1 bash scripts/bench-with-stack.sh quick",
+    "bench:all": "bash scripts/bench-with-stack.sh all"
   },
   "devDependencies": {
     "concurrently": "9.1.0",
-    "dotenv-cli": "^11.0.0"
+    "dotenv-cli": "^11.0.0",
+    "tsx": "4.19.0"
   }
 }
