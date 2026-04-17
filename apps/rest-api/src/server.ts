@@ -79,6 +79,159 @@ async function generateEmbeddingSync(
   };
 }
 
+type FactWriteContext = {
+  note?: string;
+  relation_hint?: string;
+  related_fact_ids?: string[];
+  tags?: string[];
+  source_context?: string;
+};
+
+function deriveIngestSignals(content: string, context: FactWriteContext | null): {
+  ingest_priority: number;
+  confidence: number;
+} {
+  const lengthScore = Math.min(content.length / 600, 1);
+  const contextBoost = context ? 0.15 : 0;
+  const linkedBoost = context?.related_fact_ids?.length
+    ? Math.min(context.related_fact_ids.length / 8, 0.2)
+    : 0;
+  const priority = Math.min(1, 0.35 + lengthScore * 0.35 + contextBoost + linkedBoost);
+  const confidence = Math.min(1, 0.45 + contextBoost + linkedBoost * 0.8);
+  return {
+    ingest_priority: Number(priority.toFixed(3)),
+    confidence: Number(confidence.toFixed(3)),
+  };
+}
+
+function normalizeFactWriteContext(raw: unknown): FactWriteContext | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const input = raw as Record<string, unknown>;
+  const relatedFactIds = Array.isArray(input.related_fact_ids)
+    ? input.related_fact_ids.map((v) => String(v)).filter(Boolean).slice(0, 20)
+    : [];
+  const tags = Array.isArray(input.tags)
+    ? input.tags.map((v) => String(v)).filter(Boolean).slice(0, 20)
+    : [];
+  return {
+    note: typeof input.note === "string" ? input.note : undefined,
+    relation_hint:
+      typeof input.relation_hint === "string" ? input.relation_hint : undefined,
+    related_fact_ids: relatedFactIds.length > 0 ? relatedFactIds : undefined,
+    tags: tags.length > 0 ? tags : undefined,
+    source_context:
+      typeof input.source_context === "string" ? input.source_context : undefined,
+  };
+}
+
+async function createFirstWaveRelations(args: {
+  factId: string;
+  factContent: string;
+  workspaceId: string;
+  createdBy: string;
+  namespace?: string;
+  context?: FactWriteContext | null;
+}): Promise<{ created: number; considered: number }> {
+  const provider = process.env.OPENAI_API_KEY
+    ? createAIModelClient("openai", process.env.OPENAI_API_KEY).getProvider()
+    : undefined;
+
+  const relationMinScore = parseFloat(
+    process.env.FIRST_WAVE_RELATION_MIN_SCORE || "0.72",
+  );
+  const maxNeighbors = Math.max(
+    1,
+    parseInt(process.env.FIRST_WAVE_MAX_NEIGHBORS || "4", 10),
+  );
+
+  const candidates = await Fact.search({
+    query: args.factContent,
+    workspace_id: args.workspaceId,
+    namespace: args.namespace,
+    k: Math.max(8, maxNeighbors * 3),
+    offset: 0,
+    include_trashed: false,
+    use_vector_search: undefined,
+    embeddingProvider: provider,
+  });
+
+  let created = 0;
+  let considered = 0;
+
+  // Explicit graph hints from write context have priority.
+  const hinted = new Set(args.context?.related_fact_ids || []);
+  for (const hintedFactId of hinted) {
+    if (hintedFactId === args.factId) {
+      continue;
+    }
+    const existing = await FactRelation.query({
+      workspace_id: args.workspaceId,
+      from_fact: args.factId,
+      to_fact: hintedFactId,
+      limit: 1,
+      offset: 0,
+    });
+    if (existing.length > 0) {
+      continue;
+    }
+    await FactRelation.create({
+      from_fact: args.factId,
+      to_fact: hintedFactId,
+      type: "related_to",
+      workspace_id: args.workspaceId,
+      created_by: args.createdBy,
+      metadata: {
+        source: "write_context_hint",
+        relation_hint: args.context?.relation_hint || null,
+        confidence: 0.92,
+      },
+    });
+    created += 1;
+  }
+
+  for (const c of candidates) {
+    if (c.id === args.factId) {
+      continue;
+    }
+    if (c.score < relationMinScore) {
+      continue;
+    }
+    if (created >= maxNeighbors) {
+      break;
+    }
+    considered += 1;
+
+    const existing = await FactRelation.query({
+      workspace_id: args.workspaceId,
+      from_fact: args.factId,
+      to_fact: c.id,
+      limit: 1,
+      offset: 0,
+    });
+    if (existing.length > 0) {
+      continue;
+    }
+
+    await FactRelation.create({
+      from_fact: args.factId,
+      to_fact: c.id,
+      type: "related_to",
+      workspace_id: args.workspaceId,
+      created_by: args.createdBy,
+      metadata: {
+        source: "first_wave_similarity",
+        similarity_score: c.score,
+        confidence: Number(Math.min(0.9, 0.45 + c.score * 0.4).toFixed(3)),
+      },
+    });
+    created += 1;
+  }
+
+  return { created, considered };
+}
+
 function stripEmbeddings<T extends EmbeddingRecord>(
   record: T,
 ): Omit<T, "embedding" | "embedding_model" | "_id" | "_key"> {
@@ -304,9 +457,21 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
       reply.code(401);
       return { error: "User ID is required for writes" };
     }
+    const writeContext = normalizeFactWriteContext(body.context);
+    const writeNamespace =
+      body?.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
+        ? (body.metadata.namespace as string | undefined)
+        : undefined;
+    const ingestSignals = deriveIngestSignals(body.content, writeContext);
+    const metadataWithContext = {
+      ...(body.metadata || {}),
+      ...(writeContext ? { write_context: writeContext } : {}),
+      ingest_signals: ingestSignals,
+    };
+
     const fact = await Fact.write({
       content: body.content,
-      metadata: body.metadata,
+      metadata: metadataWithContext,
       workspace_id: workspaceId,
       created_by: createdBy,
       last_updated_by: lastUpdatedBy,
@@ -351,6 +516,22 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
     const response: Record<string, any> = {
       fact: stripEmbeddings(fact),
     };
+
+    // First-wave graph stitching on write: create immediate relations for
+    // semantic neighbors and optional user-provided context links.
+    try {
+      const firstWave = await createFirstWaveRelations({
+        factId: fact.id,
+        factContent: body.content,
+        workspaceId,
+        createdBy,
+        namespace: writeNamespace,
+        context: writeContext,
+      });
+      response.first_wave_relations = firstWave;
+    } catch (relationError: any) {
+      response.first_wave_relations_error = relationError.message || String(relationError);
+    }
 
     // Include embedding status when sync_embedding was requested
     if (syncEmbedding) {
@@ -460,6 +641,7 @@ export async function createServer(options?: { skipDbInit?: boolean }) {
     const results = await searchFacts({
       query: body.query || "*",
       workspace_id: workspaceId,
+      namespace: body.namespace,
       k: body.k || 10,
       offset: body.offset || 0,
       include_trashed: body.include_trashed || false,

@@ -1,5 +1,6 @@
 import {
   Fact,
+  FactRelation,
   KnowledgeCard,
   WorkspaceMember,
   collections,
@@ -15,6 +16,12 @@ type KnowledgeCardSearchResult = {
   score: number;
 };
 
+type FactHit = Awaited<ReturnType<typeof Fact.search>>[number];
+type GraphPlan = {
+  expandedQuery: string;
+  relationTypes: string[];
+};
+
 function getProvider() {
   const client = createAIModelClient(
     (process.env.AI_PROVIDER as any) || "openai",
@@ -26,6 +33,7 @@ function getProvider() {
 export async function searchFacts(args: {
   query: string;
   workspace_id?: string;
+  namespace?: string;
   k?: number;
   offset?: number;
   include_trashed?: boolean;
@@ -33,18 +41,62 @@ export async function searchFacts(args: {
   const provider = getProvider();
   const limit = Math.min(args.k || 5, 100);  // Allow up to 100 for benchmarks
   const maxContentLength = 500;
+  const offset = args.offset || 0;
+  const seedWindow = Math.min(Math.max(limit * 3, 12), 120);
+  const dreamQueries = buildDreamQueries(args.query);
+  const perQueryWindow = Math.max(8, Math.floor(seedWindow / Math.max(1, dreamQueries.length)));
+  const variantHitLists = await Promise.all(
+    dreamQueries.map((q) =>
+      Fact.search({
+        query: q,
+        workspace_id: args.workspace_id,
+        namespace: args.namespace,
+        k: perQueryWindow,
+        offset: 0,
+        include_trashed: args.include_trashed,
+        use_vector_search: undefined,
+        embeddingProvider: provider,
+      }),
+    ),
+  );
+  const seedHits = fuseDreamHitLists(args.query, variantHitLists, seedWindow);
 
-  const hits = await Fact.search({
+  const graphEnabled = shouldUseGraphExpansion(args.query, seedHits);
+  const graphPlan = graphEnabled
+    ? await buildGraphQueryPlan(args.query, seedHits, provider)
+    : { expandedQuery: args.query, relationTypes: ["related_to"] };
+  const graphExpandedHits = graphEnabled
+    ? await getGraphExpandedHits({
+        seedHits,
+        relationTypes: graphPlan.relationTypes,
+        workspaceId: args.workspace_id,
+        namespace: args.namespace,
+        includeTrashed: args.include_trashed,
+        queryForFilter: graphPlan.expandedQuery || args.query,
+      })
+    : [];
+
+  const allCandidates = graphEnabled
+    ? fuseFactCandidates(
+        args.query,
+        seedHits,
+        graphExpandedHits,
+        limit + offset,
+      ).slice(offset, offset + limit)
+    : seedHits.slice(offset, offset + limit);
+
+  await logRetrievalTrace({
     query: args.query,
     workspace_id: args.workspace_id,
-    k: limit,
-    offset: args.offset,
-    include_trashed: args.include_trashed,
-    use_vector_search: undefined,
-    embeddingProvider: provider,
+    namespace: args.namespace,
+    graph_enabled: graphEnabled,
+    seed_count: seedHits.length,
+    graph_count: graphExpandedHits.length,
+    result_count: allCandidates.length,
+    top_score: allCandidates[0]?.score ?? 0,
   });
 
-  const optimizedHits = hits.map((hit) => {
+  const optimizedHits = allCandidates.map((hit) => {
     const { embedding, embedding_model, _key, _id, ...rest } = hit;
     const content =
       rest.content.length > maxContentLength
@@ -61,10 +113,316 @@ export async function searchFacts(args: {
     hits: optimizedHits,
     total_returned: optimizedHits.length,
     limit_used: limit,
+    graph_enriched: graphEnabled,
+    graph_query: graphPlan.expandedQuery,
     note: optimizedHits.some((h) => h.content_truncated)
       ? "Some facts have truncated content. Fetch the fact by ID for full content."
       : undefined,
   };
+}
+
+async function buildGraphQueryPlan(
+  query: string,
+  seedHits: FactHit[],
+  provider: ReturnType<typeof getProvider>,
+): Promise<GraphPlan> {
+  const fallbackTerms = tokenizeQueryTerms(query).slice(0, 8);
+  const seedTerms = seedHits
+    .slice(0, 5)
+    .flatMap((h) => tokenizeQueryTerms(h.content))
+    .slice(0, 12);
+  const fallbackExpanded = Array.from(new Set([...fallbackTerms, ...seedTerms])).join(" ");
+  const fallbackPlan: GraphPlan = {
+    expandedQuery: fallbackExpanded || query,
+    relationTypes: ["related_to"],
+  };
+
+  const aiPlannerEnabled = process.env.GRAPH_QUERY_PLANNER_AI === "true";
+  if (!aiPlannerEnabled || !process.env.OPENAI_API_KEY || seedHits.length === 0) {
+    return fallbackPlan;
+  }
+
+  try {
+    const seedContext = seedHits
+      .slice(0, 4)
+      .map((h, i) => `hit_${i + 1}: ${h.content.slice(0, 220)}`)
+      .join("\n");
+
+    const response = await provider.chatCompletion(
+      [
+        {
+          role: "system",
+          content:
+            "You are a retrieval query planner. Return compact JSON only.",
+        },
+        {
+          role: "user",
+          content: [
+            `query: ${query}`,
+            "candidate relation types: related_to, depends_on, references, part_of",
+            "Use the seed hits to propose graph traversal hints.",
+            "Return JSON with keys expanded_query (string) and relation_types (array of strings, max 2).",
+            "Seed hits:",
+            seedContext,
+          ].join("\n"),
+        },
+      ],
+      {
+        model: getChatModel(),
+        temperature: 0.1,
+        responseFormat: "json_object",
+      },
+    );
+
+    if (!response.content) {
+      return fallbackPlan;
+    }
+
+    const parsed = JSON.parse(response.content);
+    const expandedQuery = String(parsed.expanded_query || "").trim();
+    const relationTypes = Array.isArray(parsed.relation_types)
+      ? parsed.relation_types
+          .map((t: unknown) => String(t).trim())
+          .filter(Boolean)
+          .slice(0, 2)
+      : [];
+
+    return {
+      expandedQuery: expandedQuery || fallbackPlan.expandedQuery,
+      relationTypes: relationTypes.length > 0 ? relationTypes : fallbackPlan.relationTypes,
+    };
+  } catch (error: any) {
+    console.warn("Graph query planning failed, using fallback:", error.message);
+    return fallbackPlan;
+  }
+}
+
+async function getGraphExpandedHits(args: {
+  seedHits: FactHit[];
+  relationTypes: string[];
+  workspaceId?: string;
+  namespace?: string;
+  includeTrashed?: boolean;
+  queryForFilter: string;
+}): Promise<FactHit[]> {
+  const startMs = Date.now();
+  const budgetMs = Math.max(
+    20,
+    parseInt(process.env.GRAPH_EXPANSION_BUDGET_MS || "120", 10),
+  );
+  const maxGraphCandidates = Math.max(
+    8,
+    parseInt(process.env.GRAPH_EXPANSION_MAX_CANDIDATES || "40", 10),
+  );
+  const relationTypes = args.relationTypes.length > 0 ? args.relationTypes : ["related_to"];
+  const collected = new Map<string, FactHit>();
+  const seedSubset = args.seedHits.slice(0, 3);
+  const relationSubset = relationTypes.slice(0, 1);
+
+  const tasks: Array<Promise<{ relation: any; fact: any }[]>> = [];
+  for (const hit of seedSubset) {
+    for (const relType of relationSubset) {
+      tasks.push(FactRelation.getRelatedFacts(hit.id, relType));
+    }
+  }
+  const allNeighborSets = await Promise.all(tasks);
+
+  for (const neighbors of allNeighborSets) {
+    for (const n of neighbors) {
+      if (Date.now() - startMs > budgetMs) {
+        return Array.from(collected.values()).slice(0, maxGraphCandidates);
+      }
+      const fact = n.fact;
+      if (!fact || !fact.id) {
+        continue;
+      }
+      if (args.workspaceId && fact.workspace_id !== args.workspaceId) {
+        continue;
+      }
+      if (
+        args.namespace &&
+        (!fact.metadata || fact.metadata.namespace !== args.namespace)
+      ) {
+        continue;
+      }
+      if (!args.includeTrashed && (fact.trashed || fact.deleted_at)) {
+        continue;
+      }
+      const overlap = lexicalOverlap(args.queryForFilter, fact.content);
+      if (overlap < 0.15) {
+        continue;
+      }
+      if (!collected.has(fact.id)) {
+        collected.set(fact.id, {
+          ...fact,
+          score: 0.12 + overlap,
+        } as FactHit);
+        if (collected.size >= maxGraphCandidates) {
+          return Array.from(collected.values());
+        }
+      }
+    }
+  }
+
+  return Array.from(collected.values()).slice(0, maxGraphCandidates);
+}
+
+function tokenizeQueryTerms(text: string): string[] {
+  return (text || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3);
+}
+
+function lexicalOverlap(query: string, content: string): number {
+  const q = new Set(tokenizeQueryTerms(query));
+  if (q.size === 0) {
+    return 0;
+  }
+  const c = new Set(tokenizeQueryTerms(content));
+  let overlap = 0;
+  for (const t of q) {
+    if (c.has(t)) {
+      overlap += 1;
+    }
+  }
+  return overlap / q.size;
+}
+
+function fuseFactCandidates(
+  query: string,
+  seedHits: FactHit[],
+  graphHits: FactHit[],
+  window: number,
+): FactHit[] {
+  const map = new Map<string, { fact: FactHit; seedRank?: number; graphRank?: number }>();
+  for (let i = 0; i < seedHits.length; i++) {
+    map.set(seedHits[i].id, { fact: seedHits[i], seedRank: i + 1 });
+  }
+  for (let i = 0; i < graphHits.length; i++) {
+    const existing = map.get(graphHits[i].id);
+    if (existing) {
+      existing.graphRank = i + 1;
+    } else {
+      map.set(graphHits[i].id, { fact: graphHits[i], graphRank: i + 1 });
+    }
+  }
+
+  const rrfK = 50;
+  const scored = Array.from(map.values()).map((entry) => {
+    const seed = entry.seedRank ? 1 / (rrfK + entry.seedRank) : 0;
+    const graph = entry.graphRank ? 1 / (rrfK + entry.graphRank) : 0;
+    const lexical = lexicalOverlap(query, entry.fact.content) * 0.08;
+    const score = seed * 0.88 + graph * 0.12 + lexical;
+    return { ...entry.fact, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, window);
+}
+
+function shouldUseGraphExpansion(query: string, seedHits: FactHit[]): boolean {
+  if (seedHits.length === 0) {
+    return false;
+  }
+  if (process.env.GRAPH_EXPANSION_ENABLED === "false") {
+    return false;
+  }
+  const queryTokens = tokenizeQueryTerms(query);
+  const isLikelyCompositional =
+    /\b(and|both|before|after|between|connected|relation|related|caused|because|impact)\b/i.test(
+      query,
+    );
+  const sparseTopRecall = seedHits
+    .slice(0, 3)
+    .some((h) => lexicalOverlap(query, h.content) < 0.22);
+
+  // Confidence-based trigger: if top scores are flat, graph expansion may surface
+  // missing bridge facts and reduce retrieval uncertainty.
+  const top = seedHits.slice(0, 4).map((h) => h.score || 0);
+  const scoreSpread = top.length >= 2 ? top[0] - top[top.length - 1] : 0;
+  const uncertainRanking = scoreSpread < 0.12;
+
+  return isLikelyCompositional || (queryTokens.length >= 6 && (sparseTopRecall || uncertainRanking));
+}
+
+async function logRetrievalTrace(trace: {
+  query: string;
+  workspace_id?: string;
+  namespace?: string;
+  graph_enabled: boolean;
+  seed_count: number;
+  graph_count: number;
+  result_count: number;
+  top_score: number;
+}) {
+  try {
+    await collections.worker_logs.save({
+      worker_name: "retrieval-engine",
+      status: "completed",
+      metadata: {
+        type: "retrieval_trace",
+        ...trace,
+      },
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as any);
+  } catch {
+    // Observability should never break retrieval.
+  }
+}
+
+function buildDreamQueries(query: string): string[] {
+  const base = query.trim();
+  const variants = new Set<string>([base]);
+  const tokens = tokenizeQueryTerms(base);
+  if (tokens.length > 3) {
+    variants.add(tokens.join(" "));
+    variants.add(tokens.slice(0, Math.min(6, tokens.length)).join(" "));
+  }
+  if (/\bwho\b/i.test(base)) {
+    variants.add(`${base} person identity biography`);
+  }
+  if (/\bwhen\b/i.test(base)) {
+    variants.add(`${base} date year timeline`);
+  }
+  if (/\bwhere\b/i.test(base)) {
+    variants.add(`${base} location place country city`);
+  }
+
+  // Generic decomposition query to improve recall on multi-facet queries.
+  if (tokens.length >= 5) {
+    variants.add(tokens.slice(0, Math.ceil(tokens.length / 2)).join(" "));
+    variants.add(tokens.slice(Math.floor(tokens.length / 2)).join(" "));
+  }
+  return Array.from(variants).slice(0, 4);
+}
+
+function fuseDreamHitLists(
+  originalQuery: string,
+  hitLists: FactHit[][],
+  window: number,
+): FactHit[] {
+  const rrfK = 40;
+  const map = new Map<string, { fact: FactHit; score: number }>();
+  for (const list of hitLists) {
+    for (let i = 0; i < list.length; i++) {
+      const hit = list[i];
+      const rankScore = 1 / (rrfK + i + 1);
+      const lexical = lexicalOverlap(originalQuery, hit.content) * 0.06;
+      const existing = map.get(hit.id);
+      const nextScore = rankScore + lexical;
+      if (existing) {
+        existing.score += nextScore;
+      } else {
+        map.set(hit.id, { fact: hit, score: nextScore });
+      }
+    }
+  }
+  const scored = Array.from(map.values())
+    .map((entry) => ({ ...entry.fact, score: entry.score }))
+    .sort((a, b) => b.score - a.score);
+  return scored.slice(0, window);
 }
 
 export async function searchKnowledgeCards(args: {
