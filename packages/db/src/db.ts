@@ -31,9 +31,10 @@ async function normalizeBody(body: BodyInit | null): Promise<BodyInit | null> {
     return new Uint8Array(body);
   }
 
-  // If it's a ReadableStream, read it fully and convert to Buffer
-  if (body instanceof ReadableStream) {
-    const reader = body.getReader();
+  // If it's a stream-like object, read it fully and convert to Buffer
+  const streamLike = body as { getReader?: () => any };
+  if (streamLike && typeof streamLike.getReader === "function") {
+    const reader = streamLike.getReader();
     const chunks: Uint8Array[] = [];
 
     try {

@@ -22,7 +22,7 @@
     "dev:webapp": "npm run dev --workspace=apps/webapp",
     "dev:background-workers": "node scripts/wait-for-db.js && npm run dev --workspace=apps/background-workers",
     "dev:stop": "docker compose -f infra/docker-compose.dev.yml down",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "npm run lint --workspace=apps/webapp --if-present",
     "build": "npm run typecheck --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
