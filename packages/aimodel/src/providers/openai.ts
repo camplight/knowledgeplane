@@ -259,7 +259,7 @@ export class OpenAIProvider implements AIModelProvider {
 
     const message = response.choices[0]?.message;
     const toolCalls = message?.tool_calls
-      ?.filter((tc) => tc.type === "function")
+      ?.filter((tc) => tc.type === "function" && "function" in tc)
       .map((tc) => ({
         id: tc.id,
         type: "function" as const,
@@ -347,7 +347,16 @@ export class OpenAIProvider implements AIModelProvider {
   }
 
   async deleteFile(fileId: string): Promise<void> {
-    await this.client.files.delete(fileId);
+    const filesApi = this.client.files as any;
+    if (typeof filesApi.delete === "function") {
+      await filesApi.delete(fileId);
+      return;
+    }
+    if (typeof filesApi.del === "function") {
+      await filesApi.del(fileId);
+      return;
+    }
+    throw new Error("OpenAI SDK files delete API unavailable");
   }
 
   async embeddings(

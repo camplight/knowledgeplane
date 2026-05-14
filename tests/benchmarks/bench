@@ -68,6 +68,10 @@ show_help() {
     echo "    -v, --verbose       Enable verbose output (DEBUG logging, real-time streaming)"
     echo "    -- <args>           Pass extra args directly to Python script"
     echo ""
+    echo -e "${BOLD}ENVIRONMENT (freshness / ./bench all)${NC}"
+    echo "    BENCH_FRESHNESS_CORPUS_SIZE   Override FAISS corpus size (default scales down when -n is small)"
+    echo "    BENCH_SKIP_FAISS_BASELINE=1   KP freshness only (skip FAISS baseline; fastest)"
+    echo ""
     echo -e "${BOLD}LONGMEMEVAL OPTIONS${NC}"
     echo "    --setting <name>    Dataset setting: oracle (default), s (115K tokens), m (1.5M tokens)"
     echo "    --ability <name>    Filter by ability: ie, mr, tr, ku, abs (default: all)"
@@ -130,7 +134,7 @@ run_preflight() {
         echo -e "${GREEN}✓${NC} KP REST API (port 8081)"
     else
         echo -e "${RED}✗${NC} KP REST API not running"
-        echo -e "${DIM}  Start with: npm run dev:rest-api${NC}"
+        echo -e "${DIM}  Start with: npm run bench:quick (from repo root)${NC}"
         errors=$((errors + 1))
     fi
 
@@ -374,7 +378,27 @@ run_freshness() {
     echo -e "${DIM}Metric: Write-to-searchable latency${NC}"
     echo ""
 
-    run_docker freshness --mode api --n "$n" --run_baseline --corpus_size 1000
+    # FAISS baseline embeds `corpus_size` docs once — 1000 on CPU can take 30+ minutes and looks "stuck".
+    local corpus_size="${BENCH_FRESHNESS_CORPUS_SIZE:-}"
+    if [[ -z "${corpus_size}" ]]; then
+        if [[ "${n}" -le 15 ]]; then
+            corpus_size=48
+        elif [[ "${n}" -le 40 ]]; then
+            corpus_size=128
+        elif [[ "${n}" -le 100 ]]; then
+            corpus_size=320
+        else
+            corpus_size=1000
+        fi
+    fi
+
+    if [[ "${BENCH_SKIP_FAISS_BASELINE:-0}" == "1" ]] || [[ "${BENCH_SKIP_FAISS_BASELINE:-}" == "true" ]]; then
+        echo -e "${DIM}BENCH_SKIP_FAISS_BASELINE: KP freshness only (no FAISS comparison).${NC}"
+        run_docker freshness --mode api --n "$n"
+    else
+        echo -e "${DIM}FAISS baseline corpus_size=${corpus_size} (override with BENCH_FRESHNESS_CORPUS_SIZE).${NC}"
+        run_docker freshness --mode api --n "$n" --run_baseline --corpus_size "$corpus_size"
+    fi
 
     [ "$ARCHIVE" = true ] && archive_results "freshness_n${n}"
 }
