@@ -169,7 +169,7 @@ export class CardConsolidator {
     }
   }
 
-  private async process() {
+  async process(workspaceId?: string, factIds?: string[]) {
     if (this.running) {
       return; // Skip if already running
     }
@@ -184,7 +184,7 @@ export class CardConsolidator {
 
     try {
       // Get facts that haven't been consolidated into knowledge cards
-      const facts = await this.getUnconsolidatedFacts();
+      const facts = await this.getUnconsolidatedFacts(workspaceId, factIds);
 
       if (facts.length === 0) {
         await WorkerLog.create({
@@ -309,13 +309,31 @@ export class CardConsolidator {
     }
   }
 
-  private async getUnconsolidatedFacts(): Promise<any[]> {
+  private async getUnconsolidatedFacts(
+    workspaceId?: string,
+    factIds?: string[],
+  ): Promise<any[]> {
     // Get facts that are not in any knowledge card's fact_ids
     // Only process facts that have a workspace_id (workspace-scoped facts)
+    const bindVars: Record<string, unknown> = {};
+    const filters: string[] = [
+      "fact.trashed == false",
+      'fact.workspace_id != null AND fact.workspace_id != ""',
+    ];
+
+    if (workspaceId) {
+      filters.push("fact.workspace_id == @workspaceId");
+      bindVars.workspaceId = workspaceId;
+    }
+
+    if (factIds && factIds.length > 0) {
+      filters.push("(fact._id IN @factIds OR fact._key IN @factIds)");
+      bindVars.factIds = factIds;
+    }
+
     const aql = `
       FOR fact IN facts
-        FILTER fact.trashed == false
-        FILTER fact.workspace_id != null AND fact.workspace_id != ""
+        FILTER ${filters.join(" AND ")}
         LET inCard = (
           FOR card IN knowledge_cards
             FILTER fact._id IN card.fact_ids
@@ -328,7 +346,7 @@ export class CardConsolidator {
         RETURN fact
     `;
 
-    return await Fact.queryAQL(aql);
+    return await Fact.queryAQL(aql, bindVars);
   }
 
   /**

@@ -898,6 +898,13 @@ curl -X POST http://localhost:8080/mcp \
 - **Swagger/OpenAPI** documentation
 - **Tailwind CSS** for styling
 
+**Dependency Security Baseline:**
+- Web dashboard uses Next.js `16.3.0-canary.19` to pick up patched Next.js security fixes and the patched nested PostCSS dependency ahead of the next stable release.
+- REST API and MCP server use Fastify `5.8.5`; REST API, MCP server, background workers, and the database package use Undici `7.25.0`.
+- MCP protocol support uses `@modelcontextprotocol/sdk` `1.29.0`; Swagger UI uses `@fastify/swagger-ui` `5.2.6`.
+- Root dependency pins and npm overrides keep transitive security-sensitive packages on patched versions; `npm audit` should report zero known vulnerabilities.
+- A root `eslint.config.cjs` provides ESLint 9 flat-config compatibility for non-webapp workspaces.
+
 **Package Architecture:**
 - `@knowledgeplane/db` - Shared database package with ArangoDB models and connection logic
   - Main export (`@knowledgeplane/db`) - For general Node.js servers (mcp-server, rest-api, background-workers)
