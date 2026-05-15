@@ -13,6 +13,7 @@ COPY packages ./packages
 
 # Copy rest-api package.json (needed for workspace resolution)
 COPY apps/rest-api/package.json ./apps/rest-api/
+COPY apps/background-workers/package.json ./apps/background-workers/
 
 # Install all dependencies (including workspace linking)
 RUN npm ci
@@ -24,11 +25,13 @@ WORKDIR /app
 # Copy node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 
-# Copy workspace packages (needed for build)
-COPY packages ./packages
+# Copy workspace packages from deps so package-local node_modules are preserved.
+COPY --from=deps /app/packages ./packages
 
 # Copy rest-api source files
 COPY apps/rest-api ./apps/rest-api
+COPY apps/background-workers ./apps/background-workers
+COPY --from=deps /app/apps/rest-api/node_modules ./apps/rest-api/node_modules
 
 # Build from rest-api directory
 WORKDIR /app/apps/rest-api
@@ -48,7 +51,9 @@ RUN npm install -g tsx
 
 # Copy node_modules, workspace packages, and built output
 COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=deps --chown=nodejs:nodejs /app/apps/rest-api/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/packages ./packages
+COPY --from=builder --chown=nodejs:nodejs /app/apps/background-workers ./apps/background-workers
 COPY --from=builder --chown=nodejs:nodejs /app/apps/rest-api/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/rest-api/package.json ./package.json
 

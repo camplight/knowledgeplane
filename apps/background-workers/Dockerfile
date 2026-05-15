@@ -24,11 +24,12 @@ WORKDIR /app
 # Copy node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 
-# Copy workspace packages (needed for build)
-COPY packages ./packages
+# Copy workspace packages from deps so package-local node_modules are preserved.
+COPY --from=deps /app/packages ./packages
 
 # Copy background-workers source files
 COPY apps/background-workers ./apps/background-workers
+COPY --from=deps /app/apps/background-workers/node_modules ./apps/background-workers/node_modules
 
 # Build from background-workers directory
 WORKDIR /app/apps/background-workers
@@ -48,6 +49,7 @@ RUN npm install -g tsx
 
 # Copy node_modules, workspace packages, and built output
 COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=deps --chown=nodejs:nodejs /app/apps/background-workers/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/packages ./packages
 COPY --from=builder --chown=nodejs:nodejs /app/apps/background-workers/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/background-workers/package.json ./package.json

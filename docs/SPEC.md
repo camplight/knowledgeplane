@@ -840,6 +840,7 @@ For complete environment variable documentation and setup instructions, see:
 - `ARANGO_PASSWORD` - ArangoDB password
 - `PORT` - Server port (default: `8081`)
 - Docker runs compiled output from `dist/apps/rest-api/src/index.js`
+- DigitalOcean App Platform Dockerfiles preserve workspace-local `node_modules` from the dependency stage so app-specific and package-specific dependencies remain available during TypeScript builds and runtime.
 
 **Localhost Development with ngrok:**
 For localhost development, you'll need to set up ngrok to expose port 8080 for OAuth callbacks. See [DEVELOPMENT.md](../DEVELOPMENT.md) for detailed instructions.

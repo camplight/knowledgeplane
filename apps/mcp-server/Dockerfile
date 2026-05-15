@@ -23,11 +23,12 @@ WORKDIR /app
 # Copy node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 
-# Copy workspace packages (needed for build)
-COPY packages ./packages
+# Copy workspace packages from deps so package-local node_modules are preserved.
+COPY --from=deps /app/packages ./packages
 
 # Copy mcp-server source files
 COPY apps/mcp-server ./apps/mcp-server
+COPY --from=deps /app/apps/mcp-server/node_modules ./apps/mcp-server/node_modules
 
 # Build from mcp-server directory
 WORKDIR /app/apps/mcp-server
@@ -47,6 +48,7 @@ RUN npm install -g tsx
 
 # Copy node_modules, workspace packages, and built output
 COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=deps --chown=nodejs:nodejs /app/apps/mcp-server/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/packages ./packages
 COPY --from=builder --chown=nodejs:nodejs /app/apps/mcp-server/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/apps/mcp-server/package.json ./package.json
