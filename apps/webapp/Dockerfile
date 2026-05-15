@@ -25,14 +25,15 @@ WORKDIR /app
 # Copy node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 
-# Copy workspace packages (needed for build)
-COPY packages ./packages
+# Copy workspace packages from deps so package-local node_modules are preserved.
+COPY --from=deps /app/packages ./packages
 
 # Copy all webapp source files
 COPY apps/webapp ./apps/webapp
 
 # Copy workspace node_modules for webapp dependencies
 COPY --from=deps /app/apps/webapp/node_modules ./apps/webapp/node_modules
+COPY --from=deps /app/apps/webapp/node_modules ./node_modules
 
 ENV NEXT_TELEMETRY_DISABLED=1
 # Use production mode for build to prevent static page generation issues
