@@ -36,6 +36,7 @@ export interface FactSearchResult extends FactRecord {
 export interface FactSearchParams {
   query: string;
   workspace_id?: string; // Workspace ID for filtering
+  namespace?: string; // Optional metadata.namespace filter
   k?: number;
   offset?: number;
   include_trashed?: boolean;
@@ -51,6 +52,28 @@ export interface FactUpdateInput {
 }
 
 export class Fact {
+  private static tokenizeForIntent(text: string): string[] {
+    return (text || "")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length >= 3);
+  }
+
+  private static lexicalCoverageScore(query: string, content: string): number {
+    const queryTokens = new Set(this.tokenizeForIntent(query));
+    if (queryTokens.size === 0) {
+      return 0;
+    }
+    const contentTokens = new Set(this.tokenizeForIntent(content));
+    let overlap = 0;
+    for (const token of queryTokens) {
+      if (contentTokens.has(token)) {
+        overlap += 1;
+      }
+    }
+    return overlap / queryTokens.size;
+  }
+
   static async write(input: FactInput): Promise<FactRecord> {
     const now = new Date().toISOString();
     
@@ -292,6 +315,10 @@ export class Fact {
         filters.push(`fact.workspace_id == @workspaceId`);
         bindVars.workspaceId = params.workspace_id;
       }
+      if (params.namespace) {
+        filters.push(`fact.metadata.namespace == @namespace`);
+        bindVars.namespace = params.namespace;
+      }
       filters.push(`(fact.trashed == false || @includeTrashed == true)`);
       const filterClause = filters.length > 0 ? `FILTER ${filters.join(" && ")}` : "";
 
@@ -355,6 +382,10 @@ export class Fact {
       postFilters.push(`fact.workspace_id == @workspaceId`);
       bindVars.workspaceId = params.workspace_id;
     }
+    if (params.namespace) {
+      postFilters.push(`fact.metadata.namespace == @namespace`);
+      bindVars.namespace = params.namespace;
+    }
 
     // Use ArangoSearch view with BM25 scoring
     // TOKENS(@query, "text_en") tokenizes the query using the text_en analyzer
@@ -412,6 +443,10 @@ export class Fact {
       filters.push(`fact.workspace_id == @workspaceId`);
       bindVars.workspaceId = params.workspace_id;
     }
+    if (params.namespace) {
+      filters.push(`fact.metadata.namespace == @namespace`);
+      bindVars.namespace = params.namespace;
+    }
     filters.push(`(fact.trashed == false || @includeTrashed == true)`);
     const filterClause = `FILTER ${filters.join(" && ")}`;
 
@@ -454,6 +489,10 @@ export class Fact {
     if (params.workspace_id) {
       filters.push(`fact.workspace_id == @workspaceId`);
       bindVars.workspaceId = params.workspace_id;
+    }
+    if (params.namespace) {
+      filters.push(`fact.metadata.namespace == @namespace`);
+      bindVars.namespace = params.namespace;
     }
     filters.push(`(fact.trashed == false || @includeTrashed == true)`);
     filters.push(`LOWER(fact.content) LIKE LOWER(CONCAT("%", @query, "%"))`);
@@ -569,6 +608,12 @@ export class Fact {
         if (params.workspace_id && fact.workspace_id !== params.workspace_id) {
           return false;
         }
+        if (
+          params.namespace &&
+          (!fact.metadata || fact.metadata.namespace !== params.namespace)
+        ) {
+          return false;
+        }
         // Filter trashed
         if (fact.trashed && !includeTrashed) {
           return false;
@@ -646,6 +691,10 @@ export class Fact {
       filters.push(`fact.workspace_id == @workspaceId`);
       bindVars.workspaceId = params.workspace_id;
     }
+    if (params.namespace) {
+      filters.push(`fact.metadata.namespace == @namespace`);
+      bindVars.namespace = params.namespace;
+    }
 
     const aql = `
       FOR fact IN facts
@@ -700,6 +749,7 @@ export class Fact {
     params: FactSearchParams,
   ): Promise<FactSearchResult[]> {
     const limit = params.k || 5;
+    const offset = params.offset || 0;
     const provider = params.embeddingProvider;
 
     // If no provider, use full-text only
@@ -708,71 +758,112 @@ export class Fact {
     }
 
     try {
-      // Get results from both full-text and vector search
+      // Get a wider candidate pool from both channels before fusion.
+      const candidateWindow = Math.min((limit + offset) * 4, 300);
       const [fullTextResults, vectorResults] = await Promise.all([
-        this._fullTextSearch({ ...params, k: limit * 2 }), // Get more results to merge
-        this._vectorSearch({ ...params, k: limit * 2 }),
+        this._fullTextSearch({ ...params, k: candidateWindow, offset: 0 }),
+        this._vectorSearch({ ...params, k: candidateWindow, offset: 0 }),
       ]);
 
-      // Create a map to deduplicate and combine scores
+      // Reciprocal Rank Fusion (RRF) is more stable than averaging raw scores
+      // when BM25 and vector scales drift on heterogeneous corpora.
+      const rrfK = 60;
       const resultMap = new Map<
         string,
-        { fact: FactRecord; bm25Score: number | null; vectorScore: number | null }
+        {
+          fact: FactRecord;
+          bm25Rank: number | null;
+          vectorRank: number | null;
+          bm25Score: number | null;
+          vectorScore: number | null;
+        }
       >();
 
-      // Add full-text results
-      // BM25 scores are unbounded (0 to ~20+), normalize to 0-1 using: score / (score + 1)
-      for (const result of fullTextResults) {
+      for (let i = 0; i < fullTextResults.length; i++) {
+        const result = fullTextResults[i];
         const normalizedBM25 = result.score / (result.score + 1);
         resultMap.set(result.id, {
           fact: result,
+          bm25Rank: i + 1,
+          vectorRank: null,
           bm25Score: normalizedBM25,
           vectorScore: null,
         });
       }
 
-      // Add vector results (already normalized 0-1)
-      for (const result of vectorResults) {
+      for (let i = 0; i < vectorResults.length; i++) {
+        const result = vectorResults[i];
         const existing = resultMap.get(result.id);
         if (existing) {
+          existing.vectorRank = i + 1;
           existing.vectorScore = result.score;
         } else {
           resultMap.set(result.id, {
             fact: result,
+            bm25Rank: null,
+            vectorRank: i + 1,
             bm25Score: null,
             vectorScore: result.score,
           });
         }
       }
 
-      // Combine scores: weighted average of BM25 and vector scores
-      // If only one score exists, use it; otherwise average them
+      // Query-adaptive weighting:
+      // - shorter/sparser queries keep a lexical anchor
+      // - descriptive queries shift harder to semantic retrieval
+      const queryTokenCount = this.tokenizeForIntent(params.query).length;
+      const lexicalWeight = queryTokenCount <= 4 ? 0.4 : 0.32;
+      const semanticWeight = 1 - lexicalWeight;
+
       const combinedResults: FactSearchResult[] = Array.from(
         resultMap.values(),
       ).map((item) => {
-        let combinedScore: number;
-        if (item.bm25Score !== null && item.vectorScore !== null) {
-          // Both scores exist - average them (equal weight)
-          combinedScore = (item.bm25Score + item.vectorScore) / 2;
-        } else if (item.bm25Score !== null) {
-          // Only BM25 score
-          combinedScore = item.bm25Score * 0.8; // Slight penalty for single-source
-        } else if (item.vectorScore !== null) {
-          // Only vector score
-          combinedScore = item.vectorScore * 0.8; // Slight penalty for single-source
-        } else {
-          combinedScore = 0;
+        const bm25Rrf =
+          item.bm25Rank !== null ? 1 / (rrfK + item.bm25Rank) : 0;
+        const vectorRrf =
+          item.vectorRank !== null ? 1 / (rrfK + item.vectorRank) : 0;
+
+        let fused = lexicalWeight * bm25Rrf + semanticWeight * vectorRrf;
+
+        const lexicalCoverage = this.lexicalCoverageScore(
+          params.query,
+          item.fact.content,
+        );
+        fused += lexicalCoverage * 0.04;
+
+        const appearsInBoth = item.bm25Rank !== null && item.vectorRank !== null;
+        if (appearsInBoth) {
+          fused += 0.015;
         }
+
+        // Add a small direct semantic confidence term for better recall.
+        if (item.vectorScore !== null) {
+          fused += item.vectorScore * 0.08;
+        }
+
         return {
           ...item.fact,
-          score: combinedScore,
+          score: fused,
         };
       });
 
-      // Sort by combined score and limit
-      combinedResults.sort((a, b) => b.score - a.score);
+      // Semantic confidence gate: for low-confidence vector queries, preserve
+      // a lexical anchor to avoid semantic drift while still favoring recall.
+      if (vectorResults.length > 0 && fullTextResults.length > 0) {
+        const topVectorScore = vectorResults[0]?.score || 0;
+        if (topVectorScore < 0.25) {
+          const lexicalAnchor = fullTextResults[0];
+          const exists = combinedResults.find((r) => r.id === lexicalAnchor.id);
+          if (!exists) {
+            combinedResults.push({
+              ...lexicalAnchor,
+              score: lexicalAnchor.score / (lexicalAnchor.score + 1),
+            });
+          }
+        }
+      }
 
-      const offset = params.offset || 0;
+      combinedResults.sort((a, b) => b.score - a.score);
       return combinedResults.slice(offset, offset + limit);
     } catch (error: any) {
       console.error("Hybrid search error:", error.message);

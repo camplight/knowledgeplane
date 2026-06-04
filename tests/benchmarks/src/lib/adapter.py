@@ -390,6 +390,8 @@ class HTTPKnowledgePlaneAdapter(KnowledgePlaneAdapter):
                 'k': search_k,
                 'include_trashed': False,
             }
+            if namespace:
+                payload['namespace'] = namespace
 
             response = self.session.post(
                 url,

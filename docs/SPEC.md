@@ -23,11 +23,11 @@ Facts and categories – organize memory using facts and hierarchical categories
 
 Full-text search – keyword search using ArangoDB full-text indexes.
 
-Vector embeddings – automatic generation of embeddings for facts, fact relations, and knowledge cards using OpenAI embeddings. Enables semantic search capabilities with manual cosine similarity calculation. Supports hybrid search combining full-text and vector search for optimal results.
+Vector embeddings – automatic generation of embeddings for facts, fact relations, and knowledge cards using OpenAI embeddings. Enables semantic search capabilities with manual cosine similarity calculation. Hybrid fact retrieval now uses a query-adaptive rank-fusion pipeline (BM25 + vector + lexical coverage) to improve no-reranker relevance while keeping the same simple `facts_search` API.
 
 Graph database – ArangoDB provides native graph capabilities for modeling relationships between facts.
 
-Relations – facts can be linked together with typed relationships (references, depends_on, related_to, part_of, etc.).
+Relations – facts can be linked together with typed relationships (references, depends_on, related_to, part_of, etc.). New writes support optional `context` metadata and perform first-wave relation stitching at write time so the graph starts connected immediately. First-wave relation metadata now carries confidence/provenance signals for downstream replay/pruning.
 
 AQL queries – support for ArangoDB Query Language (AQL) for advanced graph queries and traversals.
 
@@ -109,6 +109,18 @@ and should be treated as underscore equivalents.
 **facts_write Parameters:**
 - `content` (required): The content of the fact
 - `metadata` (optional): Key-value pairs of metadata
+- `context` (optional): Additional write-time context used for first-wave graph linkage (for example `related_fact_ids`, `relation_hint`, tags, source context)
+**Ingest Signals (internal):**
+- Facts include `metadata.ingest_signals` with `ingest_priority` and `confidence` derived from write-time content/context.
+- Retrieval logs an internal trace (`worker_logs`, `type: retrieval_trace`) with query/graph usage/result confidence for observability and future online calibration.
+
+**Retrieval/Graph Runtime Controls (env):**
+- `GRAPH_EXPANSION_ENABLED` (default: enabled): global on/off switch for adaptive graph expansion
+- `GRAPH_QUERY_PLANNER_AI` (default: disabled): enables optional LLM query planning for graph traversal hints
+- `GRAPH_EXPANSION_BUDGET_MS` (default: `120`): max graph-expansion time budget per query
+- `GRAPH_EXPANSION_MAX_CANDIDATES` (default: `40`): cap of graph candidates considered per query
+- `FIRST_WAVE_RELATION_MIN_SCORE` (default: `0.72`): minimum similarity score for automatic first-wave relation creation
+- `FIRST_WAVE_MAX_NEIGHBORS` (default: `4`): max first-wave auto-linked neighbors per newly written fact
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
 

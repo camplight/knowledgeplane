@@ -103,6 +103,13 @@ runs/
     hotpotqa_summary.json
 ```
 
+Generate a cross-run high-level summary (with regression flags) as Markdown:
+```bash
+npx tsx tests/benchmarks/scripts/summarize-benchmarks.ts \
+  --runs-dir tests/benchmarks/runs \
+  --output-md tests/benchmarks/output/benchmark_highlevel_summary.md
+```
+
 ## Prerequisites
 
 1. **Docker** - All benchmarks run in containers
