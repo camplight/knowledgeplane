@@ -1,6 +1,6 @@
 import { collections } from "../db";
 
-export type WorkspaceMemberRole = "owner" | "admin" | "member";
+export type WorkspaceMemberRole = "owner" | "admin" | "member" | "viewer";
 
 export interface WorkspaceMemberRecord {
   _key?: string;

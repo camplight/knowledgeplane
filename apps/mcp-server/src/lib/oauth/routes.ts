@@ -160,16 +160,30 @@ export function registerProviderRoutes(
 
   // Plugin-based OAuth callback (for fastify-oauth2)
   app.get(`/auth/${providerName}/callback`, async function (request, reply) {
-    const oauth2Plugin = (app as any)[`${providerName}OAuth2`];
-    const { token } = await oauth2Plugin.getAccessTokenFromAuthorizationCodeFlow(
-      request,
-    );
+    let accessToken: string;
+    if (config.tokenAuth === "private_key_jwt") {
+      const code = (request.query as { code?: string }).code;
+      if (!code) {
+        return reply.code(400).send({ error: "Missing authorization code" });
+      }
+      accessToken = await exchangeCodeForToken(
+        config,
+        code,
+        `${baseUrl}/auth/${providerName}/callback`,
+      );
+    } else {
+      const oauth2Plugin = (app as any)[`${providerName}OAuth2`];
+      const tokenResult = await oauth2Plugin.getAccessTokenFromAuthorizationCodeFlow(
+        request,
+      );
+      accessToken = tokenResult.token.access_token;
+    }
 
     try {
       // Get user info
       const { email, username } = await fetchUserInfo(
         config,
-        token.access_token,
+        accessToken,
       );
 
       // Create or get user
@@ -196,7 +210,7 @@ export function registerProviderRoutes(
         return await handleOAuth21Flow(
           reply,
           user,
-          token.access_token,
+          accessToken,
           providerName,
           authRequest,
           authorizationCodes,
@@ -212,7 +226,7 @@ export function registerProviderRoutes(
       return handleOAuthCallbackResponse(
         reply,
         user,
-        token.access_token,
+        accessToken,
         providerName,
         isMcpSession,
         session,

@@ -9,6 +9,8 @@ export interface UserRecord {
   email: string;
   api_key?: string;
   onboarding_completed: boolean;
+  confirm_writes: boolean;
+  sessions_revoked_at?: string | null;
   created_at: string;
 }
 
@@ -179,7 +181,17 @@ export class User {
 
   static async update(
     id: string,
-    updates: Partial<Pick<UserRecord, "username" | "email" | "api_key" | "onboarding_completed">>,
+    updates: Partial<
+      Pick<
+        UserRecord,
+        | "username"
+        | "email"
+        | "api_key"
+        | "onboarding_completed"
+        | "confirm_writes"
+        | "sessions_revoked_at"
+      >
+    >,
   ): Promise<UserRecord> {
     const key = this._extractKey(id);
     const result = await collections.users.update(
@@ -192,6 +204,10 @@ export class User {
 
   static async completeOnboarding(id: string): Promise<UserRecord> {
     return await this.update(id, { onboarding_completed: true });
+  }
+
+  static async revokeSessions(id: string): Promise<void> {
+    await this.update(id, { sessions_revoked_at: new Date().toISOString() });
   }
 
   static async generateApiKey(id: string): Promise<string> {
@@ -223,6 +239,8 @@ export class User {
       email: doc.email,
       api_key: doc.api_key,
       onboarding_completed: doc.onboarding_completed || false,
+      confirm_writes: doc.confirm_writes !== false,
+      sessions_revoked_at: doc.sessions_revoked_at || null,
       created_at: doc.created_at,
     };
   }

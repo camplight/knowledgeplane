@@ -3,11 +3,12 @@ import jwksClient from "jwks-rsa";
 import type { JwksClient } from "jwks-rsa";
 import { User } from "../models/User";
 import { Workspace } from "../models/Workspace";
+import { verifyAccessToken } from "./connector-tokens";
 
 export interface AuthContext {
   userId: string;
   email?: string;
-  provider?: "google" | "github";
+  provider?: "google" | "github" | "microsoft" | "knowledgeplane";
   workspaceId?: string;
   apiKeyScope?: "legacy" | "workspace" | "user";
   [key: string]: any;
@@ -174,7 +175,8 @@ async function validateApiKey(apiKey?: string): Promise<AuthContext | null> {
       .map((k) => k.trim())
       .filter(Boolean) || [];
 
-  if (validKeys.length > 0 && validKeys.includes(apiKey)) {
+  const sharedKeysAllowed = process.env.ALLOW_SHARED_API_KEYS !== "false";
+  if (sharedKeysAllowed && validKeys.length > 0 && validKeys.includes(apiKey)) {
     const user = await User.getOrCreateByApiKey(apiKey);
     return {
       userId: user.id,
@@ -230,6 +232,25 @@ export async function requireAuth(
   }
 
   const token = header.slice("Bearer ".length);
+  if (token.split(".").length === 3) {
+    try {
+      const claims = verifyAccessToken(token);
+      const user = await User.findById(claims.userId);
+      if (!user) {
+        throw new Error("Unauthorized: Unknown user");
+      }
+      return {
+        userId: user.id,
+        email: user.email,
+        provider: "knowledgeplane",
+      };
+    } catch (error: any) {
+      if (error.message === "Unauthorized: Unknown user") {
+        throw error;
+      }
+      // Google ID tokens are also JWTs. Fall through when this is not ours.
+    }
+  }
   const providerHint = process.env.OAUTH_PROVIDER?.toLowerCase();
 
   if (

@@ -282,6 +282,26 @@ export default function ProfilePage() {
           </div>
         )}
 
+        <div className="card bg-base-100 shadow-xl border border-base-300 mb-6">
+          <div className="card-body">
+            <h2 className="card-title text-xl">Confirm before saving</h2>
+            <p className="text-sm text-base-content/70">
+              Agents ask before writing a fact into a workspace you belong to.
+            </p>
+            <label className="label cursor-pointer justify-start gap-3">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-primary"
+                checked={profileData.confirm_writes !== false}
+                onChange={(e) => {
+                  updateProfileMutation.mutate({ confirm_writes: e.target.checked });
+                }}
+              />
+              <span className="label-text">Always ask me before an agent saves</span>
+            </label>
+          </div>
+        </div>
+
         {/* Profile Information Card */}
         <div className="card bg-base-100 shadow-xl border border-base-300 mb-6">
           <div className="card-body border-b border-base-300">

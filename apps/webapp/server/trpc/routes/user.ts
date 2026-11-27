@@ -15,6 +15,7 @@ export const userRouter = router({
       z.object({
         username: z.string().min(1).max(100).optional(),
         email: z.string().email().optional(),
+        confirm_writes: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -31,9 +32,10 @@ export const userRouter = router({
         }
       }
 
-      const updates: { username?: string; email?: string } = {};
+      const updates: { username?: string; email?: string; confirm_writes?: boolean } = {};
       if (input.username) updates.username = input.username;
       if (input.email) updates.email = input.email;
+      if (input.confirm_writes !== undefined) updates.confirm_writes = input.confirm_writes;
 
       return await User.update(ctx.user.userId, updates);
     }),

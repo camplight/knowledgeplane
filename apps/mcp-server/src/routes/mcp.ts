@@ -195,6 +195,14 @@ export default async function mcpRoutes(app: FastifyInstance) {
     if (userId) {
       requestContext.userId = userId;
     }
+    if (workspaceId && userId) {
+      const member = await WorkspaceMember.findByWorkspaceAndUser(workspaceId, userId);
+      if (!member) {
+        app.log.warn({ userId, workspaceId }, "MCP: workspace membership denied");
+        return reply.code(403).send({ error: "You are not a member of this workspace" });
+      }
+    }
+
     if (workspaceId) {
       requestContext.workspaceId = workspaceId;
     }

@@ -25,7 +25,7 @@ export interface AuthorizationCodeRecord {
   user_id: string;
   scope: string | null;
   oauth_access_token: string;
-  provider: "google" | "github";
+  provider: "google" | "github" | "microsoft";
   expires_at: Date;
   created_at: Date;
 }
@@ -50,7 +50,7 @@ export interface AuthorizationCodeInput {
   user_id: string;
   scope?: string;
   oauth_access_token: string;
-  provider: "google" | "github";
+  provider: "google" | "github" | "microsoft";
   expires_at: number; // milliseconds since epoch
 }
 

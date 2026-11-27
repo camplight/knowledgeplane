@@ -125,6 +125,12 @@ export async function GET(request: NextRequest) {
       sameSite: "lax",
       maxAge: 60 * 60 * 24 * 7,
     });
+    cookieStore.set("sessionIssuedAt", new Date().toISOString(), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7,
+    });
 
     // Use stored redirect path if available (e.g., invite link)
     if (redirectPath) {

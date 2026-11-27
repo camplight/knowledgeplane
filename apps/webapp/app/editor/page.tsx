@@ -696,6 +696,9 @@ export default function EditorPage() {
                             />
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-sm text-base-content/70">
+                            {fact.canonical && (
+                              <span className="badge badge-primary">Canonical</span>
+                            )}
                             <span className="badge badge-ghost font-mono text-xs">
                               ID: {factIdDisplay}
                             </span>

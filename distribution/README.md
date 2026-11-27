@@ -10,24 +10,38 @@ Welcome! This package contains everything you need to deploy KnowledgePlane for 
 
 ## Quick Start
 
-### Step 1: Extract the Package
+### Step 1: Verify the signed bundle
+
+The publisher signs `SHA256SUMS`. `kp-load.sh` checks that signature and refuses the bundle if any file differs. It also refuses image tag `latest`.
 
 ```bash
-tar -xzf knowledgeplane-distribution-latest.tar.gz
-cd knowledgeplane-distribution-latest
+export KP_RELEASE_PUBKEY=./release-public.pem
+./kp-load.sh --verify-only
 ```
 
-### Step 2: Configure Environment
+### Step 2: Generate secrets on this server
 
 ```bash
-cp env.example .env
-# Edit .env with your settings (see Configuration section below)
+./setup.sh
+# Then set PUBLIC_HOST, IMAGE_VERSION, and one sign-in provider in .env
 ```
 
-### Step 3: Deploy
+`setup.sh` writes the session secret, token signing key, and database passwords into `.env`. They stay on this machine.
+
+### Step 3: Create the database user and load
 
 ```bash
-docker compose up -d
+./bootstrap-db.sh
+./kp-load.sh
+```
+
+Caddy serves HTTPS for `PUBLIC_HOST`. The web app is `/`. The MCP server is `/mcp`. The database is not published.
+
+### Step 4: Verify
+
+```bash
+docker compose ps
+curl -fsS "https://$PUBLIC_HOST/health"
 ```
 
 ### Step 4: Verify
@@ -46,29 +60,27 @@ All configuration is done via environment variables in the `.env` file. Copy `en
 
 ### Required Settings
 
-1. **Database Password**
-   ```bash
-   ARANGO_PASSWORD=your-secure-password-here
-   ```
-   Generate with: `openssl rand -base64 24`
+`setup.sh` fills the secrets below. Set the public host and a sign-in provider yourself.
 
-2. **Session Secret**
+1. **Database passwords**
    ```bash
-   SESSION_SECRET=your-session-secret-here
+   ARANGO_ROOT_PASSWORD=...
+   ARANGO_PASSWORD=...
+   ARANGO_USER=kp
    ```
-   Generate with: `openssl rand -base64 32`
 
-3. **API Keys**
+2. **Session and token keys**
    ```bash
-   API_KEYS=your-api-key-here
-   MCP_SERVER_API_KEY=your-api-key-here
+   SESSION_SECRET=...
+   TOKEN_SIGNING_KEY=...
    ```
-   Generate with: `openssl rand -hex 16`
+   `setup.sh` generates both. Connector access tokens are signed with `TOKEN_SIGNING_KEY`. The distribution compose file sets `ALLOW_SHARED_API_KEYS=false`, so a shared `API_KEYS` value cannot call MCP.
 
-4. **Your Domain URLs**
+3. **Public URL**
    ```bash
-   OAUTH_REDIRECT_BASE_URL=https://knowledge.yourcompany.com
-   MCP_SERVER_URL=https://mcp.yourcompany.com
+   PUBLIC_HOST=knowledge.example.com
+   APP_URL=https://knowledge.example.com
+   MCP_SERVER_URL=https://knowledge.example.com/mcp
    ```
 
 5. **OAuth Credentials** (at least one provider required)
@@ -161,25 +173,17 @@ For production deployments, consider:
 
 ## Updating
 
-To update to a new version:
+Updates are a new signed bundle. Verify it, then load it beside the running stack:
 
 ```bash
-# Stop services
-docker compose down
-
-# Pull latest images
-docker compose pull
-
-# Start updated services
-docker compose up -d
+./kp-load.sh --verify-only
+./backup.sh
+# Set IMAGE_VERSION in .env to the version in VERSION
+./kp-load.sh
+curl -fsS "https://$PUBLIC_HOST/health"
 ```
 
-**Note:** Database data is preserved in volumes, so your data will remain intact after updates.
-
-To update to a specific version, set `IMAGE_VERSION` in your `.env`:
-```bash
-IMAGE_VERSION=v1.0.0
-```
+Nothing pulls `:latest` on its own. Database data stays in the `dbdata` volume.
 
 ## Health Checks
 
@@ -198,27 +202,29 @@ docker compose ps
 
 ## Backup & Restore
 
-### Backup Database
+Nightly backups are an operator cron job, not something the app does by itself. Encrypt to at least two custodian certificates:
 
 ```bash
-# Backup ArangoDB data volume
-docker run --rm -v knowledgeplane_dbdata:/data -v $(pwd):/backup \
-  alpine tar czf /backup/db-backup-$(date +%Y%m%d).tar.gz /data
+export CUSTODIAN_CERTS="./custodian-a.crt ./custodian-b.crt"
+./backup.sh
 ```
 
-### Restore Database
+Restore steps are in [RESTORE.md](RESTORE.md).
+
+To copy facts out as Markdown plus the database records:
 
 ```bash
-# Stop services
-docker compose down
-
-# Restore volume
-docker run --rm -v knowledgeplane_dbdata:/data -v $(pwd):/backup \
-  alpine sh -c "cd /data && tar xzf /backup/db-backup-YYYYMMDD.tar.gz --strip-components=1"
-
-# Start services
-docker compose up -d
+npx tsx scripts/kp-export.ts --out ./export --workspace <workspace-id>
 ```
+
+Folder import, with a dry run first:
+
+```bash
+npx tsx scripts/kp-import.ts --dir ./notes --split heading --blocklist "codename"
+npx tsx scripts/kp-import.ts --dir ./notes --workspace <id> --user <id> --apply
+```
+
+`--canonical` marks the imported facts canonical. That flag is for an admin running the command on the server. Search prefers those facts, and only an admin can change them.
 
 ## Troubleshooting
 

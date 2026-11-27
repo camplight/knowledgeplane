@@ -17,7 +17,7 @@ export interface AuthorizationCode {
   user_id: string;
   scope?: string;
   oauth_access_token: string; // Store the OAuth provider's access token to return it
-  provider: "google" | "github";
+  provider: "google" | "github" | "microsoft";
   expires_at: number;
 }
 

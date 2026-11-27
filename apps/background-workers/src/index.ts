@@ -3,6 +3,7 @@ import { init } from "@knowledgeplane/db";
 import { CardConsolidator } from "./workers/card-consolidator.js";
 import { EmbeddingsGenerator } from "./workers/embeddings-generator.js";
 import { DataSourceRunner } from "./workers/data-source-runner.js";
+import { TrashPurger } from "./workers/trash-purger.js";
 
 async function main() {
   console.log("Starting KnowledgePlane Background Workers...");
@@ -19,9 +20,16 @@ async function main() {
   const embeddingsGenerator = new EmbeddingsGenerator();
   embeddingsGenerator.start();
 
-  // Start data source runner worker
+  // Start data source runner worker unless this deployment turns scheduled collection off
   const dataSourceRunner = new DataSourceRunner();
-  dataSourceRunner.start();
+  if (process.env.DATA_SOURCES_ENABLED !== "false") {
+    dataSourceRunner.start();
+  } else {
+    console.log("Data source runner disabled");
+  }
+
+  const trashPurger = new TrashPurger();
+  trashPurger.start();
 
   console.log("All workers started");
 
@@ -31,6 +39,7 @@ async function main() {
     cardConsolidator.stop();
     embeddingsGenerator.stop();
     dataSourceRunner.stop();
+    trashPurger.stop();
     process.exit(0);
   });
 
@@ -39,6 +48,7 @@ async function main() {
     cardConsolidator.stop();
     embeddingsGenerator.stop();
     dataSourceRunner.stop();
+    trashPurger.stop();
     process.exit(0);
   });
 }

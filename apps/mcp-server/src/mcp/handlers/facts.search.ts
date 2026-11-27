@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { searchFacts } from "@knowledgeplane/api-core";
+import { recordAudit } from "./audit-log.js";
 
 export const factsSearchTool: Tool = {
   name: "facts_search",
@@ -35,6 +36,7 @@ export const factsSearchTool: Tool = {
 export async function handleFactsSearch(args: {
   query: string;
   workspace_id?: string;
+  user_id?: string;
   k?: number;
   offset?: number;
   include_trashed?: boolean;
@@ -45,6 +47,13 @@ export async function handleFactsSearch(args: {
     k: args.k,
     offset: args.offset,
     include_trashed: args.include_trashed,
+  });
+  await recordAudit({
+    action: "fact.search",
+    actor_id: args.user_id,
+    workspace_id: args.workspace_id,
+    tool: "facts_search",
+    detail: { query: args.query, returned: results.total_returned },
   });
 
   return {

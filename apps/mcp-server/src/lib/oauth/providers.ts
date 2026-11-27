@@ -13,6 +13,8 @@ export interface OAuthProviderConfig {
   userInfoHeaders?: Record<string, string>;
   emailsUrl?: string;
   emailsHeaders?: Record<string, string>;
+  tokenAuth?: "client_secret" | "private_key_jwt";
+  privateKeyPem?: string;
   getUsername: (userInfo: any) => string;
   getEmail: (userInfo: any) => string | null;
   fetchEmail?: (accessToken: string) => Promise<string | null>;
@@ -88,6 +90,33 @@ export function createProviderConfig(
     };
   }
 
+  if (provider === "microsoft") {
+    const clientId = process.env.MICROSOFT_CLIENT_ID;
+    const tenantId = process.env.MICROSOFT_TENANT_ID;
+    const privateKey = process.env.MICROSOFT_CLIENT_PRIVATE_KEY?.replace(/\\n/g, "\n");
+    if (!clientId || !tenantId || !privateKey) return null;
+
+    return {
+      name: "microsoft",
+      clientId,
+      clientSecret: "certificate",
+      authorizeHost: "https://login.microsoftonline.com",
+      authorizePath: `/${tenantId}/oauth2/v2.0/authorize`,
+      tokenHost: "https://login.microsoftonline.com",
+      tokenPath: `/${tenantId}/oauth2/v2.0/token`,
+      scope: ["openid", "email", "profile"],
+      userInfoUrl: "https://graph.microsoft.com/oidc/userinfo",
+      tokenAuth: "private_key_jwt",
+      privateKeyPem: privateKey,
+      getUsername: (userInfo: any) =>
+        userInfo.preferred_username?.split("@")[0] ||
+        userInfo.email?.split("@")[0] ||
+        userInfo.sub,
+      getEmail: (userInfo: any) =>
+        userInfo.email || userInfo.preferred_username || null,
+    };
+  }
+
   return null;
 }
 
@@ -98,6 +127,7 @@ export function getAvailableProviders(): OAuthProvider[] {
   const providers: OAuthProvider[] = [];
   if (createProviderConfig("google")) providers.push("google");
   if (createProviderConfig("github")) providers.push("github");
+  if (createProviderConfig("microsoft")) providers.push("microsoft");
   return providers;
 }
 

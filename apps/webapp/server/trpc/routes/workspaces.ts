@@ -1,5 +1,5 @@
 import { router, protectedProcedure, publicProcedure } from "../router";
-import { Workspace, WorkspaceMember, User, Invitation } from "@knowledgeplane/db/next";
+import { ConnectorRefreshToken, Invitation, User, Workspace, WorkspaceMember } from "@knowledgeplane/db/next";
 import { z } from "zod";
 
 export const workspacesRouter = router({
@@ -58,6 +58,9 @@ export const workspacesRouter = router({
         id: z.string(),
         name: z.string().min(1).max(100).optional(),
         description: z.string().max(500).optional(),
+        require_confirm: z.boolean().optional(),
+        sensitive_patterns: z.array(z.string()).optional(),
+        trash_retention_days: z.number().min(0).max(3650).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -146,7 +149,7 @@ export const workspacesRouter = router({
       z.object({
         workspace_id: z.string(),
         user_id: z.string(),
-        role: z.enum(["owner", "admin", "member"]).default("member"),
+        role: z.enum(["owner", "admin", "member", "viewer"]).default("member"),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -179,7 +182,7 @@ export const workspacesRouter = router({
       z.object({
         workspace_id: z.string(),
         member_id: z.string(),
-        role: z.enum(["owner", "admin", "member"]),
+        role: z.enum(["owner", "admin", "member", "viewer"]),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -247,6 +250,8 @@ export const workspacesRouter = router({
       }
 
       await WorkspaceMember.delete(input.member_id);
+      await User.revokeSessions(targetMember.user_id);
+      await ConnectorRefreshToken.revokeUser(targetMember.user_id);
       return { success: true };
     }),
 

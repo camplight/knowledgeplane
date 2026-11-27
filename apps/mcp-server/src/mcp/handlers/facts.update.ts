@@ -1,6 +1,15 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { Fact, WorkspaceMember, collections } from "@knowledgeplane/db";
+import {
+  Fact,
+  WorkspaceMember,
+  collections,
+  isAdmin,
+  isWriter,
+  redactSecrets,
+  type WorkspaceRole,
+} from "@knowledgeplane/db";
 import { stripEmbeddings } from "./strip-embeddings.js";
+import { recordAudit } from "./audit-log.js";
 
 export const factsUpdateTool: Tool = {
   name: "facts_update",
@@ -16,6 +25,7 @@ export const factsUpdateTool: Tool = {
         additionalProperties: { type: "string" },
       },
       last_updated_by: { type: "string", description: "User ID of the person updating the fact" },
+      canonical: { type: "boolean", description: "Set or clear the canonical flag. Admins only." },
     },
     required: ["id", "last_updated_by"],
   },
@@ -27,6 +37,7 @@ export async function handleFactsUpdate(args: {
   metadata?: Record<string, string>;
   last_updated_by: string;
   workspace_id?: string;
+  canonical?: boolean;
 }) {
   // Get the fact first to check its workspace_id
   const existingFact = await Fact.findById(args.id);
@@ -48,12 +59,29 @@ export async function handleFactsUpdate(args: {
   if (!member) {
     throw new Error("You are not a member of this workspace");
   }
+  const role = member.role as WorkspaceRole;
+  if (!isWriter(role)) {
+    throw new Error("Viewers can only read this workspace");
+  }
+  if ((existingFact.canonical || args.canonical !== undefined) && !isAdmin(role)) {
+    throw new Error("Only admins can edit a canonical fact");
+  }
 
+  const content = args.content === undefined ? undefined : redactSecrets(args.content).content;
   const fact = await Fact.update({
     id: args.id,
-    content: args.content,
+    content,
     metadata: args.metadata,
     last_updated_by: args.last_updated_by,
+    canonical: args.canonical,
+  });
+  await recordAudit({
+    action: "fact.update",
+    actor_id: args.last_updated_by,
+    workspace_id: args.workspace_id,
+    object_id: fact.id,
+    tool: "facts_update",
+    detail: { canonical: fact.canonical === true },
   });
 
   if (args.content) {
