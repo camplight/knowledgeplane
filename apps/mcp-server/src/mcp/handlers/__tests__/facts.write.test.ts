@@ -6,6 +6,30 @@ vi.mock("@knowledgeplane/db", () => ({
   Fact: {
     write: vi.fn(),
   },
+  collections: {
+    worker_triggers: { save: vi.fn() },
+  },
+  WorkspaceMember: {
+    findByWorkspaceAndUser: vi.fn(async () => ({ role: "member" })),
+    countByWorkspace: vi.fn(async () => 1),
+  },
+  Workspace: {
+    findById: vi.fn(async () => ({
+      name: "Workspace",
+      require_confirm: false,
+      sensitive_patterns: [],
+    })),
+  },
+  User: {
+    findById: vi.fn(async () => ({ confirm_writes: false })),
+  },
+  AuditEvent: { create: vi.fn() },
+  decideFactWrite: (input: { content: string }) => ({
+    action: "write",
+    content: input.content,
+    redactions: [],
+    canonical: false,
+  }),
 }));
 
 describe("handleFactsWrite", () => {
@@ -45,6 +69,7 @@ describe("handleFactsWrite", () => {
       workspace_id: "workspaces/1",
       created_by: "users/1",
       last_updated_by: "users/1",
+      canonical: false,
     });
   });
 
@@ -81,6 +106,7 @@ describe("handleFactsWrite", () => {
       workspace_id: "workspaces/1",
       created_by: "users/1",
       last_updated_by: "users/2",
+      canonical: false,
     });
   });
 });

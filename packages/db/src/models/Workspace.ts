@@ -12,6 +12,9 @@ export interface WorkspaceRecord {
   rest_api_key?: string;
   rest_api_key_created_by?: string;
   rest_api_key_created_at?: string;
+  require_confirm: boolean;
+  sensitive_patterns: string[];
+  trash_retention_days: number;
   created_at: string;
   updated_at: string;
 }
@@ -163,6 +166,9 @@ export class Workspace {
         | "rest_api_key"
         | "rest_api_key_created_by"
         | "rest_api_key_created_at"
+        | "require_confirm"
+        | "sensitive_patterns"
+        | "trash_retention_days"
       >
     >,
   ): Promise<WorkspaceRecord> {
@@ -187,6 +193,15 @@ export class Workspace {
     }
     if (updates.rest_api_key_created_at !== undefined) {
       updateDoc.rest_api_key_created_at = updates.rest_api_key_created_at;
+    }
+    if (updates.require_confirm !== undefined) {
+      updateDoc.require_confirm = updates.require_confirm;
+    }
+    if (updates.sensitive_patterns !== undefined) {
+      updateDoc.sensitive_patterns = updates.sensitive_patterns;
+    }
+    if (updates.trash_retention_days !== undefined) {
+      updateDoc.trash_retention_days = updates.trash_retention_days;
     }
 
     const result = await collections.workspaces.update(key, updateDoc, {
@@ -268,6 +283,12 @@ export class Workspace {
       rest_api_key: doc.rest_api_key,
       rest_api_key_created_by: doc.rest_api_key_created_by,
       rest_api_key_created_at: doc.rest_api_key_created_at,
+      require_confirm: doc.require_confirm === true,
+      sensitive_patterns: Array.isArray(doc.sensitive_patterns)
+        ? doc.sensitive_patterns
+        : [],
+      trash_retention_days:
+        typeof doc.trash_retention_days === "number" ? doc.trash_retention_days : 30,
       created_at: doc.created_at,
       updated_at: doc.updated_at,
     };

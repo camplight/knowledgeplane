@@ -78,6 +78,7 @@ import {
   factsConsolidateTool,
   handleFactsConsolidate,
 } from "./handlers/facts.consolidate.js";
+import { WorkspaceMember, toolNeedsWriter } from "@knowledgeplane/db";
 
 export interface McpContext {
   userId?: string;
@@ -252,6 +253,20 @@ export function createMcpServer(
     // The transport's sessionId should be available, but we need to access it differently
     // For now, use the contextGetter which should be set up to access sessionContexts
 
+    if (!context?.userId || !context.workspaceId) {
+      throw new Error("Authentication with a workspace is required");
+    }
+    const member = await WorkspaceMember.findByWorkspaceAndUser(
+      context.workspaceId,
+      context.userId,
+    );
+    if (!member) {
+      throw new Error("You are not a member of this workspace");
+    }
+    if (toolNeedsWriter(name) && !["owner", "admin", "member"].includes(member.role)) {
+      throw new Error("Viewers can only read this workspace");
+    }
+
     if (logger) {
       logger.info(
         {
@@ -279,7 +294,7 @@ export function createMcpServer(
       });
       handler = handleFactsBulkWrite;
     } else if (name === "facts_search") {
-      handlerArgs = prepareHandlerArgs(args, context);
+      handlerArgs = prepareHandlerArgs(args, context, { setUserId: true });
       handler = handleFactsSearch;
     } else if (name === "facts_update") {
       handlerArgs = prepareHandlerArgs(args, context, {

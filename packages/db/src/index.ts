@@ -12,10 +12,14 @@ export * from "./models/ChatThread";
 export * from "./models/Workspace";
 export * from "./models/WorkspaceMember";
 export * from "./models/DataSource";
+export * from "./models/AuditEvent";
+export * from "./models/ConnectorRefreshToken";
 export * from "./lib/webhook-trigger";
 export * from "./lib/vector-search";
 export * from "./lib/auth";
 export * from "./lib/id-utils";
+export * from "./lib/write-policy";
+export * from "./lib/connector-tokens";
 
 // Re-export ensureVectorIndex for use in workers
 export { ensureVectorIndex } from "./db";

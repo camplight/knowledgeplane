@@ -1,5 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { File, WorkspaceMember } from "@knowledgeplane/db";
+import { recordAudit } from "./audit-log.js";
 
 export const filesGetTool: Tool = {
   name: "files_get",
@@ -47,6 +48,14 @@ export async function handleFilesGet(args: {
       throw new Error("You are not a member of this workspace");
     }
   }
+
+  await recordAudit({
+    action: "file.read",
+    actor_id: args.user_id,
+    workspace_id: args.workspace_id,
+    object_id: file.id,
+    tool: "files_get",
+  });
 
   return {
     content: [

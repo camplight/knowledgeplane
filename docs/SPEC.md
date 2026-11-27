@@ -51,7 +51,7 @@ Session-based context – MCP sessions maintain user and knowledge context acros
 
 Docker-first deployment – one-command local or hosted setup.
 
-Docker image distribution – distribute KnowledgePlane as Docker images that clients can deploy with their own configuration via environment variables. Clients receive a docker-compose.yml and configure via .env file.
+Docker image distribution – distribute KnowledgePlane as Docker images that clients can deploy with their own configuration via environment variables. Clients receive a signed `distribution/` bundle: Caddy for HTTPS, ArangoDB, the MCP server, the web app, and background workers. `setup.sh` generates secrets on the server. `kp-load.sh` checks the signature and refuses tag `latest`.
 
 🧩 Architecture Overview
 ```
@@ -111,6 +111,15 @@ and should be treated as underscore equivalents.
 - `metadata` (optional): Key-value pairs of metadata
 - `created_by` (optional): User ID of the creator. If not provided, inferred from authenticated session (OAuth token or API key)
 - `last_updated_by` (optional): User ID of the last updater. If not provided, inferred from authenticated session (OAuth token or API key)
+- `confirmed` (optional): Required when the user has confirm-before-save on (the default) or the workspace locks it on. The tool answers with the workspace name and member count and does not write until this is true.
+- `acknowledge_sensitive` (optional): Required when the content matches the workspace blocklist.
+- `canonical` (optional): Mark the fact canonical. Admins only. Search returns it first, and the card consolidator does not rewrite it.
+
+Passwords, API keys, and tokens are stripped from content before it is stored. Every MCP call checks workspace membership. Connector access tokens last 24 hours. Refresh tokens last 90 days, are single use, and a reuse revokes the token family. Removing a member revokes their web session and their refresh tokens. Shared `API_KEYS` are disabled in the distribution compose file (`ALLOW_SHARED_API_KEYS=false`).
+
+Microsoft Entra is a third login provider, using a certificate (`private_key_jwt`) when `MICROSOFT_CLIENT_ID`, `MICROSOFT_TENANT_ID`, and `MICROSOFT_CLIENT_PRIVATE_KEY` are set. Google and GitHub stay available.
+
+Audit events are written for fact writes, updates, trash, purge, search, and file reads. A background worker permanently deletes facts after `purge_after`. Set `DATA_SOURCES_ENABLED=false` to turn off scheduled data sources.
 
 **Note:** `workspace_id` is NOT accepted as a parameter. It is automatically set from the authenticated session context. Any `workspace_id` provided in tool arguments will be ignored and replaced with the workspace ID from the session context.
 
@@ -435,7 +444,10 @@ KnowledgePlane supports three types of authentication:
 - `_key` (string): Document key
 - `workspace_id` (string): Reference to workspace ID
 - `user_id` (string): Reference to user ID
-- `role` (string): Workspace member role - "owner", "admin", or "member"
+- `role` (string): Workspace member role - "owner", "admin", "member", or "viewer". Viewers can read. Members can write. Owners and admins can manage the workspace, mark facts canonical, and purge immediately.
+- `require_confirm` (boolean, workspace): When true, every agent save must send `confirmed: true`.
+- `sensitive_patterns` (string array, workspace): Words or `/regex/flags` that block a save until `acknowledge_sensitive: true`.
+- `trash_retention_days` (number, workspace): Days before a trashed fact is permanently removed. Default 30.
 - `created_at` (string): Creation timestamp (ISO 8601)
 - `updated_at` (string): Last update timestamp (ISO 8601)
 
@@ -452,6 +464,8 @@ KnowledgePlane supports three types of authentication:
 - `deleted_by` (string, optional): Reference to user ID who deleted the fact
 - `deleted_at` (string, optional): Deletion timestamp (ISO 8601)
 - `trashed` (boolean): Whether the fact has been trashed (default: false)
+- `canonical` (boolean): Admin-marked fact that search returns first. The card consolidator does not rewrite it. Only admins can update, trash, or purge it.
+- `purge_after` (string, optional): When a trashed fact is permanently removed (ISO 8601)
 
 **FactRelation Collection (Edges):**
 - `_id` (ArangoDB edge ID): Primary key
@@ -695,7 +709,7 @@ The web interface is built with React and Tailwind CSS, featuring:
   - Workspace settings (name, description)
   - Workspace member management (add, update roles, remove members)
   - Invitation management (create invitation links, view, copy links, track status, delete invitations)
-  - Role-based access control (owner/admin/member permissions)
+  - Role-based access control (owner/admin/member/viewer permissions)
   - Tabbed interface for workspace settings, members, and invitations
   - Toast notifications for user feedback (copy link, delete invitation)
   - Expiration days input with label and help text showing default value (7 days)

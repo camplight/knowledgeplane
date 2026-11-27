@@ -13,6 +13,10 @@ import {
   getAuthorizationServerMetadata,
   getProtectedResourceMetadata,
 } from "../lib/oauth/metadata.js";
+import {
+  issueConnectorGrant,
+  rotateConnectorGrant,
+} from "../lib/oauth/connector-grant.js";
 
 export default async function oauthRoutes(app: FastifyInstance) {
   // Register content type parser for application/x-www-form-urlencoded
@@ -43,6 +47,11 @@ export default async function oauthRoutes(app: FastifyInstance) {
   const githubConfig = createProviderConfig("github");
   if (githubConfig) {
     registerProviderRoutes(app, githubConfig);
+  }
+
+  const microsoftConfig = createProviderConfig("microsoft");
+  if (microsoftConfig) {
+    registerProviderRoutes(app, microsoftConfig);
   }
 
   // Success page (for testing/debugging)
@@ -221,10 +230,29 @@ export default async function oauthRoutes(app: FastifyInstance) {
     const clientId = body.client_id;
     const codeVerifier = body.code_verifier;
 
+    if (grantType === "refresh_token") {
+      if (!body.refresh_token) {
+        return reply.code(400).send({
+          error: "invalid_request",
+          error_description: "Missing required parameter: refresh_token",
+        });
+      }
+      try {
+        const tokens = await rotateConnectorGrant(body.refresh_token, clientId);
+        return reply.send(tokens);
+      } catch (error: any) {
+        return reply.code(400).send({
+          error: "invalid_grant",
+          error_description: error.message || "Refresh token rejected",
+        });
+      }
+    }
+
     if (grantType !== "authorization_code") {
       return reply.code(400).send({
         error: "unsupported_grant_type",
-        error_description: "Only 'authorization_code' grant type is supported",
+        error_description:
+          "Only 'authorization_code' and 'refresh_token' grant types are supported",
       });
     }
 
@@ -295,15 +323,22 @@ export default async function oauthRoutes(app: FastifyInstance) {
     // Clean up the authorization code (single use)
     await authorizationCodes.delete(code);
 
-    // Return the OAuth provider's access token
-    // This token can be validated by the existing auth system (validateGoogleToken/validateGitHubToken)
-    // which validates tokens directly with the OAuth provider
-    return reply.send({
-      access_token: authCodeData.oauth_access_token,
-      token_type: "Bearer",
-      expires_in: 3600, // 1 hour (approximate, actual expiry depends on provider)
-      scope: authCodeData.scope || "openid email profile",
-    });
+    try {
+      const tokens = await issueConnectorGrant(
+        authCodeData.user_id,
+        authCodeData.client_id,
+      );
+      return reply.send({
+        ...tokens,
+        scope: authCodeData.scope || "openid email profile",
+      });
+    } catch (error: any) {
+      app.log.error({ error: error.message }, "Failed to issue connector tokens");
+      return reply.code(500).send({
+        error: "server_error",
+        error_description: error.message || "Failed to issue connector tokens",
+      });
+    }
   });
 
   // Dynamic Client Registration Endpoint (optional per MCP spec)

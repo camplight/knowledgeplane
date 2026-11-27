@@ -326,6 +326,8 @@ export const collections = {
   workspaces: db.collection("workspaces"),
   workspace_members: db.collection("workspace_members"),
   data_sources: db.collection("data_sources"),
+  audit_events: db.collection("audit_events"),
+  connector_refresh_tokens: db.collection("connector_refresh_tokens"),
 };
 
 // Graph for relations
@@ -353,8 +355,14 @@ export async function init() {
     await sysDb.createDatabase(dbName);
     console.log(`Database ${dbName} created`);
   } catch (error: any) {
-    if (error.errorNum !== 1207) {
-      // 1207 = database already exists
+    if (error.errorNum === 1207) {
+      // Database already exists.
+    } else if (error.errorNum === 11) {
+      // Restricted database users cannot create databases. setup.sh does that.
+      console.log(
+        `Database ${dbName} was not created by this user; using the existing database`,
+      );
+    } else {
       throw error;
     }
   }
@@ -376,6 +384,8 @@ export async function init() {
     "workspaces",
     "workspace_members",
     "data_sources",
+    "audit_events",
+    "connector_refresh_tokens",
   ];
 
   for (const name of documentCollectionNames) {

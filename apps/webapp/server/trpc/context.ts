@@ -32,6 +32,12 @@ export async function createContext(opts: {
     if (userId) {
       const userRecord = await User.findById(userId);
       if (userRecord) {
+        const issuedAt = Date.parse(cookieStore.get("sessionIssuedAt")?.value || "");
+        const revokedAt = userRecord.sessions_revoked_at
+          ? Date.parse(userRecord.sessions_revoked_at)
+          : 0;
+        const sessionStillValid = !revokedAt || (Number.isFinite(issuedAt) && issuedAt > revokedAt);
+        if (sessionStillValid) {
         user = {
           userId: userRecord.id,
           email: userRecord.email,
@@ -56,6 +62,7 @@ export async function createContext(opts: {
           }
           // Note: workspaceId can still be null if user has no workspaces
           // This will be handled by individual routes that require a workspace
+        }
         }
       }
     }

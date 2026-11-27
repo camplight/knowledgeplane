@@ -1,0 +1,24 @@
+{$PUBLIC_HOST} {
+	encode gzip
+	handle /mcp* {
+		reverse_proxy mcp-server:8080
+	}
+	handle /.well-known/* {
+		reverse_proxy mcp-server:8080
+	}
+	handle /token {
+		reverse_proxy mcp-server:8080
+	}
+	handle /register {
+		reverse_proxy mcp-server:8080
+	}
+	handle /auth/* {
+		reverse_proxy mcp-server:8080
+	}
+	handle /health {
+		reverse_proxy mcp-server:8080
+	}
+	handle {
+		reverse_proxy webapp:3000
+	}
+}

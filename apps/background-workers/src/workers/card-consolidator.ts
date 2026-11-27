@@ -318,6 +318,7 @@ export class CardConsolidator {
     const bindVars: Record<string, unknown> = {};
     const filters: string[] = [
       "fact.trashed == false",
+      "(fact.canonical == null OR fact.canonical == false)",
       'fact.workspace_id != null AND fact.workspace_id != ""',
     ];
 

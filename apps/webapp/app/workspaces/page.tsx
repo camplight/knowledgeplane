@@ -14,6 +14,9 @@ export default function WorkspacesPage() {
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [expiresInDays, setExpiresInDays] = useState(7);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [requireConfirm, setRequireConfirm] = useState(false);
+  const [sensitivePatterns, setSensitivePatterns] = useState("");
+  const [trashRetentionDays, setTrashRetentionDays] = useState(30);
 
   const { data: userData, isLoading: userLoading } = trpc.auth.me.useQuery();
   const { data: workspacesData, refetch: refetchWorkspaces } = trpc.workspaces.list.useQuery();
@@ -103,6 +106,15 @@ export default function WorkspacesPage() {
       refetchInvitations();
     }
   }, [selectedWorkspaceId, activeTab]);
+
+  useEffect(() => {
+    if (!workspaceData) {
+      return;
+    }
+    setRequireConfirm(workspaceData.require_confirm === true);
+    setSensitivePatterns((workspaceData.sensitive_patterns || []).join("\n"));
+    setTrashRetentionDays(workspaceData.trash_retention_days ?? 30);
+  }, [workspaceData]);
 
   const handleCreateWorkspace = (e: React.FormEvent) => {
     e.preventDefault();
@@ -300,6 +312,30 @@ export default function WorkspacesPage() {
                         <p className="text-base-content/70 mt-1">{selectedWorkspace.description}</p>
                       )}
                     </div>
+                    <div className="flex gap-2">
+                    {canManage && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={updateWorkspaceMutation.isPending}
+                        onClick={() => {
+                          if (!selectedWorkspaceId) return;
+                          updateWorkspaceMutation.mutate({
+                            id: selectedWorkspaceId,
+                            require_confirm: requireConfirm,
+                            sensitive_patterns: sensitivePatterns
+                              .split("\n")
+                              .map((line) => line.trim())
+                              .filter(Boolean),
+                            trash_retention_days: trashRetentionDays,
+                          });
+                          setToastMessage("Workspace policy saved");
+                          setTimeout(() => setToastMessage(null), 3000);
+                        }}
+                      >
+                        Save policy
+                      </button>
+                    )}
                     {currentMember?.role === "owner" && (
                       <button
                         onClick={handleDeleteWorkspace}
@@ -309,7 +345,41 @@ export default function WorkspacesPage() {
                         Delete Workspace
                       </button>
                     )}
+                    </div>
                   </div>
+
+                  {canManage && (
+                    <div className="grid gap-4 mb-6 sm:grid-cols-2">
+                      <label className="label cursor-pointer justify-start gap-3 border border-base-300 rounded-lg p-3">
+                        <input
+                          type="checkbox"
+                          className="checkbox checkbox-primary"
+                          checked={requireConfirm}
+                          onChange={(e) => setRequireConfirm(e.target.checked)}
+                        />
+                        <span className="label-text">Require confirm before every agent save</span>
+                      </label>
+                      <label className="form-control">
+                        <span className="label-text mb-1">Trash retention (days)</span>
+                        <input
+                          type="number"
+                          min={0}
+                          className="input input-bordered input-sm"
+                          value={trashRetentionDays}
+                          onChange={(e) => setTrashRetentionDays(Number(e.target.value))}
+                        />
+                      </label>
+                      <label className="form-control sm:col-span-2">
+                        <span className="label-text mb-1">Sensitive words, one per line</span>
+                        <textarea
+                          className="textarea textarea-bordered font-mono text-sm"
+                          rows={3}
+                          value={sensitivePatterns}
+                          onChange={(e) => setSensitivePatterns(e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  )}
 
                 {/* Tabs */}
                 <div className="tabs tabs-bordered mb-6">
@@ -395,13 +465,14 @@ export default function WorkspacesPage() {
                                       updateMemberMutation.mutate({
                                         workspace_id: selectedWorkspaceId!,
                                         member_id: member.id,
-                                        role: e.target.value as "owner" | "admin" | "member",
+                                        role: e.target.value as "owner" | "admin" | "member" | "viewer",
                                       });
                                     }}
                                     className="select select-bordered select-sm"
                                     disabled={updateMemberMutation.isPending}
                                   >
                                     <option value="member">Member</option>
+                                    <option value="viewer">Viewer</option>
                                     <option value="admin">Admin</option>
                                     {currentMember?.role === "owner" && (
                                       <option value="owner">Owner</option>

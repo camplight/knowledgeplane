@@ -1,6 +1,8 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { Fact, collections } from "@knowledgeplane/db";
+import { Fact, WorkspaceMember, collections, type WorkspaceRole } from "@knowledgeplane/db";
 import { stripEmbeddingsArray } from "./strip-embeddings.js";
+import { confirmationResult, gateFactWrite } from "./fact-write-gate.js";
+import { recordAudit } from "./audit-log.js";
 
 export const factsBulkWriteTool: Tool = {
   name: "facts_bulkwrite",
@@ -22,10 +24,13 @@ export const factsBulkWriteTool: Tool = {
             },
             created_by: { type: "string", description: "User ID of the creator (optional, inferred from session if authenticated)" },
             last_updated_by: { type: "string", description: "User ID of the last updater (optional, inferred from session if authenticated)" },
+            canonical: { type: "boolean", description: "Mark the fact canonical. Admins only." },
           },
           required: ["content"],
         },
       },
+      confirmed: { type: "boolean", description: "Set true after the person confirms the save" },
+      acknowledge_sensitive: { type: "boolean", description: "Set true to save content that matched the workspace blocklist" },
     },
     required: ["facts"],
   },
@@ -38,7 +43,10 @@ export async function handleFactsBulkWrite(args: {
     workspace_id?: string;
     created_by?: string;
     last_updated_by?: string;
+    canonical?: boolean;
   }>;
+  confirmed?: boolean;
+  acknowledge_sensitive?: boolean;
 }) {
   // Validate that facts array is not empty
   if (!args.facts || args.facts.length === 0) {
@@ -62,16 +70,48 @@ export async function handleFactsBulkWrite(args: {
     );
   }
 
-  // Prepare fact inputs for bulk write
-  const factInputs = args.facts.map((fact) => ({
-    content: fact.content,
+  const member = await WorkspaceMember.findByWorkspaceAndUser(
+    args.facts[0].workspace_id!,
+    args.facts[0].created_by!,
+  );
+  if (!member) {
+    throw new Error("You are not a member of this workspace");
+  }
+
+  const prepared = [];
+  for (const fact of args.facts) {
+    const decision = await gateFactWrite({
+      content: fact.content,
+      role: member.role as WorkspaceRole,
+      userId: fact.created_by!,
+      workspaceId: fact.workspace_id!,
+      confirmed: args.confirmed,
+      acknowledgeSensitive: args.acknowledge_sensitive,
+      canonical: fact.canonical,
+    });
+    if (decision.action === "confirm") {
+      return confirmationResult(decision);
+    }
+    prepared.push({ fact, decision });
+  }
+
+  const factInputs = prepared.map(({ fact, decision }) => ({
+    content: decision.content,
     metadata: fact.metadata,
     workspace_id: fact.workspace_id!,
     created_by: fact.created_by!,
     last_updated_by: fact.last_updated_by!,
+    canonical: decision.canonical,
   }));
 
   const facts = await Fact.bulkWrite(factInputs);
+  await recordAudit({
+    action: "fact.bulkwrite",
+    actor_id: args.facts[0].created_by,
+    workspace_id: args.facts[0].workspace_id,
+    tool: "facts_bulkwrite",
+    detail: { count: facts.length },
+  });
 
   try {
     const triggers = facts.map((fact) => ({

@@ -1,6 +1,7 @@
 import { collections, ensureInitialized } from "../db";
 import { triggerWebhook } from "../lib/webhook-trigger";
 import { generateQueryEmbedding, cosineSimilarity } from "../lib/vector-search";
+import { rankCanonicalFirst } from "../lib/write-policy";
 import type { AIModelProvider } from "@knowledgeplane/aimodel";
 
 export interface FactInput {
@@ -9,6 +10,7 @@ export interface FactInput {
   workspace_id: string; // Workspace ID
   created_by: string; // User ID
   last_updated_by: string; // User ID
+  canonical?: boolean;
 }
 
 export interface FactRecord {
@@ -25,6 +27,8 @@ export interface FactRecord {
   deleted_by?: string | null;
   deleted_at?: string | null;
   trashed: boolean;
+  canonical?: boolean;
+  purge_after?: string | null;
   embedding?: number[]; // Vector embedding for semantic search
   embedding_model?: string; // Model used to generate embedding
 }
@@ -48,6 +52,7 @@ export interface FactUpdateInput {
   content?: string;
   metadata?: Record<string, string>;
   last_updated_by: string; // User ID
+  canonical?: boolean;
 }
 
 export class Fact {
@@ -80,6 +85,7 @@ export class Fact {
       created_by: input.created_by,
       last_updated_by: input.last_updated_by,
       trashed: false,
+      canonical: input.canonical === true,
       created_at: now,
       updated_at: now,
       embedding: zeroEmbedding,  // Placeholder for vector index compatibility
@@ -147,6 +153,7 @@ export class Fact {
         created_by: input.created_by,
         last_updated_by: input.last_updated_by,
         trashed: false,
+        canonical: input.canonical === true,
         created_at: now,
         updated_at: now,
         embedding: zeroEmbedding,  // Placeholder for vector index compatibility
@@ -194,6 +201,9 @@ export class Fact {
     if (input.metadata !== undefined) {
       updates.metadata = input.metadata;
     }
+    if (input.canonical !== undefined) {
+      updates.canonical = input.canonical;
+    }
 
     const key = this.extractKey(input.id);
     const result = await collections.facts.update(key, updates, {
@@ -217,17 +227,22 @@ export class Fact {
   static async trash(
     id: string,
     last_updated_by: string,
+    retentionDays: number = 30,
   ): Promise<FactRecord> {
     const key = this.extractKey(id);
-    const now = new Date().toISOString();
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const days = Math.max(0, retentionDays);
+    const purgeAfter = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
     const result = await collections.facts.update(
       key,
       {
         trashed: true,
         last_updated_by,
-        deleted_at: now,
+        deleted_at: nowIso,
         deleted_by: last_updated_by,
-        updated_at: now,
+        updated_at: nowIso,
+        purge_after: purgeAfter,
       },
       { returnNew: true },
     );
@@ -246,29 +261,87 @@ export class Fact {
     return record;
   }
 
+  static async purgeNow(id: string): Promise<void> {
+    const key = this.extractKey(id);
+    await collections.facts.remove(key);
+  }
+
+  static async purgeExpired(nowIso: string): Promise<number> {
+    const cursor = await collections.facts.database.query(
+      `
+      FOR fact IN facts
+        FILTER fact.trashed == true
+        FILTER fact.purge_after != null AND fact.purge_after <= @now
+        REMOVE fact IN facts
+        RETURN OLD._key
+      `,
+      { now: nowIso },
+    );
+    const removed = await cursor.all();
+    return removed.length;
+  }
+
   static async search(params: FactSearchParams): Promise<FactSearchResult[]> {
     // Ensure database is initialized
     await ensureInitialized();
 
-    const limit = params.k || 5;
-    const offset = params.offset || 0;
-    const includeTrashed = params.include_trashed || false;
     const useVectorSearch = params.use_vector_search;
-
     const isWildcard = params.query === "*";
 
-    // If vector search is explicitly disabled or query is wildcard, use full-text only
+    let results: FactSearchResult[];
     if (useVectorSearch === false || isWildcard) {
-      return this._fullTextSearch(params);
+      results = await this._fullTextSearch(params);
+    } else if (useVectorSearch === true) {
+      results = await this._vectorSearch(params);
+    } else {
+      results = await this._hybridSearch(params);
+    }
+    return this._promoteCanonical(params, results);
+  }
+
+  private static async _promoteCanonical(
+    params: FactSearchParams,
+    results: FactSearchResult[],
+  ): Promise<FactSearchResult[]> {
+    const ranked = rankCanonicalFirst(results);
+    if (!params.workspace_id || (params.offset || 0) > 0) {
+      return ranked;
     }
 
-    // If vector search is explicitly enabled, use vector search only
-    if (useVectorSearch === true) {
-      return this._vectorSearch(params);
+    try {
+      const query = params.query === "*" ? "" : params.query;
+      const cursor = await collections.facts.database.query(
+        `
+        FOR fact IN facts
+          FILTER fact.workspace_id == @workspaceId
+          FILTER fact.canonical == true
+          FILTER fact.trashed == false OR @includeTrashed == true
+          FILTER @query == "" OR CONTAINS(LOWER(fact.content), LOWER(@query))
+          LIMIT 20
+          RETURN fact
+        `,
+        {
+          workspaceId: params.workspace_id,
+          includeTrashed: params.include_trashed === true,
+          query,
+        },
+      );
+      const docs = await cursor.all();
+      const canonicalHits: FactSearchResult[] = docs.map((doc: any) => {
+        const fact = this._normalizeRecord(doc);
+        const existing = ranked.find((hit) => hit.id === fact.id);
+        return { ...fact, score: existing?.score ?? 1 };
+      });
+      const canonicalIds = new Set(canonicalHits.map((hit) => hit.id));
+      const limit = params.k || 5;
+      return [...canonicalHits, ...ranked.filter((hit) => !canonicalIds.has(hit.id))].slice(
+        0,
+        limit,
+      );
+    } catch (error: any) {
+      console.error("Canonical fact promotion failed:", error.message);
+      return ranked;
     }
-
-    // Otherwise, use hybrid search (default)
-    return this._hybridSearch(params);
   }
 
   private static async _fullTextSearch(
@@ -907,6 +980,8 @@ export class Fact {
       deleted_by: doc.deleted_by || null,
       deleted_at: doc.deleted_at || null,
       trashed: doc.trashed || false,
+      canonical: doc.canonical === true,
+      purge_after: doc.purge_after || null,
       embedding: doc.embedding,
       embedding_model: doc.embedding_model,
     };

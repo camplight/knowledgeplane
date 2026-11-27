@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import crypto from "crypto";
 import { User } from "@knowledgeplane/db";
 import type { OAuthProviderConfig } from "./providers.js";
+import { buildClientAssertion } from "@knowledgeplane/db";
 import type { AuthorizationRequest, AuthorizationCode } from "./types.js";
 
 /**
@@ -15,11 +16,29 @@ export async function exchangeCodeForToken(
   const tokenUrl = `${config.tokenHost}${config.tokenPath}`;
   const body = new URLSearchParams({
     client_id: config.clientId,
-    client_secret: config.clientSecret,
     code: code,
     grant_type: "authorization_code",
     redirect_uri: redirectUri,
   });
+  if (config.tokenAuth === "private_key_jwt") {
+    if (!config.privateKeyPem) {
+      throw new Error("Microsoft sign-in requires MICROSOFT_CLIENT_PRIVATE_KEY");
+    }
+    body.set(
+      "client_assertion_type",
+      "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+    );
+    body.set(
+      "client_assertion",
+      buildClientAssertion({
+        clientId: config.clientId,
+        tokenUrl,
+        privateKeyPem: config.privateKeyPem,
+      }),
+    );
+  } else {
+    body.set("client_secret", config.clientSecret);
+  }
 
   // GitHub requires Accept header
   const headers: Record<string, string> = {

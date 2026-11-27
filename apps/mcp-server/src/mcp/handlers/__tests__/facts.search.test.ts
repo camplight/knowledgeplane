@@ -6,6 +6,10 @@ vi.mock("@knowledgeplane/api-core", () => ({
   searchFacts: vi.fn(),
 }));
 
+vi.mock("../audit-log.js", () => ({
+  recordAudit: vi.fn(),
+}));
+
 describe("handleFactsSearch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
